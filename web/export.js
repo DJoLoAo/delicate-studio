@@ -1,0 +1,300 @@
+const XP_RATES = [0, 44100, 48000, 88200, 96000, 176400, 192000];
+const XP_DEFAULT = { range: "all", formats: [{ type: "wav", bits: 24, rate: 0 }], gain: 0, dither: "tpdf", shaping: "off", tplFile: "$name", tplRange: "$index $range", dest: "download", folder: "Studio" };
+const xp = { cfg: null, jobs: [], seq: 0 };
+
+function xpLoad() {
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem("studioExport") || "null"); } catch {}
+  xp.cfg = Object.assign({}, XP_DEFAULT, v && typeof v === "object" ? v : {});
+  if (!Array.isArray(xp.cfg.formats) || !xp.cfg.formats.length) xp.cfg.formats = XP_DEFAULT.formats.map(f => Object.assign({}, f));
+}
+
+function xpSave() {
+  try { localStorage.setItem("studioExport", JSON.stringify(xp.cfg)); } catch {}
+}
+
+function xpRanges() {
+  return (ed.marks || []).filter(m => m.kind === "range").slice().sort((a, b) => a.a - b.a);
+}
+
+function xpRateLabel(r) {
+  return (r / 1000).toLocaleString("en", { maximumFractionDigits: 1 }) + "k";
+}
+
+function xpBitsLabel(bits) {
+  return t(bits === 32 ? "32-bit float" : bits + "-bit");
+}
+
+function xpFmtLabel(f, srcRate) {
+  const r = f.rate || srcRate;
+  return (f.type === "flac" ? "FLAC" : "WAV") + " " + xpBitsLabel(f.bits) + " · " + (r / 1000).toLocaleString() + " kHz";
+}
+
+function xpErr(e) {
+  if (e === "login") return t("Your session has ended. Log in again.");
+  if (e === "locker-full") return t("The Locker is full. The file was not saved there.");
+  if (e === "quota") return t("Browser storage is full. Clear finished renders or remove files from Studio's list to make room.");
+  return e || "";
+}
+
+function xpClean(s) {
+  const parts = String(s).replace(/[\u0000-\u001f]/g, "").replace(/[\\/:*?"<>|]/g, "-").split(/\s+-\s+/).map(x => x.trim()).filter(Boolean);
+  return parts.join(" - ").replace(/\s{2,}/g, " ").replace(/^[\s.]+|[\s.]+$/g, "").slice(0, 180);
+}
+
+function xpName(tpl, ctx) {
+  const src = ed.doc.source || {};
+  const stem = ed.doc.name.replace(/\.[^.]+$/, "");
+  const d = new Date();
+  const map = {
+    name: stem, range: ctx.range || "", index: ctx.index ? String(ctx.index).padStart(2, "0") : "",
+    artist: src.artist || "", title: src.title || stem, album: src.album || "",
+    date: d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"),
+    rate: xpRateLabel(ctx.fmt.rate || ed.doc.sampleRate), bits: ctx.fmt.bits === 32 ? "32f" : String(ctx.fmt.bits)
+  };
+  return xpClean(tpl.replace(/\$(name|range|index|artist|title|album|date|rate|bits)/g, (_, k) => map[k])) || "export";
+}
+
+function xpPlan() {
+  const c = xp.cfg, F = ed.doc.frames;
+  let pieces = [];
+  if (c.range === "sel" && selOn()) pieces = [{ a: ed.sel.a, b: ed.sel.b, range: "", index: 0 }];
+  else if (c.range === "ranges") pieces = xpRanges().map((m, i) => ({ a: m.a, b: Math.min(F, m.b), range: m.name || t("Range") + " " + m.n, index: i + 1 }));
+  else pieces = [{ a: 0, b: F, range: "", index: 0 }];
+  const tpl = c.range === "ranges" ? c.tplRange : c.tplFile;
+  const byExt = {};
+  for (const f of c.formats) byExt[f.type] = (byExt[f.type] || 0) + 1;
+  const out = [], used = new Set();
+  for (const p of pieces) {
+    for (const f of c.formats) {
+      let base = xpName(tpl, Object.assign({ fmt: f }, p));
+      if (byExt[f.type] > 1) base += " (" + (f.bits === 32 ? "32f" : f.bits) + "-" + xpRateLabel(f.rate || ed.doc.sampleRate) + ")";
+      let name = base + "." + f.type;
+      for (let i = 2; used.has(name.toLowerCase()); i++) name = base + " (" + i + ")." + f.type;
+      used.add(name.toLowerCase());
+      out.push({ a: p.a, b: p.b, name, fmt: Object.assign({}, f) });
+    }
+  }
+  return out;
+}
+
+function xpBytes(job) {
+  const ch = ed.doc.channels, r = job.fmt.rate || ed.doc.sampleRate, frames = (job.b - job.a) * r / ed.doc.sampleRate;
+  const bytes = frames * ch * (job.fmt.bits >> 3);
+  return job.fmt.type === "flac" ? bytes * 0.62 : bytes;
+}
+
+function xpRender() {
+  if (!ed.doc) return;
+  const c = xp.cfg, nr = xpRanges().length, hasSel = selOn();
+  if (c.range === "sel" && !hasSel) c.range = "all";
+  if (c.range === "ranges" && !nr) c.range = "all";
+  document.querySelectorAll("#xRange button").forEach(b => {
+    b.classList.toggle("on", b.dataset.v === c.range);
+    b.disabled = (b.dataset.v === "sel" && !hasSel) || (b.dataset.v === "ranges" && !nr);
+  });
+  $("xRangeInfo").textContent = c.range === "sel" ? fmtTime(ed.sel.a) + "–" + fmtTime(ed.sel.b) : c.range === "ranges" ? nr + " " + t(nr === 1 ? "file per format" : "files per format") : fmtDur(ed.doc.frames / ed.doc.sampleRate);
+  const box = $("xFormats");
+  box.innerHTML = "";
+  c.formats.forEach((f, i) => {
+    const row = document.createElement("div");
+    row.className = "xfmt";
+    row.innerHTML = `<div class="dd down" data-k="type"><div class="cur"></div><div class="list"></div></div><div class="dd down" data-k="bits"><div class="cur"></div><div class="list"></div></div><div class="dd down" data-k="rate"><div class="cur"></div><div class="list"></div></div><button class="x" title="Remove" aria-label="Remove">×</button>`;
+    box.appendChild(row);
+    ddInit(row.querySelector("[data-k=type]"), [{ v: "wav", label: "WAV" }, { v: "flac", label: "FLAC" }], f.type, v => { f.type = v; if (v === "flac" && f.bits === 32) f.bits = 24; xpSave(); xpRender(); });
+    const bitsItems = [16, 24].concat(f.type === "wav" ? [32] : []).map(b => ({ v: String(b), label: xpBitsLabel(b) }));
+    ddInit(row.querySelector("[data-k=bits]"), bitsItems, String(f.bits), v => { f.bits = Number(v); xpSave(); xpRender(); });
+    ddInit(row.querySelector("[data-k=rate]"), XP_RATES.map(r => ({ v: String(r), label: r ? (r / 1000).toLocaleString() + " kHz" : t("Same as file") + " (" + (ed.doc.sampleRate / 1000).toLocaleString() + " kHz)" })), String(f.rate), v => { f.rate = Number(v); xpSave(); xpRender(); });
+    const x = row.querySelector(".x");
+    x.disabled = c.formats.length < 2;
+    x.addEventListener("click", () => { c.formats.splice(i, 1); xpSave(); xpRender(); });
+  });
+  $("xGain").value = (Number(c.gain) || 0).toFixed(1);
+  const allFloat = c.formats.every(f => f.type === "wav" && f.bits === 32);
+  document.querySelectorAll("#xDither button").forEach(b => { b.classList.toggle("on", b.dataset.v === c.dither); b.disabled = allFloat; });
+  document.querySelectorAll("#xShape button").forEach(b => { b.classList.toggle("on", b.dataset.v === c.shaping); b.disabled = allFloat || c.dither === "off"; });
+  const rates = c.formats.map(f => f.rate || ed.doc.sampleRate);
+  $("xShapeNote").textContent = c.shaping === "strong" && rates.some(r => r > 50000) ? t("Strong shaping is tuned for 44.1 and 48 kHz; higher rates use light shaping.") : "";
+  $("xName").value = c.range === "ranges" ? c.tplRange : c.tplFile;
+  document.querySelectorAll("#xDest button").forEach(b => b.classList.toggle("on", b.dataset.v === c.dest));
+  $("xFolder").value = c.folder;
+  $("xFolder").classList.toggle("hidden", c.dest !== "locker");
+  const plan = xpPlan();
+  $("xPreview").textContent = plan.slice(0, 3).map(p => (c.dest === "locker" && c.folder ? c.folder.replace(/\/+$/, "") + "/" : "") + p.name).join("  ·  ") + (plan.length > 3 ? "  ·  +" + (plan.length - 3) : "");
+  const bytes = plan.reduce((s, p) => s + xpBytes(p), 0);
+  $("xSummary").textContent = plan.length + " " + t(plan.length === 1 ? "file" : "files") + " · " + (c.formats.some(f => f.type === "flac") ? "≈ " : "") + fmtBytes(bytes);
+  $("xGo").disabled = !plan.length;
+  xpQueue();
+}
+
+function openExport() {
+  if (!ed.doc) return;
+  closePopovers();
+  if (selOn() && xp.cfg.range === "all" && !xp.touched) xp.cfg.range = "sel";
+  $("exp").classList.remove("hidden");
+  xpRender();
+  setTimeout(() => $("xGo").focus(), 30);
+}
+
+function closeExport() {
+  $("exp").classList.add("hidden");
+}
+
+function xpGo() {
+  if (!ed.doc) return;
+  const c = xp.cfg;
+  const g = Number(String($("xGain").value).replace(",", "."));
+  c.gain = Number.isFinite(g) ? Math.max(-60, Math.min(24, g)) : 0;
+  xpSave();
+  const master = { gain: c.gain, dither: c.dither, shaping: c.shaping };
+  const dest = c.dest === "locker" ? { kind: "locker", folder: c.folder } : { kind: "download" };
+  const docName = ed.doc.name;
+  for (const p of xpPlan()) {
+    const id = "x" + Date.now().toString(36) + (++xp.seq);
+    const job = { id, name: p.name, fmt: p.fmt, dest, state: "queued", frac: 0, doc: docName, fmtLabel: xpFmtLabel(p.fmt, ed.doc.sampleRate), len: (p.b - p.a) / ed.doc.sampleRate };
+    xp.jobs.push(job);
+    call({ t: "export", id: ed.doc.id, jobId: id, a: p.a, b: p.b, name: p.name, fmt: p.fmt, master, dest }).catch(e => { job.state = "failed"; job.error = e.message; xpQueue(); });
+  }
+  xpQueue();
+}
+
+function xpJob(m) {
+  const j = xp.jobs.find(x => x.id === m.id);
+  if (!j) return;
+  const was = j.state;
+  Object.assign(j, { state: m.state, frac: m.frac });
+  if (m.state === "done") {
+    Object.assign(j, { size: m.size, peak: m.peak, clipped: m.clipped, file: m.file, locker: m.locker, ms: m.ms });
+    if (was !== "done") {
+      if (j.dest.kind === "download") xpDownload(j);
+      flash(t("Exported") + " " + (j.locker ? j.locker.path : j.name));
+    }
+  }
+  if (m.state === "failed") {
+    j.error = m.error;
+    if (was !== "failed") xpFail(j, m);
+  }
+  xpQueue();
+  xpBadge();
+}
+
+function xpFail(j, m) {
+  const e = m.error || "";
+  if (e === "login") tell(xpErr(e));
+  else if (e === "locker-full" || e === "quota") tell(xpErr(e), t("Could not export"));
+  else tell(j.name + ": " + e, t("Could not export"));
+}
+
+async function xpFile(j) {
+  const root = await navigator.storage.getDirectory();
+  const dir = await (await root.getDirectoryHandle("studio")).getDirectoryHandle("exports");
+  return (await dir.getFileHandle(j.file)).getFile();
+}
+
+async function xpDownload(j) {
+  try {
+    const f = await xpFile(j);
+    const url = URL.createObjectURL(f);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = j.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  } catch { tell(t("The rendered file is no longer here. Render it again."), t("Could not export")); }
+}
+
+function xpBadge() {
+  const n = xp.jobs.filter(j => ["queued", "rendering", "hashing", "uploading", "verifying"].includes(j.state)).length;
+  $("expN").textContent = n ? "· " + n : "";
+}
+
+const XP_STATE = { queued: "Waiting", rendering: "Rendering", hashing: "Checking", uploading: "Uploading", verifying: "Saving in the Locker", done: "Done", failed: "Failed", cancelled: "Cancelled" };
+
+function xpQueue() {
+  const box = $("xQueue");
+  if (!box) return;
+  $("xQueueSec").classList.toggle("hidden", !xp.jobs.length);
+  box.innerHTML = "";
+  for (const j of xp.jobs.slice().reverse()) {
+    const row = document.createElement("div");
+    row.className = "xjob " + j.state;
+    row.innerHTML = `<div class="xj1"><span class="xn"></span><span class="xs"></span></div><div class="xj2"><span class="xf"></span><span class="xr"></span><span class="grow"></span><span class="xa"></span></div><div class="bbar"><i></i></div>`;
+    row.querySelector(".xn").textContent = j.name;
+    row.querySelector(".xs").textContent = t(XP_STATE[j.state] || j.state) + (["rendering", "hashing", "uploading"].includes(j.state) ? " " + Math.round((j.frac || 0) * 100) + "%" : "");
+    row.querySelector(".xf").textContent = j.fmtLabel + " · " + fmtDur(j.len) + (j.dest.kind === "locker" ? " · " + t("Locker") : "");
+    let res = "";
+    if (j.state === "done") {
+      const pk = j.peak > 0 ? 20 * Math.log10(j.peak) : -Infinity;
+      res = fmtBytes(j.size) + " · " + t("peak") + " " + (pk === -Infinity ? "−∞" : (pk >= 0 ? "+" : "") + pk.toFixed(1)) + " dBFS" + (j.clipped ? " · " + j.clipped.toLocaleString() + " " + t("samples clipped") : "") + (j.locker ? " · " + (j.locker.duplicate ? t("already in the Locker as") + " " : "") + j.locker.path : "");
+    } else if (j.state === "failed") res = xpErr(j.error);
+    const xr = row.querySelector(".xr");
+    xr.textContent = res;
+    xr.classList.toggle("warn", !!(j.clipped || j.state === "failed"));
+    row.querySelector(".bbar i").style.width = Math.round((j.state === "done" ? 1 : j.frac || 0) * 100) + "%";
+    const act = row.querySelector(".xa");
+    const live = ["queued", "rendering", "hashing", "uploading", "verifying"].includes(j.state);
+    if (j.state === "done" && j.dest.kind === "download") {
+      const d = document.createElement("button");
+      d.className = "outbtn";
+      d.textContent = t("download");
+      d.addEventListener("click", () => xpDownload(j));
+      act.appendChild(d);
+    }
+    const x = document.createElement("button");
+    x.className = "x";
+    x.textContent = "×";
+    x.title = live ? t("Cancel") : t("Remove");
+    x.addEventListener("click", () => {
+      if (live) ed.worker.postMessage({ t: "xcancel", id: j.id });
+      else { ed.worker.postMessage({ t: "xremove", id: j.id }); xp.jobs = xp.jobs.filter(y => y !== j); xpQueue(); }
+    });
+    act.appendChild(x);
+    box.appendChild(row);
+  }
+}
+
+function wireExport() {
+  xpLoad();
+  $("expClose").addEventListener("click", closeExport);
+  $("exp").addEventListener("pointerdown", e => { if (e.target === $("exp")) closeExport(); });
+  $("exp").addEventListener("keydown", e => { if (e.key === "Escape" && !e.target.closest(".dd.open")) { e.stopPropagation(); closeExport(); } });
+  const seg = (id, key, after) => $(id).addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b || b.disabled) return;
+    xp.cfg[key] = b.dataset.v;
+    if (key === "range") xp.touched = true;
+    xpSave();
+    if (after) after();
+    xpRender();
+  });
+  seg("xRange", "range");
+  seg("xDither", "dither");
+  seg("xShape", "shaping");
+  seg("xDest", "dest");
+  $("xAddFmt").addEventListener("click", () => {
+    const last = xp.cfg.formats[xp.cfg.formats.length - 1];
+    xp.cfg.formats.push(last && last.type === "wav" ? { type: "flac", bits: 16, rate: 44100 } : { type: "wav", bits: 24, rate: 0 });
+    xpSave();
+    xpRender();
+  });
+  $("xName").addEventListener("input", () => { if (xp.cfg.range === "ranges") xp.cfg.tplRange = $("xName").value; else xp.cfg.tplFile = $("xName").value; xpSave(); xpRender(); });
+  $("xFolder").addEventListener("input", () => { xp.cfg.folder = $("xFolder").value; xpSave(); xpRender(); });
+  $("xGain").addEventListener("change", () => { const g = Number(String($("xGain").value).replace(",", ".")); xp.cfg.gain = Number.isFinite(g) ? Math.max(-60, Math.min(24, g)) : 0; xpSave(); xpRender(); });
+  document.querySelectorAll("#xTokens button").forEach(b => b.addEventListener("click", () => {
+    const i = $("xName");
+    const s = i.selectionStart ?? i.value.length, e2 = i.selectionEnd ?? i.value.length;
+    i.value = i.value.slice(0, s) + b.textContent + i.value.slice(e2);
+    i.dispatchEvent(new Event("input"));
+    i.focus();
+    i.setSelectionRange(s + b.textContent.length, s + b.textContent.length);
+  }));
+  $("xGo").addEventListener("click", xpGo);
+  $("xClear").addEventListener("click", () => {
+    for (const j of xp.jobs.filter(j => ["done", "failed", "cancelled"].includes(j.state))) ed.worker.postMessage({ t: "xremove", id: j.id });
+    xp.jobs = xp.jobs.filter(j => !["done", "failed", "cancelled"].includes(j.state));
+    xpQueue();
+  });
+  document.addEventListener("i18n", () => { if (!$("exp").classList.contains("hidden")) xpRender(); });
+}

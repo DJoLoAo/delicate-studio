@@ -61,6 +61,7 @@ ed.worker.onmessage = e => {
   const m = e.data;
   if (m.t === "progress") { importProgress(m); return; }
   if (m.t === "playerror") { stopPlay(); tell(t("Playback stopped") + ": " + m.msg); return; }
+  if (m.t === "xjob") { xpJob(m); return; }
   const p = ed.pending.get(m.req);
   if (!p) return;
   ed.pending.delete(m.req);
@@ -936,7 +937,7 @@ async function refreshFiles() {
           await call({ t: "remove", id: d.id });
           try { localStorage.removeItem("studioView:" + d.id); } catch {}
           if (ed.doc && ed.doc.id === d.id) closeDoc(); else refreshFiles();
-        } catch (e) { tell(String(e.message || e)); }
+        } catch (e) { tell(e && e.message === "exporting" ? t("This file is being exported. Remove it when its render has finished.") : String(e.message || e)); }
       });
       row.appendChild(name);
       row.appendChild(x);
@@ -1687,6 +1688,7 @@ function wireUi() {
   wireOverview();
   wireRuler();
   wireCommands();
+  wireExport();
   wireDrop();
 }
 

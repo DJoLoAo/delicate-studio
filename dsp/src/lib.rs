@@ -88,9 +88,13 @@ impl Decoder {
     }
 }
 
+pub mod enc;
+pub mod rs;
+
 #[cfg(target_arch = "wasm32")]
 mod wasm {
     use super::Decoder;
+    use sha2::{Digest, Sha256};
     use std::io::{Read, Result as IoResult, Seek, SeekFrom};
     use symphonia::core::io::MediaSource;
 
@@ -228,11 +232,315 @@ mod wasm {
     pub extern "C" fn dec_close() {
         unsafe { *std::ptr::addr_of_mut!(DEC) = None; }
     }
+
+    static mut FLAC: Option<crate::enc::Flac> = None;
+    static mut FL_IN: Vec<i32> = Vec::new();
+    static mut FL_OUT: (usize, usize) = (0, 0);
+    static mut FL_HDR: Vec<u8> = Vec::new();
+
+    fn flac() -> Option<&'static mut crate::enc::Flac> {
+        unsafe { (*std::ptr::addr_of_mut!(FLAC)).as_mut() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn fl_open(rate: u32, channels: u32, bits: u32, block: u32) -> i32 {
+        match crate::enc::Flac::new(rate as usize, channels as usize, bits as usize, block as usize) {
+            Ok(f) => unsafe {
+                *std::ptr::addr_of_mut!(FLAC) = Some(f);
+                *std::ptr::addr_of_mut!(FL_IN) = vec![0; (block * channels) as usize];
+                0
+            },
+            Err(e) => fail(e),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn fl_in() -> *mut i32 {
+        unsafe { (*std::ptr::addr_of_mut!(FL_IN)).as_mut_ptr() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn fl_frame(samples: u32) -> i32 {
+        let Some(f) = flac() else { return fail("flac not open".into()); };
+        let input = unsafe { &(&*std::ptr::addr_of!(FL_IN))[..samples as usize] };
+        match f.frame(input) {
+            Ok(b) => unsafe {
+                *std::ptr::addr_of_mut!(FL_OUT) = (b.as_ptr() as usize, b.len());
+                b.len() as i32
+            },
+            Err(e) => fail(e),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn fl_header(last: u32) -> i32 {
+        let Some(f) = flac() else { return fail("flac not open".into()); };
+        match f.header(last != 0) {
+            Ok(h) => unsafe {
+                let hdr = &mut *std::ptr::addr_of_mut!(FL_HDR);
+                *hdr = h;
+                *std::ptr::addr_of_mut!(FL_OUT) = (hdr.as_ptr() as usize, hdr.len());
+                hdr.len() as i32
+            },
+            Err(e) => fail(e),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn fl_out() -> *const u8 {
+        unsafe { (*std::ptr::addr_of!(FL_OUT)).0 as *const u8 }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn fl_close() {
+        unsafe {
+            *std::ptr::addr_of_mut!(FLAC) = None;
+            *std::ptr::addr_of_mut!(FL_IN) = Vec::new();
+        }
+    }
+
+    static mut RS: Option<crate::rs::Rs> = None;
+
+    fn rsm() -> Option<&'static mut crate::rs::Rs> {
+        unsafe { (*std::ptr::addr_of_mut!(RS)).as_mut() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rs_open(rate_in: u32, rate_out: u32, channels: u32) -> i32 {
+        match crate::rs::Rs::new(rate_in as usize, rate_out as usize, channels as usize) {
+            Ok(r) => { unsafe { *std::ptr::addr_of_mut!(RS) = Some(r); } 0 }
+            Err(e) => fail(e),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rs_need() -> u32 { rsm().map(|r| r.input_frames() as u32).unwrap_or(0) }
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rs_in_stride() -> u32 { rsm().map(|r| r.in_stride() as u32).unwrap_or(0) }
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rs_out_stride() -> u32 { rsm().map(|r| r.out_stride() as u32).unwrap_or(0) }
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rs_delay() -> u32 { rsm().map(|r| r.delay() as u32).unwrap_or(0) }
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rs_in() -> *mut f32 { rsm().map(|r| r.inp.as_mut_ptr()).unwrap_or(std::ptr::null_mut()) }
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rs_out() -> *const f32 { rsm().map(|r| r.out.as_ptr()).unwrap_or(std::ptr::null()) }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rs_process(frames: u32) -> i32 {
+        let Some(r) = rsm() else { return fail("resampler not open".into()); };
+        match r.process(frames as usize) {
+            Ok(n) => n as i32,
+            Err(e) => fail(e),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rs_close() {
+        unsafe { *std::ptr::addr_of_mut!(RS) = None; }
+    }
+
+    static mut SHA: Option<Sha256> = None;
+    static mut SHA_BUF: Vec<u8> = Vec::new();
+    static mut SHA_HEX: [u8; 64] = [0; 64];
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sha_open(cap: u32) -> *mut u8 {
+        unsafe {
+            *std::ptr::addr_of_mut!(SHA) = Some(Sha256::new());
+            let b = &mut *std::ptr::addr_of_mut!(SHA_BUF);
+            *b = vec![0; cap as usize];
+            b.as_mut_ptr()
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sha_update(len: u32) {
+        unsafe {
+            let b = &*std::ptr::addr_of!(SHA_BUF);
+            if let Some(h) = (*std::ptr::addr_of_mut!(SHA)).as_mut() { h.update(&b[..(len as usize).min(b.len())]); }
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sha_hex() -> *const u8 {
+        unsafe {
+            let out = &mut *std::ptr::addr_of_mut!(SHA_HEX);
+            if let Some(h) = (*std::ptr::addr_of_mut!(SHA)).take() {
+                let d = h.finalize();
+                const HEX: &[u8; 16] = b"0123456789abcdef";
+                for (i, b) in d.iter().enumerate() { out[i * 2] = HEX[(b >> 4) as usize]; out[i * 2 + 1] = HEX[(b & 15) as usize]; }
+            }
+            *std::ptr::addr_of_mut!(SHA_BUF) = Vec::new();
+            out.as_ptr()
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::Decoder;
+
+    #[test]
+    fn flac_round_trip_is_bit_exact() {
+        use md5::{Digest, Md5};
+        let (rate, ch, bits, block) = (96000usize, 2usize, 24usize, 4096usize);
+        let n = rate * 2 + 1234;
+        let mut pcm = vec![0i32; n * ch];
+        let mut seed = 7u64;
+        for i in 0..n {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let noise = ((seed >> 40) as i32 & 0xff) - 128;
+            let v = ((i as f64 * 0.031).sin() * 3_000_000.0) as i32 + noise;
+            pcm[i * 2] = v;
+            pcm[i * 2 + 1] = -v / 2;
+        }
+        let mut enc = crate::enc::Flac::new(rate, ch, bits, block).unwrap();
+        let mut body = Vec::new();
+        for f in pcm.chunks(block * ch) { body.extend_from_slice(enc.frame(f).unwrap()); }
+        let mut file = enc.header(true).unwrap();
+        file.extend_from_slice(&body);
+        let mut md = Md5::new();
+        for v in &pcm { md.update(&v.to_le_bytes()[..3]); }
+        let want: [u8; 16] = md.finalize().into();
+        assert_eq!(&file[8 + 18..8 + 34], &want, "md5 in streaminfo");
+        let total = u64::from_be_bytes([0, 0, 0, file[8 + 13] & 15, file[8 + 14], file[8 + 15], file[8 + 16], file[8 + 17]]);
+        assert_eq!(total, n as u64);
+        let mut d = Decoder::open(Box::new(std::io::Cursor::new(file.clone())), "flac").unwrap();
+        assert_eq!((d.sample_rate, d.channels, d.bits), (96000, 2, 24));
+        let mut got: Vec<[f32; 2]> = Vec::new();
+        loop {
+            let k = d.next().unwrap();
+            if k == 0 { break; }
+            let p = d.planar();
+            for i in 0..k { got.push([p[i], p[k + i]]); }
+        }
+        assert_eq!(got.len(), n);
+        let scale = (1i64 << 23) as f32;
+        for i in 0..n {
+            assert_eq!((got[i][0] * scale).round() as i32, pcm[i * 2], "L {i}");
+            assert_eq!((got[i][1] * scale).round() as i32, pcm[i * 2 + 1], "R {i}");
+        }
+        std::fs::write(std::env::temp_dir().join("studio-flac-test.flac"), &file).unwrap();
+        assert!(body.len() < pcm.len() * 3 * 7 / 10, "compressed {} of {}", body.len(), pcm.len() * 3);
+    }
+
+    fn flac_cycle(pcm: &[i32], rate: usize, ch: usize, bits: usize, name: &str) -> usize {
+        let block = 4096;
+        let mut enc = crate::enc::Flac::new(rate, ch, bits, block).unwrap();
+        let mut body = Vec::new();
+        for f in pcm.chunks(block * ch) {
+            let out = enc.frame(f).unwrap();
+            assert!(out.len() <= f.len() * bits.div_ceil(8) + 64, "{name}: frame of {} bytes for {} samples", out.len(), f.len());
+            body.extend_from_slice(out);
+        }
+        let mut file = enc.header(true).unwrap();
+        file.extend_from_slice(&body);
+        std::fs::write(std::env::temp_dir().join(format!("studio-flac-{name}.flac")), &file).unwrap();
+        let mut d = Decoder::open(Box::new(std::io::Cursor::new(file)), "flac").unwrap();
+        assert_eq!((d.sample_rate as usize, d.channels as usize, d.bits as usize), (rate, ch, bits), "{name}");
+        let scale = (1i64 << (bits - 1)) as f32;
+        let mut pos = 0;
+        loop {
+            let k = d.next().unwrap();
+            if k == 0 { break; }
+            let p = d.planar();
+            for i in 0..k {
+                for c in 0..ch {
+                    assert_eq!((p[c * k + i] * scale).round() as i32, pcm[(pos + i) * ch + c], "{name}: sample {} ch {c}", pos + i);
+                }
+            }
+            pos += k;
+        }
+        assert_eq!(pos * ch, pcm.len(), "{name}");
+        body.len()
+    }
+
+    #[test]
+    fn flac_survives_hard_material() {
+        let mut seed = 99u64;
+        let mut rnd = move || { seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (seed >> 33) as i64 };
+        let top = (1i32 << 23) - 1;
+        let bottom = -(1i32 << 23);
+        let n = 3 * 4096 + 1;
+        let square: Vec<i32> = (0..n * 2).map(|i| if (i / 2 / 37) % 2 == 0 { top } else { bottom }).collect();
+        flac_cycle(&square, 96000, 2, 24, "square");
+        let wide: Vec<i32> = (0..n * 2).map(|i| if (i / 2 + i % 2) % 2 == 0 { bottom } else { top }).collect();
+        flac_cycle(&wide, 96000, 2, 24, "wide");
+        let clipped: Vec<i32> = (0..n * 2).map(|i| (((i / 2) as f64 * 0.013).sin() * 4.0e7 + (rnd() % 900_000) as f64).clamp(bottom as f64, top as f64) as i32).collect();
+        flac_cycle(&clipped, 96000, 2, 24, "clipped");
+        let noise16: Vec<i32> = (0..44_100 * 2).map(|_| (rnd() % 65_536 - 32_768) as i32).collect();
+        let size = flac_cycle(&noise16, 44_100, 2, 16, "noise16");
+        assert!(size <= noise16.len() * 2 + noise16.len() / 4096 * 40, "noise {size}");
+        let padded: Vec<i32> = (0..30_000).map(|i| (((i as f64) * 0.02).sin() * 20_000.0) as i32 * 256 + if i % 7 == 0 { 256 } else { 0 }).collect();
+        let size = flac_cycle(&padded, 48_000, 1, 24, "wasted");
+        let plain: Vec<i32> = padded.iter().map(|v| v >> 8).collect();
+        let size16 = flac_cycle(&plain, 48_000, 1, 16, "plain16");
+        assert!(size < size16 + size16 / 50 + 200, "wasted bits {size} vs {size16}");
+        let six: Vec<i32> = (0..(4096 + 17) * 6).map(|i| (((i / 6) as f64 * 0.01 * (1 + i % 6) as f64).sin() * 30_000.0) as i32).collect();
+        flac_cycle(&six, 48_000, 6, 16, "six");
+        let silence = vec![0i32; 5000 * 2];
+        assert!(flac_cycle(&silence, 44_100, 2, 16, "silence") < 40);
+        let mono_pair: Vec<i32> = (0..9000 * 2).map(|i| (((i / 2) as f64 * 0.05).sin() * 3.0e6) as i32).collect();
+        flac_cycle(&mono_pair, 88_200, 2, 24, "same");
+        for len in [1usize, 2, 5, 16, 17, 31, 32, 33, 255, 256, 257, 4095] {
+            let short: Vec<i32> = (0..(4096 + len) * 2).map(|_| (rnd() % 2_000_000 - 1_000_000) as i32).collect();
+            flac_cycle(&short, 44_100, 2, 24, &format!("tail{len}"));
+        }
+        let odd_rate: Vec<i32> = (0..10_000).map(|i| ((i as f64 * 0.03).sin() * 10_000.0) as i32).collect();
+        for rate in [22_050usize, 37_800, 64_000, 384_000, 352_800] {
+            flac_cycle(&odd_rate, rate, 1, 16, &format!("rate{rate}"));
+        }
+        let mut enc = crate::enc::Flac::new(44_100, 2, 16, 4096).unwrap();
+        assert!(enc.frame(&[40_000, 0]).is_err());
+        assert!(enc.frame(&[1, 2, 3]).is_err());
+    }
+
+    #[test]
+    fn resampler_keeps_pitch_and_rejects_aliases() {
+        let run = |rate_in: usize, rate_out: usize, freq: f64, secs: f64| -> Vec<f32> {
+            let mut r = crate::rs::Rs::new(rate_in, rate_out, 1).unwrap();
+            let n = (rate_in as f64 * secs) as usize;
+            let src: Vec<f32> = (0..n).map(|i| (2.0 * std::f64::consts::PI * freq * i as f64 / rate_in as f64).sin() as f32 * 0.5).collect();
+            let mut out = Vec::new();
+            let mut pos = 0;
+            let delay = r.delay();
+            let want = (n as u64 * rate_out as u64).div_ceil(rate_in as u64) as usize;
+            while out.len() < want + delay {
+                let need = r.input_frames();
+                let take = need.min(n.saturating_sub(pos));
+                r.inp[..take].copy_from_slice(&src[pos..pos + take]);
+                for v in &mut r.inp[take..need] { *v = 0.0; }
+                pos += take;
+                let k = r.process(need).unwrap();
+                out.extend_from_slice(&r.out[..k]);
+            }
+            out[delay..delay + want].to_vec()
+        };
+        let a = run(96000, 44100, 1000.0, 2.0);
+        assert_eq!(a.len(), 88200);
+        let mid = &a[4410..a.len() - 4410];
+        let crossings = mid.windows(2).filter(|w| w[0] < 0.0 && w[1] >= 0.0).count() as f64;
+        let hz = crossings / (mid.len() as f64 / 44100.0);
+        assert!((hz - 1000.0).abs() < 2.0, "pitch {hz}");
+        let peak = mid.iter().fold(0f32, |m, v| m.max(v.abs()));
+        assert!((peak - 0.5).abs() < 0.005, "level {peak}");
+        let alias = run(96000, 44100, 30000.0, 1.0);
+        let m = &alias[4410..alias.len() - 4410];
+        let rms = (m.iter().map(|v| (*v as f64) * (*v as f64)).sum::<f64>() / m.len() as f64).sqrt();
+        let db = 20.0 * (rms / (0.5 / 2f64.sqrt())).log10();
+        assert!(db < -100.0, "alias rejection {db:.1} dB");
+        let up = run(44100, 96000, 1000.0, 1.0);
+        assert_eq!(up.len(), 96000);
+        let level = |freq: f64| {
+            let y = run(96000, 44100, freq, 1.0);
+            let m = &y[11025..33075];
+            let rms = (m.iter().map(|v| (*v as f64).powi(2)).sum::<f64>() / m.len() as f64).sqrt();
+            20.0 * (rms / (0.5 / 2f64.sqrt())).log10()
+        };
+        for f in [20.0, 1000.0, 10000.0, 20000.0, 21500.0] { assert!(level(f).abs() < 0.01, "passband {f}: {:.3} dB", level(f)); }
+        for f in [22300.0, 23000.0, 26000.0, 40000.0] { assert!(level(f) < -130.0, "stopband {f}: {:.1} dB", level(f)); }
+    }
 
     #[test]
     fn decodes_test_files() {

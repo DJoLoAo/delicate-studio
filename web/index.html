@@ -59,7 +59,7 @@
     <div id="ed" class="hidden">
       <div class="edhead">
         <div class="docmeta"><b id="docName"></b><span id="docInfo"></span><span id="docSrc" class="badge hidden"></span></div>
-        <div class="tools" id="edTools"><button class="tbtn sm" id="undoBtn" data-cmd="undo" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button><button class="tbtn sm" id="redoBtn" data-cmd="redo" title="Redo" aria-label="Redo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button><span class="tsep"></span><button class="tbtn sm" id="cutBtn" data-cmd="cut" title="Cut" aria-label="Cut"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><path d="M8.1 15.9L19 4M15.9 15.9L5 4"/></svg></button><button class="tbtn sm" id="copyBtn" data-cmd="copy" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/></svg></button><button class="tbtn sm" id="pasteBtn" data-cmd="paste" title="Paste" aria-label="Paste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9z"/><path d="M15 5h3v15H6V5h3"/><path d="M9 12h6M9 16h4"/></svg></button><button class="tbtn sm" id="delBtn" data-cmd="delete" title="Delete the selection" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><span class="tsep"></span><button class="tbtn sm" id="silBtn" data-cmd="silence" title="Silence the selection" aria-label="Silence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2-5 2 10 2-5h2"/><path d="M14 12h8" stroke-dasharray="1.5 2.5"/></svg></button><button class="tbtn sm" id="cropBtn" data-cmd="crop" title="Crop to the selection" aria-label="Crop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v16h16"/><path d="M2 6h16v16"/></svg></button><button class="tbtn sm" id="insBtn" data-cmd="insert" title="Insert silence…" aria-label="Insert silence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 12h4M15 12h4" stroke-dasharray="1.5 2"/><path d="M9 8l3-3 3 3"/></svg></button><span class="tsep"></span><div class="histw"><button class="outbtn" id="histBtn" data-cmd="hist" title="History"><span>History</span><span id="histN"></span></button><div id="hist" class="hidden"><div class="hhead"><b>History</b><span class="grow"></span><button class="x" id="histX" data-cmd="hist" title="Close" aria-label="Close">×</button></div><div id="histList" class="hlist"></div><div class="sinfo" id="histInfo"></div></div></div><div class="histw"><button class="outbtn" id="locsBtn" data-cmd="locs" title="Locations">Locations</button><div id="locs" class="hidden"><div class="hhead"><b>Locations</b><span class="grow"></span><button class="outbtn" id="locsAdd">New…</button><button class="x" id="locsX" title="Close" aria-label="Close">×</button></div><div id="locsList" class="hlist"></div><div class="sinfo" id="locsInfo"></div></div></div></div>
+        <div class="tools" id="edTools"><button class="tbtn sm" id="undoBtn" data-cmd="undo" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button><button class="tbtn sm" id="redoBtn" data-cmd="redo" title="Redo" aria-label="Redo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button><span class="tsep"></span><button class="tbtn sm" id="cutBtn" data-cmd="cut" title="Cut" aria-label="Cut"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><path d="M8.1 15.9L19 4M15.9 15.9L5 4"/></svg></button><button class="tbtn sm" id="copyBtn" data-cmd="copy" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/></svg></button><button class="tbtn sm" id="pasteBtn" data-cmd="paste" title="Paste" aria-label="Paste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9z"/><path d="M15 5h3v15H6V5h3"/><path d="M9 12h6M9 16h4"/></svg></button><button class="tbtn sm" id="delBtn" data-cmd="delete" title="Delete the selection" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><span class="tsep"></span><button class="tbtn sm" id="silBtn" data-cmd="silence" title="Silence the selection" aria-label="Silence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2-5 2 10 2-5h2"/><path d="M14 12h8" stroke-dasharray="1.5 2.5"/></svg></button><button class="tbtn sm" id="cropBtn" data-cmd="crop" title="Crop to the selection" aria-label="Crop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v16h16"/><path d="M2 6h16v16"/></svg></button><button class="tbtn sm" id="insBtn" data-cmd="insert" title="Insert silence…" aria-label="Insert silence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 12h4M15 12h4" stroke-dasharray="1.5 2"/><path d="M9 8l3-3 3 3"/></svg></button><span class="tsep"></span><div class="histw"><button class="outbtn" id="histBtn" data-cmd="hist" title="History"><span>History</span><span id="histN"></span></button><div id="hist" class="hidden"><div class="hhead"><b>History</b><span class="grow"></span><button class="x" id="histX" data-cmd="hist" title="Close" aria-label="Close">×</button></div><div id="histList" class="hlist"></div><div class="sinfo" id="histInfo"></div></div></div><button class="outbtn" id="expBtn" data-cmd="export" title="Export"><span>Export</span><span id="expN"></span></button><div class="histw"><button class="outbtn" id="locsBtn" data-cmd="locs" title="Locations">Locations</button><div id="locs" class="hidden"><div class="hhead"><b>Locations</b><span class="grow"></span><button class="outbtn" id="locsAdd">New…</button><button class="x" id="locsX" title="Close" aria-label="Close">×</button></div><div id="locsList" class="hlist"></div><div class="sinfo" id="locsInfo"></div></div></div></div>
         <div class="seg" id="chanSeg" title="Channels the selection applies to"></div>
         <div class="seg" id="scaleSeg"><button class="segbtn" data-v="lin" title="Linear amplitude">Lin</button><button class="segbtn" data-v="db" title="Logarithmic amplitude (dB)">dB</button></div>
         <div class="seg" id="colourSeg"><button class="segbtn" data-v="spectral" title="Colour by frequency content: low pink, mid gold, high blue">Spectral</button><button class="segbtn" data-v="plain" title="One colour">Plain</button></div>
@@ -124,6 +124,41 @@
   </div>
 </div>
 
+<div id="exp" class="hidden">
+  <div class="panel xpanel" role="dialog" aria-labelledby="expTitle">
+    <div class="phead"><b id="expTitle">Export</b><button class="x" id="expClose" title="Close" aria-label="Close">×</button></div>
+    <section>
+      <h3>Audio</h3>
+      <div class="row"><label>Range</label><div class="seg" id="xRange"><button class="segbtn" data-v="all">Whole file</button><button class="segbtn" data-v="sel">Selection</button><button class="segbtn" data-v="ranges">Each range</button></div><span class="snote" id="xRangeInfo"></span></div>
+    </section>
+    <section>
+      <h3>Formats</h3>
+      <div id="xFormats"></div>
+      <button class="outbtn" id="xAddFmt">+ add format</button>
+    </section>
+    <section>
+      <h3>Master section</h3>
+      <div class="row"><label>Gain</label><input id="xGain" class="xnum" inputmode="decimal" autocomplete="off" spellcheck="false"><span class="snote">dB</span></div>
+      <div class="row"><label>Dither</label><div class="seg" id="xDither"><button class="segbtn" data-v="tpdf">TPDF</button><button class="segbtn" data-v="off">Off</button></div></div>
+      <div class="row"><label>Noise shaping</label><div class="seg" id="xShape"><button class="segbtn" data-v="off">Off</button><button class="segbtn" data-v="light">Light</button><button class="segbtn" data-v="strong">Strong</button></div><span class="snote" id="xShapeNote"></span></div>
+      <div class="snote">Dither is the last stage before the file is written; 32-bit float files get none.</div>
+    </section>
+    <section>
+      <h3>Name and place</h3>
+      <div class="row"><label>Name</label><input id="xName" class="xtext" autocomplete="off" spellcheck="false"></div>
+      <div class="row"><label></label><div class="xtok" id="xTokens"><button>$name</button><button>$range</button><button>$index</button><button>$artist</button><button>$title</button><button>$album</button><button>$date</button><button>$rate</button><button>$bits</button></div></div>
+      <div class="row"><label>Save to</label><div class="seg" id="xDest"><button class="segbtn" data-v="download">Download</button><button class="segbtn" data-v="locker">Locker</button></div><input id="xFolder" class="xtext" placeholder="Folder in the Locker" autocomplete="off" spellcheck="false"></div>
+      <div class="row"><label>Files</label><span class="snote xprev" id="xPreview"></span></div>
+    </section>
+    <div class="xfoot"><span class="snote" id="xSummary"></span><span class="grow"></span><button class="primary" id="xGo">Render</button></div>
+    <section id="xQueueSec" class="hidden">
+      <h3>Render queue</h3>
+      <div id="xQueue"></div>
+      <button class="outbtn" id="xClear">clear finished</button>
+    </section>
+  </div>
+</div>
+
 <div id="ctx" class="hidden" role="menu"></div>
 
 <div id="pal" class="hidden"><div class="ppanel" role="dialog" aria-label="Command palette"><input id="palQ" placeholder="Type a command, a time such as 1:23.5, or a location" autocomplete="off" spellcheck="false"><div id="palList"></div><div class="pfoot"><span>↑ ↓ · Enter</span><span class="grow"></span><span>Click a shortcut to change it</span></div></div></div>
@@ -135,6 +170,7 @@
 <script src="/studio/edit.js"></script>
 <script src="/studio/editor.js"></script>
 <script src="/studio/commands.js"></script>
+<script src="/studio/export.js"></script>
 <script src="/studio/app.js"></script>
 </body>
 </html>

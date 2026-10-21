@@ -95,6 +95,7 @@ const CMDS = [
   { id: "locAdd", g: "Locations", label: "New memory location…", run: () => addLocationDlg(), doc: true, kw: "marker zoom view named" },
   { id: "locs", g: "Locations", label: "Locations", run: () => toggleLocs(), doc: true, kw: "markers memory locations list" },
   { id: "open", g: "File", label: "Open a file…", run: () => pickFiles() },
+  { id: "export", g: "File", label: "Export…", run: () => openExport(), doc: true, kw: "render bounce save wav flac master dither" },
   { id: "files", g: "File", label: "Files", run: () => openFiles(), kw: "library locker studio" },
   { id: "close", g: "File", label: "Close file", run: () => closeDoc(), doc: true },
   { id: "settings", g: "File", label: "Settings", run: () => openSettings() },
@@ -113,7 +114,7 @@ const BASE_KEYS = {
   undo: ["Mod+Z"], redo: ["Mod+Shift+Z", "Mod+Y"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
   delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"],
   markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"],
-  open: ["Mod+O"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"]
+  open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"]
 };
 
 const KEYMAPS = {
@@ -138,7 +139,7 @@ const KEYMAPS = {
       zp1: [{ mac: "Ctrl+1", win: { k: "1", native: "Win+1" } }, "1"], zp2: [{ mac: "Ctrl+2", win: { k: "2", native: "Win+2" } }, "2"], zp3: [{ mac: "Ctrl+3", win: { k: "3", native: "Win+3" } }, "3"], zp4: [{ mac: "Ctrl+4", win: { k: "4", native: "Win+4" } }, "4"], zp5: [{ mac: "Ctrl+5", win: { k: "5", native: "Win+5" } }, "5"],
       undo: ["Mod+Z", "Z"], redo: ["Mod+Shift+Z", "Shift+Z"], cut: ["Mod+X", "X"], copy: ["Mod+C", "C"], paste: ["Mod+V", "V"],
       delete: ["Delete", "Backspace"], silence: ["Mod+B"], crop: [{ k: "Shift+T", native: "Mod+T" }], insert: ["Mod+Shift+E"], selAll: ["Mod+A"],
-      locAdd: ["NumEnter"], markAdd: [{ mac: "Mod+Enter" }], locs: ["Mod+Num5"], open: ["Mod+O"]
+      locAdd: ["NumEnter"], markAdd: [{ mac: "Mod+Enter" }], locs: ["Mod+Num5"], open: ["Mod+O"], export: ["Mod+Alt+B"]
     }
   },
   reaper: {
@@ -147,7 +148,7 @@ const KEYMAPS = {
       play: ["Space"], home: ["Home", "W"], end: ["End"], loop: ["R"],
       zoomIn: ["=", "+", "Num+"], zoomOut: ["-", "Num-"], zoomSel: [{ mac: "Mod+PageUp", win: { k: "Z", native: "Ctrl+PageUp" } }], zoomFull: [{ mac: "Mod+PageDown", win: { k: "\\", native: "Ctrl+PageDown" } }],
       undo: ["Mod+Z"], redo: ["Mod+Shift+Z"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"], delete: ["Delete"], selAll: ["Mod+A"], deselect: ["Escape"],
-      markAdd: ["M"], locAdd: ["Shift+M"], rangeAdd: ["Shift+R"], prevMark: ["["], nextMark: ["]"], locs: ["Mod+J"], palette: ["?"],
+      markAdd: ["M"], locAdd: ["Shift+M"], rangeAdd: ["Shift+R"], prevMark: ["["], nextMark: ["]"], locs: ["Mod+J"], palette: ["?"], export: ["Mod+Alt+R"],
       loc1: ["1", "Num1"], loc2: ["2", "Num2"], loc3: ["3", "Num3"], loc4: ["4", "Num4"], loc5: ["5", "Num5"], loc6: ["6", "Num6"], loc7: ["7", "Num7"], loc8: ["8", "Num8"], loc9: ["9", "Num9"], loc10: ["0", "Num0"]
     }
   }
@@ -322,7 +323,7 @@ function onKey(e) {
     else if (e.target !== $("palQ") && !MOD_ONLY.includes(e.key)) $("palQ").focus();
     return;
   }
-  const modal = ($("dlg") && !$("dlg").classList.contains("hidden")) || !$("settings").classList.contains("hidden");
+  const modal = ($("dlg") && !$("dlg").classList.contains("hidden")) || !$("settings").classList.contains("hidden") || !$("exp").classList.contains("hidden");
   if (typing(e) || modal) return;
   if (!$("app") || $("app").classList.contains("hidden")) return;
   const combo = comboOf(e);

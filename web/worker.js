@@ -20,6 +20,7 @@ let importing = Promise.resolve();
 let downloadCtl = null;
 let clip = null;
 let q = Promise.resolve();
+const lingering = new Map();
 const CT_EXT = { "audio/flac": "flac", "audio/x-flac": "flac", "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/m4a": "m4a", "audio/aac": "aac", "audio/wav": "wav", "audio/x-wav": "wav", "audio/wave": "wav", "audio/vnd.wave": "wav", "audio/aiff": "aiff", "audio/x-aiff": "aiff", "audio/ogg": "ogg", "audio/x-caf": "caf" };
 
 function enqueue(fn) {
@@ -70,7 +71,7 @@ async function download(req, url, name) {
       let chunk;
       try { chunk = await reader.read(); } catch { throw new Error(cancelImport ? "cancelled" : "network"); }
       if (chunk.done) break;
-      h.write(chunk.value, { at: got });
+      putAt(h, chunk.value, got);
       got += chunk.value.length;
       const now = performance.now();
       if (now - last > 150) { last = now; postMessage({ t: "progress", req, name, phase: "download", frac: total ? Math.min(1, got / total) : 0, bytes: got, total }); }
@@ -111,6 +112,10 @@ async function exclusive(fh) {
   }
 }
 
+function putAt(h, data, at) {
+  if (h.write(data, { at }) !== data.byteLength) { const e = new Error("quota"); e.name = "QuotaExceededError"; throw e; }
+}
+
 function errText(e) {
   const m = String(e && e.message || e);
   if (e && e.name === "NoModificationAllowedError") return "locked";
@@ -129,7 +134,7 @@ async function writeFile(dir, name, data) {
   const h = await (await dir.getFileHandle(name, { create: true })).createSyncAccessHandle();
   try {
     h.truncate(0);
-    h.write(data instanceof ArrayBuffer ? new Uint8Array(data) : data, { at: 0 });
+    putAt(h, data instanceof ArrayBuffer ? new Uint8Array(data) : data, 0);
     h.flush();
   } finally { h.close(); }
 }
@@ -198,23 +203,25 @@ function sumEnd(S) {
   return { pk: Float32Array.from(S.pk), bd: Float32Array.from(S.bd) };
 }
 
-function poolRead(c, f, n, out, off) {
-  const ch = cur.meta.channels;
+function poolRead(d, c, f, n, out, off) {
+  const ch = d.meta.channels;
   let done = 0;
   while (done < n) {
     const p = f + done, s = Math.floor(p / BLOCK), o = p % BLOCK;
     const run = Math.min(n - done, BLOCK - o);
-    cur.pool.read(new Uint8Array(out.buffer, out.byteOffset + (off + done) * 4, run * 4), { at: (s * BLOCK * ch + c * BLOCK + o) * 4 });
+    d.pool.read(new Uint8Array(out.buffer, out.byteOffset + (off + done) * 4, run * 4), { at: (s * BLOCK * ch + c * BLOCK + o) * 4 });
     done += run;
   }
 }
 
-function readSrc(src, c, f, n, out, off) {
+function readSrcOf(d, src, c, f, n, out, off) {
   if (n <= 0) return;
-  if (src === 0) { poolRead(c, f, n, out, off); return; }
-  const a = cur.allocs[src];
-  cur.heap.read(new Uint8Array(out.buffer, out.byteOffset + off * 4, n * 4), { at: (a[0] + f) * 4 });
+  if (src === 0) { poolRead(d, c, f, n, out, off); return; }
+  const a = d.allocs[src];
+  d.heap.read(new Uint8Array(out.buffer, out.byteOffset + off * 4, n * 4), { at: (a[0] + f) * 4 });
 }
+
+function readSrc(src, c, f, n, out, off) { readSrcOf(cur, src, c, f, n, out, off); }
 
 function readClip(start, count, out, stride) {
   const c = cur;
@@ -226,7 +233,7 @@ function allocBegin() {
 }
 
 function allocPush(w, d, n) {
-  cur.heap.write(new Uint8Array(d.buffer, d.byteOffset, n * 4), { at: (w.off + w.n) * 4 });
+  putAt(cur.heap, new Uint8Array(d.buffer, d.byteOffset, n * 4), (w.off + w.n) * 4);
   sumFeed(w.S, d, n);
   w.n += n;
   cur.heapEnd = w.off + w.n;
@@ -238,7 +245,7 @@ function allocEnd(w) {
   both.set(s.pk);
   both.set(s.bd, s.pk.length);
   const pkOff = cur.pkEnd;
-  cur.hpk.write(new Uint8Array(both.buffer), { at: pkOff * 4 });
+  putAt(cur.hpk, new Uint8Array(both.buffer), pkOff * 4);
   cur.pkEnd += both.length;
   const id = cur.allocs.length;
   cur.allocs.push([w.off, w.n, pkOff]);
@@ -508,7 +515,7 @@ async function materializeClip() {
       for (let f = 0; f < cb.n; f += MAT) {
         const n = Math.min(MAT, cb.n - f);
         readList(cb.lists[k], cb.cum[k], f, n, buf, 0, readSrc);
-        h.write(new Uint8Array(buf.buffer, 0, n * 4), { at: (k * cb.n + f) * 4 });
+        putAt(h, new Uint8Array(buf.buffer, 0, n * 4), (k * cb.n + f) * 4);
       }
     }
     h.flush();
@@ -714,13 +721,17 @@ function moveHist(m) {
   return statePayload(m.have, { t: "state", sel });
 }
 
+function closeHandles(c) {
+  for (const h of [c.pool, c.heap, c.hpk]) { if (h) { try { h.close(); } catch {} } }
+}
+
 async function closeCur() {
   stopPlay();
   const c = cur;
   if (!c) return;
   if (c.saving) { try { await c.saving; } catch {} }
   if (clip && !clip.file && clip.doc === c.meta.id) { try { await materializeClip(); } catch { clip = null; } }
-  for (const h of [c.pool, c.heap, c.hpk]) { if (h) { try { h.close(); } catch {} } }
+  if (c.busy > 0) lingering.set(c.meta.id, c); else closeHandles(c);
   cur = null;
 }
 
@@ -783,7 +794,7 @@ async function importFile(req, file, opts) {
       if (bandK % BPB === 0) { bandChunks.push(bandSlot); bandSlot = new Float32Array(BPB * 3); }
     };
     const flushSlot = () => {
-      pool.write(new Uint8Array(block.buffer), { at: slot * slotBytes });
+      putAt(pool, new Uint8Array(block.buffer), slot * slotBytes);
       const pk = new Float32Array(ch * BPB * 2);
       for (let c = 0; c < ch; c++) {
         const base = c * BLOCK;
@@ -878,7 +889,14 @@ async function openDoc(id, have) {
   const meta = await readJson(docDir, "meta.json");
   const slotPeaks = await readFloat(docDir, "peaks.f32");
   const bands = await readFloat(docDir, "bands.f32");
+  if (cur && cur.meta.id === id) return { meta: cur.meta, peaks: timelinePeaks(slotPeaks, cur.meta.channels, cur.meta.slots), bands, state: statePayload(have || 1), recovered: false };
   await closeCur();
+  if (lingering.has(id)) {
+    cur = lingering.get(id);
+    lingering.delete(id);
+    cur.meta.opened = Date.now();
+    return { meta: cur.meta, peaks: timelinePeaks(slotPeaks, cur.meta.channels, cur.meta.slots), bands, state: statePayload(have || 1), recovered: false };
+  }
   await clipReady;
   const pool = await syncHandle(await docDir.getFileHandle("pool.f32"), true);
   let heap = null, hpk = null;
@@ -891,7 +909,7 @@ async function openDoc(id, have) {
   }
   const heapFrames = Math.floor(heap.getSize() / 4), pkFloats = Math.floor(hpk.getSize() / 4);
   const st = await loadEdits(docDir, meta, heapFrames, pkFloats);
-  cur = { meta, pool, heap, hpk, dir: docDir, heapEnd: heapFrames, pkEnd: pkFloats, allocs: [null], sums: [null], hist: null, idx: 0, seq: 0, lists: null, cum: null, len: 0, edges: new Map(), ver: 0, saving: null, dirty: false, saveErr: null };
+  cur = { meta, pool, heap, hpk, dir: docDir, heapEnd: heapFrames, pkEnd: pkFloats, allocs: [null], sums: [null], hist: null, idx: 0, seq: 0, lists: null, cum: null, len: 0, edges: new Map(), ver: 0, saving: null, dirty: false, saveErr: null, busy: 0 };
   if (st.hist) {
     cur.allocs = st.allocs;
     cur.hist = st.hist;
@@ -990,6 +1008,307 @@ function startPlay(start, end, loop, off) {
   }, 8);
 }
 
+const XP = { jobs: [], running: null, dsp: null };
+const SHAPES = { off: [], light: [1], strong: [2.033, -2.165, 1.959, -1.59, 0.6149] };
+
+async function exportsDir() {
+  return (await studioDir()).getDirectoryHandle("exports", { create: true });
+}
+
+const exportsReady = (async () => {
+  try {
+    const d = await exportsDir();
+    const names = [];
+    for await (const [n] of d.entries()) names.push(n);
+    for (const n of names) { try { await d.removeEntry(n); } catch {} }
+  } catch {}
+})();
+
+async function dspExports() {
+  if (!XP.dsp) {
+    const inst = await WebAssembly.instantiate(await wasmMod(), { env: { read_at: () => 0, byte_len: () => 0 } });
+    XP.dsp = inst.exports;
+  }
+  return XP.dsp;
+}
+
+function dspError(x) {
+  return new TextDecoder().decode(new Uint8Array(x.memory.buffer, x.dec_error_ptr(), x.dec_error_len()));
+}
+
+function xorshift(seed) {
+  let v = (seed >>> 0) || 0x9e3779b9;
+  return () => { v ^= v << 13; v >>>= 0; v ^= v >>> 17; v ^= v << 5; v >>>= 0; return v / 4294967296; };
+}
+
+function wavHeader(frames, ch, rate, bits, float) {
+  const bps = bits >> 3, align = ch * bps, data = frames * align, pad = data % 2;
+  const ext = !float && ch > 2;
+  const fmtLen = float ? 18 : ext ? 40 : 16, factLen = float ? 12 : 0;
+  const size = 12 + 36 + 8 + fmtLen + factLen + 8;
+  const riff = size - 8 + data + pad, rf64 = riff > 0xFFFFFFFF;
+  const b = new ArrayBuffer(size), v = new DataView(b);
+  let o = 0;
+  const tag = t => { for (let i = 0; i < 4; i++) v.setUint8(o++, t.charCodeAt(i)); };
+  const u16 = n => { v.setUint16(o, n, true); o += 2; };
+  const u32 = n => { v.setUint32(o, n, true); o += 4; };
+  const u64 = n => { v.setUint32(o, n % 4294967296, true); v.setUint32(o + 4, Math.floor(n / 4294967296), true); o += 8; };
+  tag(rf64 ? "RF64" : "RIFF"); u32(rf64 ? 0xFFFFFFFF : riff); tag("WAVE");
+  if (rf64) { tag("ds64"); u32(28); u64(riff); u64(data); u64(frames); u32(0); }
+  else { tag("JUNK"); u32(28); o += 28; }
+  tag("fmt "); u32(fmtLen); u16(float ? 3 : ext ? 0xFFFE : 1); u16(ch); u32(rate); u32(rate * align); u16(align); u16(bits);
+  if (float) u16(0);
+  if (ext) { u16(22); u16(bits); u32(ch >= 32 ? 0xFFFFFFFF : (2 ** ch) - 1); for (const x of [1, 0, 0, 0, 0, 0, 16, 0, 128, 0, 0, 170, 0, 56, 155, 113]) v.setUint8(o++, x); }
+  if (float) { tag("fact"); u32(4); u32(frames > 0xFFFFFFFF ? 0xFFFFFFFF : frames); }
+  tag("data"); u32(rf64 ? 0xFFFFFFFF : data);
+  return { bytes: new Uint8Array(b), pad };
+}
+
+function xpost(job, extra) {
+  postMessage(Object.assign({ t: "xjob", id: job.id, state: job.state, frac: job.frac || 0 }, extra || {}));
+}
+
+function releaseDoc(c) {
+  c.busy--;
+  if (c.busy <= 0 && lingering.get(c.meta.id) === c && cur !== c) { lingering.delete(c.meta.id); closeHandles(c); }
+}
+
+async function renderJob(job) {
+  const c = job.c, ch = c.meta.channels, rateIn = c.meta.sampleRate, f = job.fmt;
+  const rateOut = f.rate || rateIn, flac = f.type === "flac", float = !flac && f.bits === 32;
+  const bits = float ? 32 : f.bits, total = job.b - job.a;
+  const outFrames = rateOut === rateIn ? total : Math.ceil(total * rateOut / rateIn);
+  const reader = (src, sc, fr, n, out, off) => readSrcOf(c, src, sc, fr, n, out, off);
+  const cum = job.lists.map(cumOf);
+  const gain = Math.pow(10, (Number(job.master.gain) || 0) / 20);
+  const dith = !float && job.master.dither !== "off";
+  let h = dith ? (SHAPES[job.master.shaping] || []) : [];
+  if (job.master.shaping === "strong" && rateOut > 50000) h = SHAPES.light;
+  const nh = h.length, err = Array.from({ length: ch }, () => new Float64Array(Math.max(1, nh))), head = new Int32Array(ch);
+  const rnd = xorshift(Date.now() ^ job.seed);
+  const scale = Math.pow(2, bits - 1), qmax = scale - 1, qmin = -scale;
+  const x = await dspExports();
+  await exportsReady;
+  const dir = await exportsDir();
+  const fh = await dir.getFileHandle(job.file, { create: true });
+  const hd = await fh.createSyncAccessHandle();
+  let fileOff = 0, peak = 0, clipped = 0, last = performance.now(), lastPost = 0;
+  const OB = 1 << 22, ob = new Uint8Array(OB), ob16 = new Int16Array(ob.buffer), ob32 = new Float32Array(ob.buffer);
+  let o = 0;
+  const flush = () => { if (o) { putAt(hd, ob.subarray(0, o), fileOff); fileOff += o; o = 0; } };
+  const block = 4096;
+  let fi = 0, flIn = null;
+  const flFrame = () => {
+    const n = x.fl_frame(fi);
+    if (n < 0) throw new Error(dspError(x));
+    if (o + n > OB) flush();
+    ob.set(new Uint8Array(x.memory.buffer, x.fl_out(), n), o);
+    o += n;
+    fi = 0;
+  };
+  try {
+    hd.truncate(0);
+    if (flac) {
+      if (x.fl_open(rateOut, ch, bits, block) !== 0) throw new Error(dspError(x));
+      const n = x.fl_header(1);
+      if (n < 0) throw new Error(dspError(x));
+      ob.set(new Uint8Array(x.memory.buffer, x.fl_out(), n), 0);
+      o = n;
+    } else {
+      const w = wavHeader(outFrames, ch, rateOut, bits, float);
+      putAt(hd, w.bytes, 0);
+      fileOff = w.bytes.length;
+      job.pad = w.pad;
+    }
+    const push = (pl, stride, st, k) => {
+      if (!flac && o + k * ch * 4 > OB) flush();
+      if (flac && !flIn) flIn = new Int32Array(x.memory.buffer, x.fl_in(), block * ch);
+      for (let i = st; i < st + k; i++) {
+        for (let cc = 0; cc < ch; cc++) {
+          const v = pl[cc * stride + i];
+          const av = v < 0 ? -v : v;
+          if (av > peak) peak = av;
+          if (float) { ob32[o >> 2] = v; o += 4; continue; }
+          let w = v * scale;
+          if (nh) { const e = err[cc]; let p = head[cc]; for (let j = 0; j < nh; j++) { w -= h[j] * e[p]; p = p === 0 ? nh - 1 : p - 1; } }
+          let qv = Math.floor(w + (dith ? rnd() - rnd() : 0) + 0.5);
+          if (qv > qmax) { qv = qmax; clipped++; } else if (qv < qmin) { qv = qmin; clipped++; }
+          if (nh) { let ev = qv - w; ev = ev > 4 ? 4 : ev < -4 ? -4 : ev; const p = head[cc] = head[cc] + 1 === nh ? 0 : head[cc] + 1; err[cc][p] = ev; }
+          if (flac) { flIn[fi++] = qv; }
+          else if (bits === 16) { ob16[o >> 1] = qv; o += 2; }
+          else { ob[o] = qv & 255; ob[o + 1] = (qv >> 8) & 255; ob[o + 2] = (qv >> 16) & 255; o += 3; }
+        }
+        if (flac && fi === block * ch) { flFrame(); flIn = new Int32Array(x.memory.buffer, x.fl_in(), block * ch); }
+      }
+    };
+    const tick = async done => {
+      const now = performance.now();
+      if (now - last < 24) return;
+      job.frac = Math.min(1, done / Math.max(1, outFrames));
+      if (now - lastPost > 150) { lastPost = now; xpost(job); }
+      await new Promise(r => setTimeout(r, 0));
+      last = performance.now();
+      if (job.cancel) throw new Error("cancelled");
+    };
+    if (rateOut === rateIn) {
+      const CH = 65536, buf = new Float32Array(CH * ch);
+      for (let pos = 0; pos < total;) {
+        const k = Math.min(CH, total - pos);
+        for (let cc = 0; cc < ch; cc++) readList(job.lists[cc], cum[cc], job.a + pos, k, buf, cc * CH, reader);
+        if (gain !== 1) for (let cc = 0; cc < ch; cc++) { const b0 = cc * CH; for (let i = 0; i < k; i++) buf[b0 + i] *= gain; }
+        push(buf, CH, 0, k);
+        pos += k;
+        await tick(pos);
+      }
+    } else {
+      if (x.rs_open(rateIn, rateOut, ch) !== 0) throw new Error(dspError(x));
+      const need = x.rs_need(), sIn = x.rs_in_stride(), sOut = x.rs_out_stride();
+      let skip = x.rs_delay(), pos = 0, emitted = 0, tmp = null;
+      while (emitted < outFrames) {
+        const take = Math.max(0, Math.min(need, total - pos));
+        const inV = new Float32Array(x.memory.buffer, x.rs_in(), sIn * ch);
+        for (let cc = 0; cc < ch; cc++) {
+          if (take) readList(job.lists[cc], cum[cc], job.a + pos, take, inV, cc * sIn, reader);
+          inV.fill(0, cc * sIn + take, cc * sIn + need);
+          if (gain !== 1) for (let i = 0; i < take; i++) inV[cc * sIn + i] *= gain;
+        }
+        pos += take;
+        const k = x.rs_process(need);
+        if (k < 0) throw new Error(dspError(x));
+        const outV = new Float32Array(x.memory.buffer, x.rs_out(), sOut * ch);
+        let st = 0;
+        if (skip) { st = Math.min(skip, k); skip -= st; }
+        const m = Math.min(k - st, outFrames - emitted);
+        if (m > 0) {
+          if (!tmp || tmp.length < m * ch) tmp = new Float32Array(Math.max(m, need * 2) * ch);
+          for (let cc = 0; cc < ch; cc++) tmp.set(outV.subarray(cc * sOut + st, cc * sOut + st + m), cc * m);
+          flIn = null;
+          push(tmp, m, 0, m);
+          emitted += m;
+        }
+        await tick(emitted);
+      }
+      x.rs_close();
+    }
+    if (flac) {
+      if (fi) flFrame();
+      flush();
+      const n = x.fl_header(1);
+      if (n < 0) throw new Error(dspError(x));
+      putAt(hd, new Uint8Array(x.memory.buffer, x.fl_out(), n).slice(), 0);
+      x.fl_close();
+    } else {
+      if (job.pad) { if (o + 1 > OB) flush(); ob[o++] = 0; }
+      flush();
+    }
+    hd.flush();
+    let sha = null;
+    if (job.dest.kind === "locker") {
+      job.state = "hashing"; job.frac = 0; xpost(job);
+      const CAP = 1 << 22, ptr = x.sha_open(CAP);
+      for (let at = 0; at < fileOff;) {
+        const n = Math.min(CAP, fileOff - at);
+        hd.read(new Uint8Array(x.memory.buffer, ptr, n), { at });
+        x.sha_update(n);
+        at += n;
+        job.frac = at / fileOff;
+        await tick(0);
+      }
+      sha = new TextDecoder().decode(new Uint8Array(x.memory.buffer, x.sha_hex(), 64));
+    }
+    hd.close();
+    return { size: fileOff, peak, clipped, frames: outFrames, rate: rateOut, sha };
+  } catch (e) {
+    try { hd.close(); } catch {}
+    try { x.fl_close(); x.rs_close(); } catch {}
+    try { await dir.removeEntry(job.file); } catch {}
+    throw e;
+  }
+}
+
+async function lockerUpload(job, res) {
+  const dir = await exportsDir();
+  const file = await (await dir.getFileHandle(job.file)).getFile();
+  const folder = String(job.dest.folder || "").split("/").map(x => x.trim()).filter(x => x && x !== "." && x !== "..").join("/");
+  const base = job.name.replace(/[\\/]/g, "-"), dot = base.lastIndexOf(".");
+  const stem = dot > 0 ? base.slice(0, dot) : base, ext = dot > 0 ? base.slice(dot) : "";
+  let taken = new Set();
+  try {
+    const r = await fetch("/api/locker/files?prefix=" + encodeURIComponent((folder ? folder + "/" : "") + stem), { cache: "no-store" });
+    if (r.ok) taken = new Set(((await r.json()).files || []).map(f => f.path));
+  } catch {}
+  let path = (folder ? folder + "/" : "") + base;
+  for (let i = 2; taken.has(path); i++) path = (folder ? folder + "/" : "") + stem + " (" + i + ")" + ext;
+  let r = await fetch("/api/locker/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path, size: file.size, sha256: res.sha }) });
+  if (r.status === 401) throw new Error("login");
+  if (r.status === 402) { const q = await r.json().catch(() => ({})); throw Object.assign(new Error("locker-full"), { quota: q }); }
+  if (!r.ok) throw new Error("locker " + r.status + " " + (await r.text()).slice(0, 120));
+  const start = await r.json();
+  if (start.duplicate) return { path: start.path, duplicate: true };
+  let off = start.offset || 0;
+  job.state = "uploading";
+  const CHUNK = 16 << 20;
+  while (off < file.size) {
+    if (job.cancel) { fetch("/api/locker/upload/" + start.id, { method: "DELETE" }).catch(() => {}); throw new Error("cancelled"); }
+    job.frac = off / file.size;
+    xpost(job);
+    r = await fetch("/api/locker/upload/" + start.id, { method: "PATCH", headers: { "Content-Type": "application/octet-stream", "Upload-Offset": String(off) }, body: file.slice(off, Math.min(file.size, off + CHUNK)) });
+    if (r.status === 409) { off = (await r.json()).offset; continue; }
+    if (r.status === 401) throw new Error("login");
+    if (!r.ok) throw new Error("locker " + r.status);
+    off = (await r.json()).offset;
+  }
+  job.state = "verifying"; job.frac = 1; xpost(job);
+  r = await fetch("/api/locker/upload/" + start.id + "/finish", { method: "POST" });
+  if (r.status === 402) throw new Error("locker-full");
+  if (!r.ok) throw new Error("locker " + r.status + " " + (await r.text()).slice(0, 120));
+  const j = await r.json();
+  return { path: j.path, duplicate: false };
+}
+
+async function pumpExport() {
+  if (XP.running) return;
+  for (;;) {
+    const job = XP.jobs.find(j => j.state === "queued");
+    if (!job) break;
+    XP.running = job;
+    job.state = "rendering"; job.frac = 0; xpost(job);
+    const t0 = performance.now();
+    try {
+      const res = await renderJob(job);
+      let up = null;
+      if (job.dest.kind === "locker") up = await lockerUpload(job, res);
+      job.state = "done"; job.frac = 1;
+      xpost(job, { size: res.size, peak: res.peak, clipped: res.clipped, frames: res.frames, rate: res.rate, sha: res.sha, file: job.file, locker: up, ms: Math.round(performance.now() - t0) });
+    } catch (e) {
+      job.state = e.message === "cancelled" ? "cancelled" : "failed";
+      xpost(job, { error: errText(e), quota: e.quota || null });
+      if (job.dest.kind === "locker") { try { await (await exportsDir()).removeEntry(job.file); } catch {} }
+    }
+    releaseDoc(job.c);
+    job.c = null;
+    job.lists = null;
+    XP.running = null;
+  }
+}
+
+function queueExport(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const a = clampI(m.a, 0, c.len), b = clampI(m.b, 0, c.len);
+  if (b <= a) throw new Error("nosel");
+  const f = m.fmt || {};
+  const type = f.type === "flac" ? "flac" : "wav";
+  const bits = type === "flac" ? (f.bits === 16 ? 16 : 24) : [16, 24, 32].includes(f.bits) ? f.bits : 24;
+  const rate = [0, 44100, 48000, 88200, 96000, 176400, 192000].includes(f.rate) ? f.rate : 0;
+  const job = { id: m.jobId, c, lists: c.lists, a, b, name: String(m.name || "export"), fmt: { type, bits, rate }, master: m.master || {}, dest: m.dest || { kind: "download" }, file: m.jobId + "." + type, state: "queued", frac: 0, seed: XP.jobs.length * 7919 };
+  c.busy = (c.busy || 0) + 1;
+  XP.jobs.push(job);
+  xpost(job);
+  pumpExport();
+  return { t: "queued", id: job.id };
+}
+
 function opened(req, r) {
   postMessage({ t: "opened", req, meta: r.meta, peaks: r.peaks, bands: r.bands, state: r.state, recovered: r.recovered }, [r.peaks.buffer, r.bands.buffer]);
 }
@@ -1036,6 +1355,7 @@ async function handle(m) {
   if (m.t === "remove") {
     await importing;
     await enqueue(async () => {
+      if ((cur && cur.meta.id === m.id && cur.busy > 0) || lingering.has(m.id)) throw new Error("exporting");
       if (cur && cur.meta.id === m.id) await closeCur();
       await (await docsDir()).removeEntry(m.id, { recursive: true });
     });
@@ -1044,6 +1364,13 @@ async function handle(m) {
   }
   if (m.t === "edit") { postMessage(Object.assign({ req: m.req }, await enqueue(() => applyEdit(m)))); return; }
   if (m.t === "undo" || m.t === "redo" || m.t === "jump") { postMessage(Object.assign({ req: m.req }, await enqueue(() => moveHist(m)))); return; }
+  if (m.t === "export") { postMessage(Object.assign({ req: m.req }, await enqueue(() => queueExport(m)))); return; }
+  if (m.t === "xcancel") { const j = XP.jobs.find(x => x.id === m.id); if (j) { j.cancel = true; if (j.state === "queued") { j.state = "cancelled"; xpost(j); releaseDoc(j.c); j.c = null; j.lists = null; } } return; }
+  if (m.t === "xremove") {
+    const i = XP.jobs.findIndex(x => x.id === m.id);
+    if (i >= 0 && !["queued", "rendering", "hashing", "uploading", "verifying"].includes(XP.jobs[i].state)) { const j = XP.jobs.splice(i, 1)[0]; try { await (await exportsDir()).removeEntry(j.file); } catch {} }
+    return;
+  }
   if (m.t === "adjust") { postMessage(Object.assign({ req: m.req }, await enqueue(() => adjustSel(m)))); return; }
   if (m.t === "flush") { await enqueue(async () => { if (cur && cur.saving) await cur.saving; }); postMessage({ t: "flushed", req: m.req, err: cur ? cur.saveErr : null }); return; }
 }
