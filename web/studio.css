@@ -267,3 +267,14 @@ canvas.ru{height:34px}
   #locs{position:fixed;left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:55vh}
   #pal{padding-top:8vh}
 }
+#ctx{position:fixed;z-index:60;min-width:250px;max-width:calc(100vw - 8px);max-height:calc(100vh - 8px);overflow:auto;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 44px rgba(0,0,0,.7);padding:4px 0}
+#ctx.hidden{display:none}
+#ctx .citem{display:flex;align-items:center;gap:18px;width:100%;background:transparent;border:0;color:var(--white);font:inherit;font-size:11.5px;padding:6px 14px;cursor:pointer;text-align:left;outline:none}
+#ctx .citem:hover:not(:disabled),#ctx .citem:focus-visible,#ctx .citem:focus{background:var(--bg4);color:var(--gold)}
+#ctx .citem:disabled{opacity:.35;cursor:default}
+#ctx .cl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ctx .ck{font-size:10px;color:var(--dim);white-space:nowrap}
+#ctx .csep{height:1px;background:var(--border);margin:4px 0}
+#wv{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+@media (pointer:coarse){#ctx .citem{padding:10px 16px;font-size:13px}}
+#ctx:focus{outline:none}

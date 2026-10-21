@@ -1381,7 +1381,7 @@ function applyPanel(which) {
 
 function wireWave() {
   const cv = $("wv");
-  let autoTimer = 0, lastX = 0;
+  let autoTimer = 0, lastX = 0, press = null;
   const local = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width }; };
   const auto = () => {
     if (!ed.dragging) return;
@@ -1398,12 +1398,27 @@ function wireWave() {
     else { ed.sel = { a: Math.min(dg.anchor, f), b: Math.max(dg.anchor, f) }; }
     redraw();
   };
+  const cancelPress = () => { if (press) { clearTimeout(press.timer); press = null; } };
   cv.addEventListener("pointerdown", e => {
-    if (!ed.doc || e.button > 0) return;
+    if (!ed.doc || e.button > 0 || (IS_MAC && e.ctrlKey)) return;
     e.preventDefault();
     cv.setPointerCapture(e.pointerId);
     const p = local(e);
     lastX = p.x;
+    cancelPress();
+    if (e.pointerType === "touch") {
+      const keep = { sel: { a: ed.sel.a, b: ed.sel.b }, cursor: ed.cursor };
+      press = { x: e.clientX, y: e.clientY, pid: e.pointerId, timer: setTimeout(() => {
+        const pr = press;
+        press = null;
+        clearInterval(autoTimer);
+        ed.dragging = null;
+        try { cv.releasePointerCapture(e.pointerId); } catch {}
+        ed.sel = keep.sel;
+        ed.cursor = keep.cursor;
+        waveMenuAt(pr.x, pr.y, true, pr.pid);
+      }, 550) };
+    }
     const f = Math.max(0, Math.min(ed.doc.frames, frameAt(p.x)));
     const selOn = ed.sel.b > ed.sel.a;
     const nearA = selOn && Math.abs(xOf(ed.sel.a) - p.x) < 6, nearB = selOn && Math.abs(xOf(ed.sel.b) - p.x) < 6;
@@ -1421,6 +1436,7 @@ function wireWave() {
   cv.addEventListener("pointermove", e => {
     if (!ed.doc) return;
     const p = local(e);
+    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) cancelPress();
     if (!ed.dragging) {
       const selOn = ed.sel.b > ed.sel.a;
       cv.style.cursor = selOn && (Math.abs(xOf(ed.sel.a) - p.x) < 6 || Math.abs(xOf(ed.sel.b) - p.x) < 6) ? "ew-resize" : "text";
@@ -1432,6 +1448,7 @@ function wireWave() {
     dragTo(p.x);
   });
   const end = e => {
+    cancelPress();
     if (!ed.dragging) return;
     clearInterval(autoTimer);
     const dg = ed.dragging;
@@ -1449,8 +1466,15 @@ function wireWave() {
   };
   cv.addEventListener("pointerup", end);
   cv.addEventListener("pointercancel", end);
+  cv.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    if (!ed.doc || !$("ctx").classList.contains("hidden")) return;
+    if (ed.dragging) { clearInterval(autoTimer); ed.dragging = null; }
+    waveMenuAt(e.clientX, e.clientY);
+  });
   cv.addEventListener("wheel", e => {
     if (!ed.doc) return;
+    ctxClose();
     e.preventDefault();
     const p = local(e);
     const horizontal = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);

@@ -258,5 +258,7 @@
  "Space": "Leertaste",
  "Home": "Pos1",
  "key changed": "Taste geändert",
- "keys changed": "Tasten geändert"
+ "keys changed": "Tasten geändert",
+ "Play from here": "Ab hier abspielen",
+ "Play the selection": "Auswahl abspielen"
 }

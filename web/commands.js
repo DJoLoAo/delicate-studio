@@ -277,6 +277,7 @@ function seqKey(combo) {
 
 function wireCommands() {
   kbLoad();
+  wireCtx();
   document.addEventListener("keydown", onKey);
   const seg = $("zpSeg");
   seg.addEventListener("click", e => {
@@ -315,6 +316,7 @@ function closePopovers() {
 
 function onKey(e) {
   if (kb.capture) { captureKey(e); return; }
+  if (!$("ctx").classList.contains("hidden")) { if (e.key === "Escape") { e.preventDefault(); ctxClose(); } return; }
   if (!$("pal").classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); palClose(); }
     else if (e.target !== $("palQ") && !MOD_ONLY.includes(e.key)) $("palQ").focus();
@@ -501,4 +503,118 @@ function captureKey(e) {
   keysInfo();
   palRender(true);
   $("palQ").focus();
+}
+
+function ctxClose() {
+  const el = $("ctx");
+  if (!el || el.classList.contains("hidden")) return;
+  if (el.contains(document.activeElement)) document.activeElement.blur();
+  el.classList.add("hidden");
+}
+
+const ctxState = { fresh: true, pid: null };
+
+function ctxOpen(x, y, items, touch, pid) {
+  closePopovers();
+  const el = $("ctx");
+  ctxState.fresh = !touch;
+  ctxState.pid = touch && pid !== undefined ? pid : null;
+  el.innerHTML = "";
+  let lastSep = true;
+  for (const it of items) {
+    if (it === "-") { if (!lastSep) { const d = document.createElement("div"); d.className = "csep"; el.appendChild(d); lastSep = true; } continue; }
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "citem";
+    b.disabled = !it.enabled;
+    b.innerHTML = `<span class="cl"></span><span class="ck"></span>`;
+    b.querySelector(".cl").textContent = it.label;
+    b.querySelector(".ck").textContent = it.key || "";
+    if (it.id) b.dataset.cmd = it.id;
+    b.addEventListener("click", ev => {
+      ev.stopPropagation();
+      const fromOpener = ev.pointerId !== undefined && ev.pointerId >= 0 ? ev.pointerId === ctxState.pid : !ctxState.fresh && ev.detail !== 0;
+      if (fromOpener) return;
+      ctxClose();
+      it.run();
+    });
+    el.appendChild(b);
+    lastSep = false;
+  }
+  if (el.lastChild && el.lastChild.className === "csep") el.lastChild.remove();
+  el.style.left = "0px";
+  el.style.top = "0px";
+  el.classList.remove("hidden");
+  const r = el.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight, gap = touch ? 14 : 0;
+  el.style.left = Math.max(4, Math.min(x, W - r.width - 4)) + "px";
+  const below = y + gap, above = y - gap - r.height;
+  el.style.top = (below + r.height + 4 <= H ? below : above >= 4 ? above : Math.max(4, H - r.height - 4)) + "px";
+  el.tabIndex = -1;
+  el.focus({ preventScroll: true });
+}
+
+function ctxKey(e) {
+  const el = $("ctx");
+  const items = [...el.querySelectorAll(".citem:not(:disabled)")];
+  const i = items.indexOf(document.activeElement);
+  if (e.key === "Escape" || e.key === "Tab") { e.preventDefault(); ctxClose(); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const n = items.length;
+    if (!n) return;
+    items[e.key === "ArrowDown" ? (i + 1) % n : i < 0 ? n - 1 : (i - 1 + n) % n].focus({ preventScroll: true });
+    return;
+  }
+  if (e.key === "Home" || e.key === "End") { e.preventDefault(); if (items.length) items[e.key === "Home" ? 0 : items.length - 1].focus({ preventScroll: true }); return; }
+  if (e.key === "Enter" || e.key === " ") return;
+  e.preventDefault();
+}
+
+function ctxCmd(id, label) {
+  const c = CMD[id];
+  return { id, label: label || cmdLabel(c), key: cmdKeyText(id), enabled: cmdEnabled(c), run: () => runCmd(c) };
+}
+
+function waveMenuAt(clientX, clientY, touch, pid) {
+  if (!ed.doc) return;
+  const r = $("wv").getBoundingClientRect(), x = clientX - r.left;
+  const f = Math.round(Math.max(0, Math.min(ed.doc.frames, frameAt(x))));
+  const inside = selOn() && f >= ed.sel.a && f <= ed.sel.b;
+  if (!inside) { ed.sel = { a: 0, b: 0 }; ed.cursor = f; redraw(); }
+  let mk = null;
+  for (const m of shownMarks()) {
+    const d = Math.min(Math.abs(xOf(m.a) - x), m.kind === "range" ? Math.abs(xOf(m.b) - x) : Infinity);
+    if (d <= 5 && (!mk || d < mk.d)) mk = { m, d };
+  }
+  const stereo = ed.doc.channels > 1;
+  const items = [
+    ed.play.on ? ctxCmd("stop") : { label: selOn() ? t("Play the selection") : t("Play from here"), key: cmdKeyText("play"), enabled: true, run: () => startPlay(selOn() ? ed.sel.a : ed.cursor) },
+    "-",
+    ctxCmd("undo"), ctxCmd("redo"),
+    "-",
+    ctxCmd("cut"), ctxCmd("copy"), ctxCmd("paste", selOn() ? t("Paste — replaces the selection") : t("Paste")),
+    ctxCmd("delete"), ctxCmd("silence"), ctxCmd("crop"), ctxCmd("insert"),
+    "-",
+    ctxCmd("selAll"), ctxCmd("deselect"), ctxCmd("zoomSel"), ctxCmd("zcIn"), ctxCmd("zcOut")
+  ];
+  if (stereo) items.push(ctxCmd("chanL"), ctxCmd("chanR"));
+  items.push("-", ctxCmd("markAdd", selOn() ? t("Add a range from the selection") : t("Add marker")), ctxCmd("locAdd"));
+  if (mk) {
+    const m = mk.m, name = m.n + (m.name ? " · " + m.name : "");
+    items.push("-",
+      { label: t("Go to location") + " " + name, enabled: true, run: () => recallMark(m) },
+      { label: t("Rename location") + " " + m.n + "…", enabled: true, run: () => renameMark(m) },
+      { label: t("Delete location") + " " + m.n, enabled: true, run: () => markEdit("markdel", m.id) });
+  }
+  ctxOpen(clientX, clientY, items, touch, pid);
+}
+
+function wireCtx() {
+  const el = $("ctx");
+  el.addEventListener("keydown", e => { e.stopPropagation(); ctxKey(e); });
+  el.addEventListener("contextmenu", e => e.preventDefault());
+  document.addEventListener("pointerdown", e => { if (!el.classList.contains("hidden") && !el.contains(e.target)) ctxClose(); }, true);
+  el.addEventListener("pointerdown", () => { ctxState.fresh = true; }, true);
+  window.addEventListener("resize", ctxClose);
+  window.addEventListener("blur", ctxClose);
 }

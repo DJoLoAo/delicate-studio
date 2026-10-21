@@ -258,5 +258,7 @@
  "Space": "Espacio",
  "Home": "Inicio",
  "key changed": "tecla cambiada",
- "keys changed": "teclas cambiadas"
+ "keys changed": "teclas cambiadas",
+ "Play from here": "Reproducir desde aquí",
+ "Play the selection": "Reproducir la selección"
 }
