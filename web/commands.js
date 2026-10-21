@@ -91,6 +91,8 @@ const CMDS = [
   { id: "insert", g: "Edit", label: "Insert silence…", run: () => insertSilenceDlg(), doc: true },
   { id: "hist", g: "Edit", label: "History", run: () => toggleHist(), doc: true, kw: "undo list steps" },
   { id: "diag", g: "Repair", label: "Diagnostics: DeClicker…", run: () => toggleDiag(), doc: true, kw: "declick decrackle click pop crackle vinyl scan repair restore" },
+  { id: "nr", g: "Repair", label: "Noise Reduction…", run: () => toggleNr(), doc: true, kw: "denoise noise reduction hiss surface noise vinyl print process" },
+  { id: "nrCap", g: "Repair", label: "Capture noise print", run: () => nrCapture(), doc: true, when: () => selOn(), kw: "noise print profile learn denoise" },
   { id: "heal", g: "Repair", label: "Heal the selection", run: () => edit("heal"), doc: true, when: () => selOn(), kw: "automatic heal repair click pop fix interpolate" },
   { id: "markAdd", g: "Locations", label: "Add marker (or a range from the selection)", run: () => addMarker(false), doc: true, kw: "cue memory location" },
   { id: "rangeAdd", g: "Locations", label: "Add a range from the selection", run: () => addMarker(true), doc: true, when: () => selOn(), kw: "region memory location" },
@@ -114,7 +116,7 @@ const BASE_KEYS = {
   zp1: ["1"], zp2: ["2"], zp3: ["3"], zp4: ["4"], zp5: ["5"],
   selAll: ["Mod+A"], deselect: ["Escape"],
   undo: ["Mod+Z"], redo: ["Mod+Shift+Z", "Mod+Y"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
-  delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"], heal: ["Mod+U"],
+  delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"], heal: ["Mod+U"], nrCap: ["Shift+P"],
   markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"],
   open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"]
 };
@@ -130,7 +132,7 @@ const KEYMAPS = {
       undo: ["Mod+Z"], redo: ["Mod+Shift+Z"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
       delete: ["Delete", "Backspace"], crop: [{ k: "T", native: "Mod+T" }], selAll: ["Mod+A"], deselect: ["Mod+Shift+A"],
       markAdd: ["M", "*", "Num*"], locs: ["Alt+8"], chanL: ["ArrowUp"], chanR: ["ArrowDown"],
-      zcIn: ["Shift+I"], zcOut: ["Shift+O"], open: ["Mod+O"], heal: ["Mod+U"]
+      zcIn: ["Shift+I"], zcOut: ["Shift+O"], open: ["Mod+O"], heal: ["Mod+U"], nr: ["Mod+Shift+P"], nrCap: ["Shift+P"]
     }
   },
   protools: {
@@ -596,7 +598,7 @@ function waveMenuAt(clientX, clientY, touch, pid) {
     ctxCmd("undo"), ctxCmd("redo"),
     "-",
     ctxCmd("cut"), ctxCmd("copy"), ctxCmd("paste", selOn() ? t("Paste — replaces the selection") : t("Paste")),
-    ctxCmd("delete"), ctxCmd("silence"), ctxCmd("crop"), ctxCmd("insert"), ctxCmd("heal"),
+    ctxCmd("delete"), ctxCmd("silence"), ctxCmd("crop"), ctxCmd("insert"), ctxCmd("heal"), ctxCmd("nrCap"),
     "-",
     ctxCmd("selAll"), ctxCmd("deselect"), ctxCmd("zoomSel"), ctxCmd("zcIn"), ctxCmd("zcOut")
   ];

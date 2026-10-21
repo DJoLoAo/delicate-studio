@@ -266,6 +266,7 @@ name = "studio-dsp"
 version = "0.1.0"
 dependencies = [
  "md-5",
+ "realfft",
  "rubato",
  "sha2",
  "symphonia",

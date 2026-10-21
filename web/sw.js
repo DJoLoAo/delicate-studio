@@ -1,5 +1,5 @@
-const SHELL = "studio-shell-v8";
-const SHELL_FILES = ["/", "/index.html", "/studio.css", "/app.js", "/editor.js", "/edit.js", "/commands.js", "/export.js", "/repair.js", "/worker.js", "/player-worklet.js", "/studio-dsp.wasm", "/dialog.js", "/i18n.js", "/favicon.svg", "/manifest.webmanifest", "/fonts/fonts.css", "/fonts/JetBrainsMono.woff2", "/fonts/InstrumentSerif-Regular.woff2", "/fonts/InstrumentSerif-Italic.woff2", "/worldpicker/lang-picker.js", "/worldpicker/countries.js", "/worldpicker/world.js", "/worldpicker/flags-meta.js", "/worldpicker/flags.webp", "/i18n/de.json", "/i18n/fr.json", "/i18n/es.json", "/i18n/it.json", "/i18n/pt.json", "/i18n/hi.json"];
+const SHELL = "studio-shell-v9";
+const SHELL_FILES = ["/", "/index.html", "/studio.css", "/app.js", "/editor.js", "/edit.js", "/commands.js", "/export.js", "/repair.js", "/nr.js", "/worker.js", "/player-worklet.js", "/studio-dsp.wasm", "/dialog.js", "/i18n.js", "/favicon.svg", "/manifest.webmanifest", "/fonts/fonts.css", "/fonts/JetBrainsMono.woff2", "/fonts/InstrumentSerif-Regular.woff2", "/fonts/InstrumentSerif-Italic.woff2", "/worldpicker/lang-picker.js", "/worldpicker/countries.js", "/worldpicker/world.js", "/worldpicker/flags-meta.js", "/worldpicker/flags.webp", "/i18n/de.json", "/i18n/fr.json", "/i18n/es.json", "/i18n/it.json", "/i18n/pt.json", "/i18n/hi.json"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(SHELL).then(c => Promise.allSettled(SHELL_FILES.map(f => c.add(f)))).then(() => self.skipWaiting()));

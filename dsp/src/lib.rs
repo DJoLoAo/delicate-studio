@@ -89,6 +89,7 @@ impl Decoder {
 }
 
 pub mod enc;
+pub mod nr;
 pub mod restore;
 pub mod rs;
 
@@ -360,6 +361,111 @@ mod wasm {
     #[unsafe(no_mangle)]
     pub extern "C" fn rp_context(p: u32, m: u32, heal: u32) -> u32 {
         crate::restore::context_len(p as usize, m as usize, heal != 0) as u32
+    }
+
+    static mut NR: [Option<crate::nr::Nr>; 2] = [None, None];
+    static mut NP_BUF: Vec<f32> = Vec::new();
+    static mut NP_OUT: Vec<f32> = Vec::new();
+
+    fn nrm(slot: u32) -> Option<&'static mut crate::nr::Nr> {
+        unsafe { (*std::ptr::addr_of_mut!(NR)).get_mut(slot as usize).and_then(|s| s.as_mut()) }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn nr_open(slot: u32, ch: u32, sr: u32, n: u32, k: u32) -> i32 {
+        if slot > 1 || ch == 0 || ch > 8 || sr == 0 || !(256..=65536).contains(&n) || !n.is_power_of_two() || !(3..=32).contains(&k) {
+            return fail("noise reduction settings out of range".into());
+        }
+        unsafe { (*std::ptr::addr_of_mut!(NR))[slot as usize] = Some(crate::nr::Nr::new(ch as usize, sr as usize, n as usize, k as usize)); }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn nr_close(slot: u32) {
+        if slot <= 1 {
+            unsafe { (*std::ptr::addr_of_mut!(NR))[slot as usize] = None; }
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn nr_print(slot: u32, c: u32) -> *mut f32 {
+        match nrm(slot) {
+            Some(r) if (c as usize) < r.ch => r.gn.print_mut(c as usize).as_mut_ptr(),
+            _ => std::ptr::null_mut(),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn nr_curve(slot: u32) -> *mut f32 {
+        nrm(slot).map(|r| r.gn.curve.as_mut_ptr()).unwrap_or(std::ptr::null_mut())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn nr_set(slot: u32, floor: f32, amount: f32, thr: f32, decay: f32, link: u32, only: u32) -> i32 {
+        let Some(r) = nrm(slot) else { return fail("noise reduction is not open".into()) };
+        r.gn.configure(crate::nr::Settings { floor_db: floor, amount, thr_db: thr, decay, link: link != 0, noise_only: only != 0 });
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn nr_reset(slot: u32) {
+        if let Some(r) = nrm(slot) {
+            r.reset();
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn nr_hop(slot: u32) -> u32 {
+        nrm(slot).map(|r| r.st.hop as u32).unwrap_or(0)
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn nr_in(slot: u32, m: u32) -> *mut f32 {
+        nrm(slot).map(|r| r.stage(m as usize)).unwrap_or(std::ptr::null_mut())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn nr_run(slot: u32, m: u32) -> i32 {
+        match nrm(slot) {
+            Some(r) => r.run(m as usize) as i32,
+            None => fail("noise reduction is not open".into()),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn nr_out(slot: u32) -> *const f32 {
+        nrm(slot).map(|r| r.out.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn np_buf(len: u32) -> *mut f32 {
+        unsafe {
+            let b = &mut *std::ptr::addr_of_mut!(NP_BUF);
+            if b.len() < len as usize {
+                b.resize(len as usize, 0.0);
+            }
+            b.as_mut_ptr()
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn np_stats(len: u32, n: u32, k: u32) -> i32 {
+        if !(256..=65536).contains(&n) || !n.is_power_of_two() || !(3..=32).contains(&k) {
+            return fail("noise print settings out of range".into());
+        }
+        let x = unsafe { &(&*std::ptr::addr_of!(NP_BUF))[..len as usize] };
+        let Some(p) = crate::nr::print_of(x, n as usize, k as usize) else { return fail("the noise print is too short".into()) };
+        let out = unsafe { &mut *std::ptr::addr_of_mut!(NP_OUT) };
+        out.clear();
+        out.extend_from_slice(&p.mean);
+        out.extend_from_slice(&p.lo);
+        out.extend_from_slice(&p.hi);
+        p.frames as i32
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn np_out() -> *const f32 {
+        unsafe { (*std::ptr::addr_of!(NP_OUT)).as_ptr() }
     }
 
     static mut RS: Option<crate::rs::Rs> = None;

@@ -19,7 +19,7 @@ class StudioPlayer extends AudioWorkletProcessor {
       const w = Atomics.load(ctrl, 1);
       let r = Atomics.load(ctrl, 2);
       const end = Atomics.load(ctrl, 5);
-      let n = Math.min(frames, w - r);
+      let n = Math.max(0, Math.min(frames, w - r));
       if (end >= 0) n = Math.min(n, Math.max(0, end - r));
       for (let c = 0; c < ch; c++) {
         const o = out[c], base = c * R;

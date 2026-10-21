@@ -63,6 +63,7 @@ ed.worker.onmessage = e => {
   if (m.t === "playerror") { stopPlay(); tell(t("Playback stopped") + ": " + m.msg); return; }
   if (m.t === "xjob") { xpJob(m); return; }
   if (m.t === "dprog") { dgProg(m); return; }
+  if (m.t === "nprog") { nrProg(m); return; }
   const p = ed.pending.get(m.req);
   if (!p) return;
   ed.pending.delete(m.req);
@@ -627,6 +628,7 @@ function updatePanel() {
   document.querySelectorAll("#scaleSeg button").forEach(btn => btn.classList.toggle("on", btn.dataset.v === ed.scale));
   document.querySelectorAll("#colourSeg button").forEach(btn => btn.classList.toggle("on", btn.dataset.v === ed.colour));
   editButtons();
+  rpTick();
 }
 
 function saveView(now) {
@@ -720,6 +722,7 @@ function showDoc(meta, peaks, bands, state) {
   drawMeters();
   redraw();
   closeFiles();
+  nrDoc();
 }
 
 function closeDoc() {
@@ -1093,7 +1096,7 @@ function drawMeters() {
   if (active || ed.play.on) ed.meterRaf = requestAnimationFrame(drawMeters);
 }
 
-const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", repair: "Repair" };
+const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", repair: "Repair", nr: "Noise Reduction" };
 
 function selOn() { return ed.sel.b > ed.sel.a; }
 
@@ -1124,7 +1127,8 @@ function setSelFrom(sel) {
 
 function editError(e) {
   const m = e && e.message || String(e);
-  if (m === "stale" || m === "nothing") return;
+  if (m === "stale" || m === "nothing" || m === "cancelled") return;
+  if (m === "print-none" || m.startsWith("print-rate:") || m.startsWith("print-short:") || m === "changed") { tell(nrErrText(m), t("Noise Reduction")); return; }
   if (m === "nosel") { tell(t("Select a range first.")); return; }
   if (m === "noclip") { tell(t("The clipboard is empty.")); return; }
   if (m === "empty") { tell(t("A file can't be empty. Select less, or close the file instead.")); return; }
@@ -1701,6 +1705,7 @@ function wireUi() {
   wireCommands();
   wireExport();
   wireDiag();
+  wireNr();
   wireDrop();
 }
 

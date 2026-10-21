@@ -1,5 +1,6 @@
 const DG_ROW = 26;
 const DG_LENS = [1, 2, 5, 10, 20];
+const rp = { open: false, tab: "declick", selKey: "" };
 const dg = { open: false, res: null, sel: new Set(), focus: -1, scan: null, listen: "off", cfg: null, seq: 0, refresh: 0, done: 0 };
 
 function dgLoad() {
@@ -19,23 +20,45 @@ function dgRange() {
   return { a: 0, b: ed.doc ? ed.doc.frames : 0, sel: false };
 }
 
-function openDiag() {
+function openRepair(tab) {
   if (!ed.doc) return;
   closePopovers();
-  dg.open = true;
+  const prev = rp.open ? rp.tab : null;
+  rp.open = true;
+  rp.tab = tab === "nr" ? "nr" : "declick";
+  dg.open = rp.tab === "declick";
   $("diag").classList.remove("hidden");
-  dgRender();
+  $("dgBody").classList.toggle("hidden", rp.tab !== "declick");
+  $("nrBody").classList.toggle("hidden", rp.tab !== "nr");
+  document.querySelectorAll("#rpTabs button").forEach(b => b.classList.toggle("on", b.dataset.v === rp.tab));
+  if (prev === "declick" && rp.tab !== "declick") dgListen("off");
+  if (prev === "nr" && rp.tab !== "nr") nrHide();
+  if (rp.tab === "declick") dgRender(); else if (prev !== "nr") nrShow();
   redraw();
 }
 
+function openDiag() { openRepair("declick"); }
+
 function closeDiag() {
+  const was = rp.open ? rp.tab : null;
+  rp.open = false;
   dg.open = false;
   $("diag").classList.add("hidden");
   dgListen("off");
+  if (was === "nr") nrHide();
   redraw();
 }
 
-function toggleDiag() { if (dg.open) closeDiag(); else openDiag(); }
+function toggleDiag() { if (rp.open && rp.tab === "declick") closeDiag(); else openRepair("declick"); }
+function toggleNr() { if (rp.open && rp.tab === "nr") closeDiag(); else openRepair("nr"); }
+
+function rpTick() {
+  if (!rp.open) return;
+  const key = ed.sel.a + ":" + ed.sel.b;
+  if (key === rp.selKey) return;
+  rp.selKey = key;
+  if (rp.tab === "nr") nrRender(); else dgRender();
+}
 
 function dgListen(mode) {
   dg.listen = mode;
@@ -196,6 +219,7 @@ function dgAfterEdit() {
 }
 
 function drawDiag(g, W, H, dpr) {
+  if (rp.open && rp.tab === "nr") { drawNrPrint(g, W, H, dpr); return; }
   if (!dg.open || !dg.res || !dg.res.events.length) return;
   const ev = dg.res.events, v0 = ed.view.start, v1 = v0 + viewWidth() * ed.view.spp;
   let lo = 0, hi = ev.length - 1, i = ev.length;
@@ -214,6 +238,7 @@ function drawDiag(g, W, H, dpr) {
 function wireDiag() {
   dgLoad();
   $("dgX").addEventListener("click", closeDiag);
+  $("rpTabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) openRepair(b.dataset.v); });
   $("dgSens").addEventListener("input", () => { dg.cfg.sens = Number($("dgSens").value); $("dgSensV").textContent = dg.cfg.sens; dgSave(); });
   $("dgSens").addEventListener("change", () => $("dgSens").blur());
   const seg = (id, fn) => $(id).addEventListener("click", e => { const b = e.target.closest("button"); if (!b || b.disabled) return; fn(b.dataset.v); dgSave(); dgRender(); });
@@ -228,8 +253,8 @@ function wireDiag() {
   $("dgList").addEventListener("scroll", dgList);
   $("dgList").addEventListener("click", e => { const row = e.target.closest(".dgrow"); if (row) { dgFocus(Number(row.dataset.i), e.shiftKey || e.ctrlKey || e.metaKey); $("dgList").focus({ preventScroll: true }); } });
   $("diag").addEventListener("keydown", e => {
-    if (e.key === "Escape") { e.stopPropagation(); closeDiag(); return; }
-    if (!dg.res || !dg.res.events.length || e.target.closest("input")) return;
+    if (e.key === "Escape" && !e.target.closest(".dd.open")) { e.stopPropagation(); closeDiag(); return; }
+    if (rp.tab !== "declick" || !dg.res || !dg.res.events.length || e.target.closest("input")) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); dgFocus(Math.max(0, Math.min(dg.res.events.length - 1, dg.focus + (e.key === "ArrowDown" ? 1 : -1))), false); }
     else if (e.key === "Enter" && dg.focus >= 0 && e.target.closest("#dgList")) { e.preventDefault(); e.stopPropagation(); dgRepair(false); }
   });
