@@ -11,7 +11,15 @@ const ed = {
   req: 0,
   pending: new Map(),
   doc: null,
-  levels: [],
+  srcs: [],
+  clip: null,
+  ver: 0,
+  hist: [],
+  histIdx: 0,
+  clipInfo: null,
+  editing: false,
+  xfade: localStorage.getItem("studioXfade") === null ? 5 : Number(localStorage.getItem("studioXfade")) || 0,
+  snap: localStorage.getItem("studioSnap") === "1",
   view: { start: 0, spp: 1 },
   sel: { a: 0, b: 0 },
   chans: [],
@@ -108,17 +116,10 @@ function parseTime(text, fmt) {
   return Math.round(total * sr);
 }
 
-function buildLevels(meta, pk, bands) {
-  const ch = meta.channels, n0 = Math.ceil(meta.frames / BUCKET), buckets = meta.slots * BPB;
-  const min = [], max = [];
-  for (let c = 0; c < ch; c++) {
-    const mn = new Float32Array(n0), mx = new Float32Array(n0);
-    const base = c * buckets * 2;
-    for (let k = 0; k < n0; k++) { mn[k] = pk[base + k * 2]; mx[k] = pk[base + k * 2 + 1]; }
-    min.push(mn); max.push(mx);
-  }
-  const levels = [{ size: BUCKET, n: n0, min, max, band: bands.slice(0, n0 * 3) }];
-  while (levels[levels.length - 1].n > 1 && levels.length < 6) {
+function buildPyr(n0, mins, maxs, band) {
+  const ch = mins.length;
+  const levels = [{ size: BUCKET, n: n0, min: mins, max: maxs, band }];
+  while (levels[levels.length - 1].n > 1 && levels.length < 8) {
     const p = levels[levels.length - 1], n = Math.ceil(p.n / 16);
     const L = { size: p.size * 16, n, min: [], max: [], band: new Float32Array(n * 3) };
     for (let c = 0; c < ch; c++) {
@@ -142,6 +143,82 @@ function buildLevels(meta, pk, bands) {
     levels.push(L);
   }
   return levels;
+}
+
+function poolPyr(meta, pk, bands) {
+  const ch = meta.channels, n0 = Math.ceil(meta.frames / BUCKET), buckets = meta.slots * BPB;
+  const min = [], max = [];
+  for (let c = 0; c < ch; c++) {
+    const mn = new Float32Array(n0), mx = new Float32Array(n0);
+    const base = c * buckets * 2;
+    for (let k = 0; k < n0; k++) { mn[k] = pk[base + k * 2]; mx[k] = pk[base + k * 2 + 1]; }
+    min.push(mn); max.push(mx);
+  }
+  return buildPyr(n0, min, max, bands.slice(0, n0 * 3));
+}
+
+function allocPyr(a) {
+  const n0 = a.pk.length / 2, mn = new Float32Array(n0), mx = new Float32Array(n0);
+  for (let k = 0; k < n0; k++) { mn[k] = a.pk[k * 2]; mx[k] = a.pk[k * 2 + 1]; }
+  return buildPyr(n0, [mn], [mx], a.bd);
+}
+
+function accNew() { return { mn: Infinity, mx: -Infinity, l: 0, m: 0, h: 0 }; }
+function accReset(A) { A.mn = Infinity; A.mx = -Infinity; A.l = 0; A.m = 0; A.h = 0; }
+
+function takeRange(P, c, i0, i1, A) {
+  const mn = P.min[c], mx = P.max[c], bd = P.band, w = P.size;
+  for (let i = i0; i < i1; i++) {
+    if (mn[i] < A.mn) A.mn = mn[i];
+    if (mx[i] > A.mx) A.mx = mx[i];
+    A.l += bd[i * 3] * w; A.m += bd[i * 3 + 1] * w; A.h += bd[i * 3 + 2] * w;
+  }
+}
+
+function pyrQuery(lv, c, i0, i1, A) {
+  let L = 0;
+  while (i0 < i1) {
+    const P = lv[L];
+    if (L + 1 < lv.length && i1 - i0 >= 32) {
+      const a0 = (i0 + 15) & ~15, b0 = i1 & ~15;
+      takeRange(P, c, i0, a0, A);
+      takeRange(P, c, b0, i1, A);
+      i0 = a0 >> 4; i1 = b0 >> 4; L++;
+      continue;
+    }
+    takeRange(P, c, i0, i1, A);
+    break;
+  }
+}
+
+function colPeak(c, s0, s1, A) {
+  const C = ed.clip, list = C.lists[c], cum = C.cum[c], E = C.edges[c];
+  let lo = 0, hi = list.length - 1, i = 0;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (cum[mid] <= s0) { i = mid; lo = mid + 1; } else hi = mid - 1; }
+  let any = false;
+  for (; i < list.length && cum[i] < s1; i++) {
+    const g = list[i], T0 = cum[i], n = g[3];
+    const u0 = Math.max(s0, T0), u1 = Math.min(s1, T0 + n);
+    if (u1 <= u0) continue;
+    any = true;
+    if (g[0] === SIL) { if (A.mn > 0) A.mn = 0; if (A.mx < 0) A.mx = 0; continue; }
+    const S = ed.srcs[g[0]];
+    if (!S) continue;
+    const st = g[2], end = st + n, a = st + (u0 - T0), b = st + (u1 - T0), e = E[i];
+    const h1 = Math.min(end, Math.ceil(st / BUCKET) * BUCKET), t0 = Math.max(h1, Math.floor(end / BUCKET) * BUCKET);
+    if (e && a < h1) { if (e[0] < A.mn) A.mn = e[0]; if (e[1] > A.mx) A.mx = e[1]; }
+    if (e && b > t0 && end > t0) { if (e[2] < A.mn) A.mn = e[2]; if (e[3] > A.mx) A.mx = e[3]; }
+    let full = false;
+    if (t0 > h1) {
+      const i0 = Math.max(h1 / BUCKET, Math.floor(a / BUCKET)), i1 = Math.min(t0 / BUCKET, Math.ceil(b / BUCKET));
+      if (i1 > i0) { pyrQuery(S.levels, g[1], i0, i1, A); full = true; }
+    }
+    if (!full) {
+      const L0 = S.levels[0], k = Math.min(L0.n - 1, Math.floor(a / BUCKET));
+      A.l += L0.band[k * 3] || 0; A.m += L0.band[k * 3 + 1] || 0; A.h += L0.band[k * 3 + 2] || 0;
+    }
+  }
+  return any;
 }
 
 function amp(v) {
@@ -235,37 +312,15 @@ function render() {
   saveView();
 }
 
-function columnPeaks(level, s0, s1, c) {
-  const L = ed.levels[level];
-  const i0 = Math.max(0, Math.floor(s0 / L.size)), i1 = Math.min(L.n, Math.max(i0 + 1, Math.ceil(s1 / L.size)));
-  let mn = Infinity, mx = -Infinity;
-  const a = L.min[c], b = L.max[c];
-  for (let i = i0; i < i1; i++) { if (a[i] < mn) mn = a[i]; if (b[i] > mx) mx = b[i]; }
-  return i1 > i0 ? [mn, mx, i0, i1] : null;
-}
-
-function columnBand(level, i0, i1) {
-  const band = ed.levels[level].band;
-  let l = 0, m = 0, h = 0;
-  for (let i = i0; i < i1; i++) { l += band[i * 3]; m += band[i * 3 + 1]; h += band[i * 3 + 2]; }
-  return colourOf(l, m, h);
-}
-
-function levelFor(sppDev) {
-  let lv = 0;
-  for (let i = 0; i < ed.levels.length; i++) if (ed.levels[i].size <= sppDev) lv = i;
-  return lv;
-}
-
 function rawCovers(a, b) {
   const r = ed.raw;
-  return r && r.id === ed.doc.id && a >= r.start && b <= r.start + r.count;
+  return r && r.id === ed.doc.id && r.ver === ed.ver && a >= r.start && b <= r.start + r.count;
 }
 
 function wantRaw(a, b) {
   const span = b - a;
   const start = Math.max(0, Math.floor(a - span * 0.5)), end = Math.min(ed.doc.frames, Math.ceil(b + span * 0.5));
-  ed.rawWant = { id: ed.doc.id, start, count: end - start };
+  ed.rawWant = { id: ed.doc.id, ver: ed.ver, start, count: end - start };
   pumpRaw();
 }
 
@@ -276,8 +331,8 @@ async function pumpRaw() {
   ed.rawBusy = true;
   try {
     const r = await call({ t: "read", id: w.id, start: w.start, count: w.count });
-    if (ed.doc && r.id === ed.doc.id && r.count) {
-      ed.raw = { id: r.id, start: r.start, count: r.count, data: r.data };
+    if (ed.doc && r.id === ed.doc.id && r.ver === ed.ver && r.count) {
+      ed.raw = { id: r.id, ver: r.ver, start: r.start, count: r.count, data: r.data };
       redraw();
     }
   } catch {}
@@ -287,7 +342,7 @@ async function pumpRaw() {
 
 function drawWave() {
   const cv = $("wv"), dpr = canvasFit(cv), g = cv.getContext("2d");
-  const key = [cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.chans.join(), ed.raw ? ed.raw.id + ed.raw.start + ":" + ed.raw.count : "", ed.doc.id].join("|");
+  const key = [cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.chans.join(), ed.raw ? ed.raw.id + ed.raw.ver + ":" + ed.raw.start + ":" + ed.raw.count : "", ed.doc.id, ed.ver].join("|");
   if (!ed.waveBuf) ed.waveBuf = document.createElement("canvas");
   if (key !== ed.waveKey) {
     ed.waveBuf.width = cv.width;
@@ -320,14 +375,14 @@ function drawWaveBase(g, W, H, dpr) {
     g.fillRect(0, Math.round(mid), W, 1);
     const visA = start, visB = start + W * sppD;
     const useRaw = sppD < BUCKET;
-    if (useRaw && !rawCovers(Math.floor(visA), Math.ceil(visB))) wantRaw(visA, visB);
+    if (useRaw && !rawCovers(Math.floor(visA), Math.min(doc.frames, Math.ceil(visB)))) wantRaw(visA, visB);
     const raw = useRaw && rawCovers(Math.floor(visA), Math.min(doc.frames, Math.ceil(visB))) ? ed.raw : null;
     if (raw && sppD < 1) {
       const d = raw.data, base = c * raw.count;
       const i0 = Math.max(0, Math.floor(visA) - 1), i1 = Math.min(doc.frames - 1, Math.ceil(visB) + 1);
-      const lvl0 = ed.levels[0].band;
-      const k = Math.floor((i0 + i1) / 2 / BUCKET);
-      g.strokeStyle = colourOf(lvl0[k * 3] || 0, lvl0[k * 3 + 1] || 0, lvl0[k * 3 + 2] || 0);
+      const ac = accNew();
+      colPeak(c, i0, i1 + 1, ac);
+      g.strokeStyle = colourOf(ac.l, ac.m, ac.h);
       g.lineWidth = Math.max(1, dpr * 1.2);
       g.beginPath();
       for (let i = i0; i <= i1; i++) {
@@ -344,24 +399,23 @@ function drawWaveBase(g, W, H, dpr) {
       }
       continue;
     }
-    const lv = levelFor(sppD);
+    const ac = accNew();
     for (let x = 0; x < W; x++) {
       const s0 = start + x * sppD, s1 = s0 + sppD;
       if (s0 >= doc.frames) break;
-      let mn, mx, col;
+      let mn, mx;
+      accReset(ac);
       if (raw) {
         const d = raw.data, base = c * raw.count;
         const a = Math.max(raw.start, Math.floor(s0)), b = Math.min(raw.start + raw.count, Math.max(a + 1, Math.ceil(s1)));
         mn = Infinity; mx = -Infinity;
         for (let i = a; i < b; i++) { const v = d[base + i - raw.start]; if (v < mn) mn = v; if (v > mx) mx = v; }
-        const k = Math.floor(s0 / BUCKET), band = ed.levels[0].band;
-        col = colourOf(band[k * 3] || 0, band[k * 3 + 1] || 0, band[k * 3 + 2] || 0);
+        colPeak(c, a, b, ac);
       } else {
-        const p = columnPeaks(lv, s0, s1, c);
-        if (!p) continue;
-        mn = p[0]; mx = p[1];
-        col = columnBand(lv, p[2], p[3]);
+        if (!colPeak(c, s0, s1, ac) || ac.mx === -Infinity) continue;
+        mn = ac.mn; mx = ac.mx;
       }
+      const col = colourOf(ac.l, ac.m, ac.h);
       let y0 = mid - amp(mx) * A, y1 = mid - amp(mn) * A;
       if (y1 - y0 < 1) { const ym = (y0 + y1) / 2; y0 = ym - 0.5; y1 = ym + 0.5; }
       g.fillStyle = col;
@@ -452,7 +506,7 @@ function drawRuler() {
 
 function drawOverview() {
   const cv = $("ov"), dpr = canvasFit(cv), g = cv.getContext("2d");
-  const key = [cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.doc.id].join("|");
+  const key = [cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.doc.id, ed.ver].join("|");
   if (!ed.ovBuf) ed.ovBuf = document.createElement("canvas");
   if (key !== ed.ovKey) {
     ed.ovBuf.width = cv.width;
@@ -468,19 +522,14 @@ function drawOverviewBase(g, W, H, dpr) {
   const doc = ed.doc, ch = doc.channels;
   g.fillStyle = "#0e0c0a";
   g.fillRect(0, 0, W, H);
-  const sppD = doc.frames / W, lv = levelFor(sppD), mid = H / 2, A = H / 2 - 2 * dpr;
+  const sppD = doc.frames / W, mid = H / 2, A = H / 2 - 2 * dpr, ac = accNew();
   for (let x = 0; x < W; x++) {
     const s0 = x * sppD, s1 = s0 + sppD;
-    let mn = Infinity, mx = -Infinity, i0 = 0, i1 = 0;
-    for (let c = 0; c < ch; c++) {
-      const p = columnPeaks(lv, s0, s1, c);
-      if (!p) continue;
-      if (p[0] < mn) mn = p[0];
-      if (p[1] > mx) mx = p[1];
-      i0 = p[2]; i1 = p[3];
-    }
-    if (mx === -Infinity) continue;
-    g.fillStyle = columnBand(lv, i0, i1);
+    accReset(ac);
+    for (let c = 0; c < ch; c++) colPeak(c, s0, s1, ac);
+    if (ac.mx === -Infinity) continue;
+    const mn = ac.mn, mx = ac.mx;
+    g.fillStyle = colourOf(ac.l, ac.m, ac.h);
     g.globalAlpha = 0.75;
     const y0 = mid - Math.abs(amp(mx)) * A, y1 = mid + Math.abs(amp(mn)) * A;
     g.fillRect(x, y0, 1, Math.max(1, y1 - y0));
@@ -514,6 +563,7 @@ function updatePanel() {
   });
   document.querySelectorAll("#scaleSeg button").forEach(btn => btn.classList.toggle("on", btn.dataset.v === ed.scale));
   document.querySelectorAll("#colourSeg button").forEach(btn => btn.classList.toggle("on", btn.dataset.v === ed.colour));
+  editButtons();
 }
 
 function saveView(now) {
@@ -539,12 +589,38 @@ function chanSeg() {
   add(ch === 2 ? "L+R" : t("All"), "all");
 }
 
-function showDoc(meta, peaks, bands) {
-  stopPlay();
-  ed.doc = meta;
-  ed.levels = buildLevels(meta, peaks, bands);
+function docInfoText() {
+  const d = ed.doc, chs = d.channels === 1 ? t("mono") : d.channels === 2 ? t("stereo") : d.channels + " ch";
+  return [(d.sampleRate / 1000).toLocaleString() + " kHz", d.bits ? d.bits + "-bit" : (d.ext || "").toUpperCase(), chs, fmtDur(d.frames / d.sampleRate)].join(" · ");
+}
+
+function applyState(st) {
+  for (const a of st.allocs) ed.srcs[a.id] = { levels: allocPyr(a) };
+  ed.clip = { lists: st.lists, cum: st.lists.map(cumOf), edges: st.edges, len: st.len };
+  ed.doc.frames = st.len;
+  ed.ver = st.ver;
+  ed.hist = st.hist;
+  ed.histIdx = st.idx;
+  ed.clipInfo = st.clip;
+  if (st.saveErr && st.saveErr !== ed.saveErr) tell(t("Studio could not save your latest edits in this browser.") + " (" + (st.saveErr === "quota" ? t("Browser storage is full. Remove files from Studio's list to make room.") : st.saveErr) + ")");
+  ed.saveErr = st.saveErr || null;
   ed.raw = null;
   ed.rawWant = null;
+  $("docInfo").textContent = docInfoText();
+  editButtons();
+  if (!$("hist").classList.contains("hidden")) renderHist();
+}
+
+function showOpened(r) {
+  showDoc(r.meta, r.peaks, r.bands, r.state);
+  if (r.recovered) tell(t("Studio restored this file's edit history from its last good save. The most recent edit may be missing."), t("History restored"));
+}
+
+function showDoc(meta, peaks, bands, state) {
+  stopPlay();
+  ed.doc = Object.assign({}, meta);
+  ed.srcs = [{ levels: poolPyr(meta, peaks, bands) }];
+  applyState(state);
   ed.chans = new Array(meta.channels).fill(true);
   ed.sel = { a: 0, b: 0 };
   ed.cursor = 0;
@@ -552,21 +628,20 @@ function showDoc(meta, peaks, bands) {
   $("ed").classList.remove("hidden");
   $("docName").textContent = meta.name;
   $("docName").title = meta.name;
-  const chs = meta.channels === 1 ? t("mono") : meta.channels === 2 ? t("stereo") : meta.channels + " ch";
-  $("docInfo").textContent = [(meta.sampleRate / 1000).toLocaleString() + " kHz", meta.bits ? meta.bits + "-bit" : (meta.ext || "").toUpperCase(), chs, fmtDur(meta.frames / meta.sampleRate)].join(" · ");
   const sl = srcLabel(meta.source);
   $("docSrc").textContent = sl ? sl + " · " + t("read-only original") : "";
   $("docSrc").classList.toggle("hidden", !sl);
   chanSeg();
-  ed.view.spp = meta.frames / viewWidth();
+  const F = ed.doc.frames;
+  ed.view.spp = F / viewWidth();
   ed.view.start = 0;
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem("studioView:" + meta.id) || "null"); } catch {}
   if (saved) {
     if (Number.isFinite(saved.spp)) ed.view.spp = saved.spp;
     if (Number.isFinite(saved.start)) ed.view.start = saved.start;
-    if (Number.isFinite(saved.cursor)) ed.cursor = Math.min(meta.frames, Math.max(0, saved.cursor));
-    if (Number.isFinite(saved.a) && Number.isFinite(saved.b) && saved.b <= meta.frames) ed.sel = { a: saved.a, b: saved.b };
+    if (Number.isFinite(saved.cursor)) ed.cursor = Math.min(F, Math.max(0, saved.cursor));
+    if (Number.isFinite(saved.a) && Number.isFinite(saved.b) && saved.b <= F) ed.sel = { a: saved.a, b: saved.b };
     if (Array.isArray(saved.chans) && saved.chans.length === meta.channels && saved.chans.some(Boolean)) ed.chans = saved.chans;
   }
   clampView();
@@ -580,8 +655,10 @@ function showDoc(meta, peaks, bands) {
 function closeDoc() {
   stopPlay();
   ed.doc = null;
-  ed.levels = [];
+  ed.srcs = [];
+  ed.clip = null;
   ed.raw = null;
+  closeHist();
   $("ed").classList.add("hidden");
   $("empty").classList.remove("hidden");
   try { localStorage.removeItem("studioLastDoc"); } catch {}
@@ -591,8 +668,7 @@ function closeDoc() {
 
 async function openDoc(id) {
   try {
-    const r = await call({ t: "open", id });
-    showDoc(r.meta, r.peaks, r.bands);
+    showOpened(await call({ t: "open", id }));
   } catch (e) { openError(e, ""); }
 }
 
@@ -609,8 +685,7 @@ async function importFiles(files) {
     ed.importing = { name: f.name, frac: 0 };
     importProgress({ name: f.name, frac: 0 });
     try {
-      const r = await call({ t: "import", file: f });
-      showDoc(r.meta, r.peaks, r.bands);
+      showOpened(await call({ t: "import", file: f }));
     } catch (e) { openError(e, f.name); }
   }
   ed.importing = null;
@@ -746,8 +821,7 @@ async function importRemote(src, ext) {
   const name = [src.artist, src.title].filter(Boolean).join(" - ") || src.path || src.id;
   importProgress({ name, frac: 0, phase: "download" });
   try {
-    const r = await call({ t: "import", url: "/api/stream/" + encodeURIComponent(src.id), name, ext: ext || "", source: src });
-    showDoc(r.meta, r.peaks, r.bands);
+    showOpened(await call({ t: "import", url: "/api/stream/" + encodeURIComponent(src.id), name, ext: ext || "", source: src }));
   } catch (e) {
     if (e && e.message === "login") tell(t("Your session has ended. Log in again."));
     else if (e && e.message === "network") tell(t("The download was interrupted. Try again."), t("Could not open the file"));
@@ -779,7 +853,7 @@ async function refreshFiles() {
       name.title = d.name;
       name.innerHTML = `<span class="fn"></span><span class="fi"></span>`;
       name.querySelector(".fn").textContent = d.name;
-      name.querySelector(".fi").textContent = [srcLabel(d.source), fmtDur(d.frames / d.sampleRate), (d.sampleRate / 1000) + " kHz", d.bits ? d.bits + "-bit" : (d.ext || "").toUpperCase(), d.channels === 1 ? t("mono") : d.channels === 2 ? t("stereo") : d.channels + " ch", fmtBytes(d.frames * d.channels * 4)].filter(Boolean).join(" · ");
+      name.querySelector(".fi").textContent = [srcLabel(d.source), fmtDur((d.len || d.frames) / d.sampleRate), (d.sampleRate / 1000) + " kHz", d.bits ? d.bits + "-bit" : (d.ext || "").toUpperCase(), d.channels === 1 ? t("mono") : d.channels === 2 ? t("stereo") : d.channels + " ch", d.edits ? d.edits + " " + t(d.edits === 1 ? "edit" : "edits") : "", fmtBytes(d.frames * d.channels * 4 + (d.heapBytes || 0))].filter(Boolean).join(" · ");
       name.addEventListener("click", () => openDoc(d.id));
       const x = document.createElement("button");
       x.className = "x fdel";
@@ -943,6 +1017,131 @@ function drawMeters() {
   if (active || ed.play.on) ed.meterRaf = requestAnimationFrame(drawMeters);
 }
 
+const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence" };
+
+function selOn() { return ed.sel.b > ed.sel.a; }
+
+function editButtons() {
+  if (!ed.doc) return;
+  const has = selOn(), set = (id, on) => { const b = $(id); if (b) b.disabled = !on; };
+  set("undoBtn", ed.histIdx > 0);
+  set("redoBtn", ed.histIdx < ed.hist.length - 1);
+  for (const id of ["cutBtn", "copyBtn", "delBtn", "silBtn", "cropBtn"]) set(id, has);
+  set("pasteBtn", !!ed.clipInfo);
+  $("histN").textContent = ed.histIdx ? "· " + ed.histIdx : "";
+}
+
+function mapPos(p, h) {
+  if (!h || h.ch) return p;
+  if (h.op === "delete" || h.op === "cut" || h.op === "paste" || h.op === "insert") return p < h.a ? p : p < h.b ? h.a : p - (h.b - h.a) + (h.op === "paste" || h.op === "insert" ? h.n : 0);
+  if (h.op === "crop") return p >= h.a && p < h.b ? p - h.a : 0;
+  return p;
+}
+
+function setSelFrom(sel) {
+  const F = ed.doc.frames;
+  if (!sel) { ed.sel = { a: Math.min(ed.sel.a, F), b: Math.min(ed.sel.b, F) }; ed.cursor = Math.min(ed.cursor, F); if (ed.sel.b <= ed.sel.a) ed.sel = { a: 0, b: 0 }; return; }
+  const a = Math.max(0, Math.min(F, sel.a)), b = Math.max(0, Math.min(F, sel.b));
+  ed.sel = b > a ? { a, b } : { a: 0, b: 0 };
+  ed.cursor = Math.max(0, Math.min(F, sel.cursor !== undefined ? sel.cursor : a));
+}
+
+function editError(e) {
+  const m = e && e.message || String(e);
+  if (m === "stale" || m === "nothing") return;
+  if (m === "nosel") { tell(t("Select a range first.")); return; }
+  if (m === "noclip") { tell(t("The clipboard is empty.")); return; }
+  if (m === "empty") { tell(t("A file can't be empty. Select less, or close the file instead.")); return; }
+  if (m.startsWith("rate:")) { tell(t("The clipboard holds audio at a different sample rate") + " (" + (Number(m.slice(5)) / 1000).toLocaleString() + " kHz). " + t("Sample-rate conversion arrives with export."), t("Could not paste")); return; }
+  if (m === "quota") { tell(t("Browser storage is full. Remove files from Studio's list to make room.")); return; }
+  tell(m, t("Could not edit"));
+}
+
+async function runEdit(msg, structural) {
+  if (!ed.doc || ed.editing) return;
+  const wasPlaying = ed.play.on && structural, ph = wasPlaying ? playhead() : 0;
+  if (wasPlaying) stopPlay();
+  ed.editing = true;
+  try {
+    const r = await call(Object.assign({ id: ed.doc.id, a: ed.sel.a, b: ed.sel.b, cursor: ed.cursor, chans: ed.chans, xfade: ed.xfade, snap: ed.snap, have: ed.srcs.length }, msg));
+    if (!ed.doc) return;
+    if (r.t === "copied") {
+      ed.clipInfo = r.clip;
+      flash(t("Copied") + " " + fmtTime(r.clip.n) + " · " + (r.clip.ch === 1 ? t("mono") : r.clip.ch === 2 ? t("stereo") : r.clip.ch + " ch"));
+      setSelFrom(r.sel);
+      editButtons();
+      redraw();
+      return;
+    }
+    const h = msg.t === "edit" ? r.hist[r.idx] : null;
+    applyState(r);
+    setSelFrom(r.sel);
+    ensureVisible(ed.cursor);
+    clampView();
+    redraw();
+    if (wasPlaying) startPlay(Math.max(0, Math.min(ed.doc.frames - 1, Math.round(h ? mapPos(ph, h) : ph))));
+  } catch (e) { editError(e); }
+  finally { ed.editing = false; }
+}
+
+function edit(op, extra) {
+  if (!ed.doc) return;
+  if (["cut", "copy", "delete", "silence", "crop"].includes(op) && !selOn()) return;
+  if (op === "paste" && !ed.clipInfo) return;
+  return runEdit(Object.assign({ t: "edit", op }, extra || {}), op !== "copy");
+}
+
+function flash(text) {
+  const el = $("stMsg");
+  el.textContent = text;
+  clearTimeout(ed.flashT);
+  ed.flashT = setTimeout(() => { el.textContent = ""; }, 3000);
+}
+function undo() { if (ed.histIdx > 0) runEdit({ t: "undo" }, true); }
+function redo() { if (ed.histIdx < ed.hist.length - 1) runEdit({ t: "redo" }, true); }
+function jumpHist(idx) { if (idx !== ed.histIdx) runEdit({ t: "jump", idx }, true); }
+
+async function insertSilenceDlg() {
+  if (!ed.doc) return;
+  const def = fmtTime(ed.doc.sampleRate);
+  const v = await askForm(t("Insert silence"), `<label class="dfield"><span>${esc(t("Duration"))}</span><input name="dur" value="${esc(def)}" spellcheck="false" autocomplete="off" inputmode="decimal"></label><div class="dnote">${esc(selOn() ? t("Goes in at the start of the selection.") : t("Goes in at the cursor."))}</div>`, { ok: t("insert"), setup: f => requestAnimationFrame(() => { const i = f.querySelector("input"); if (i) i.select(); }) });
+  if (!v) return;
+  const n = parseTime(v.dur, ed.fmt);
+  if (!n || n <= 0) { tell(t("Enter a duration such as") + " " + def + "."); return; }
+  edit("insert", { n });
+}
+
+function histLabel(h) {
+  const name = t(EDIT_LABELS[h.op] || h.op);
+  if (h.op === "open") return name;
+  const ch = h.ch ? " · " + h.ch : "";
+  if (h.op === "insert") return name + " " + fmtTime(h.n) + " @ " + fmtTime(h.a) + ch;
+  if (h.op === "paste") return name + " " + fmtTime(h.n) + " @ " + fmtTime(h.a) + (h.b > h.a && !h.ch ? " " + t("over") + " " + fmtTime(h.b - h.a) : "") + ch;
+  return name + " " + fmtTime(h.a) + "–" + fmtTime(h.b) + ch;
+}
+
+function renderHist() {
+  const box = $("histList");
+  box.innerHTML = "";
+  ed.hist.forEach((h, i) => {
+    const row = document.createElement("button");
+    row.className = "hrow" + (i === ed.histIdx ? " cur" : "") + (i > ed.histIdx ? " undone" : "");
+    row.innerHTML = `<span class="hn"></span><span class="hl"></span><span class="ht"></span>`;
+    row.querySelector(".hn").textContent = i;
+    row.querySelector(".hl").textContent = histLabel(h);
+    row.querySelector(".ht").textContent = h.t ? new Date(h.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+    row.addEventListener("click", () => jumpHist(i));
+    box.appendChild(row);
+  });
+  const c = box.querySelector(".cur");
+  if (c) c.scrollIntoView({ block: "nearest" });
+  $("histInfo").textContent = ed.hist.length > 1 ? t("Click a step to go back to it. Later steps stay until you make a new edit.") : t("No edits yet. Every edit is listed here and can be undone.");
+}
+
+function openHist() { if (!ed.doc) return; closeFiles(); $("hist").classList.remove("hidden"); renderHist(); }
+function closeHist() { $("hist").classList.add("hidden"); }
+function toggleHist() { if ($("hist").classList.contains("hidden")) openHist(); else closeHist(); }
+
 function setSelChannels(key) {
   const ch = ed.doc.channels;
   ed.chans = key === "all" ? new Array(ch).fill(true) : ed.chans.map((_, i) => i === +key);
@@ -1103,6 +1302,13 @@ function ddInit(el, items, value, onChange) {
 function shortcuts() {
   const rows = [
     ["Space", t("Play / stop")],
+    ["Ctrl/⌘ Z", t("Undo")],
+    ["Ctrl/⌘ Shift Z · Ctrl/⌘ Y", t("Redo")],
+    ["Ctrl/⌘ X / C / V", t("Cut / copy / paste")],
+    ["Del · Backspace", t("Delete the selection")],
+    ["Shift + Del", t("Silence the selection")],
+    ["T", t("Crop to the selection")],
+    ["H", t("History")],
     ["L", t("Loop on / off")],
     ["Home / End", t("Cursor to start / end")],
     ["= / −", t("Zoom in / out")],
@@ -1127,7 +1333,7 @@ function typing(e) {
 
 function wireKeys() {
   document.addEventListener("keydown", e => {
-    const modal = $("dlg") && !$("dlg").classList.contains("hidden");
+    const modal = ($("dlg") && !$("dlg").classList.contains("hidden")) || !$("settings").classList.contains("hidden");
     if (typing(e) || modal) return;
     if (!$("app") || $("app").classList.contains("hidden")) return;
     const mod = e.ctrlKey || e.metaKey;
@@ -1136,8 +1342,19 @@ function wireKeys() {
     if (!ed.doc) return;
     if (e.key === " " && !mod) { e.preventDefault(); togglePlay(); return; }
     if (mod && (e.key === "a" || e.key === "A")) { e.preventDefault(); ed.sel = { a: 0, b: ed.doc.frames }; ed.cursor = 0; redraw(); return; }
+    if (mod && !e.altKey) {
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
+      if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); redo(); return; }
+      if (k === "x") { e.preventDefault(); edit("cut"); return; }
+      if (k === "c") { e.preventDefault(); edit("copy"); return; }
+      if (k === "v") { e.preventDefault(); edit("paste"); return; }
+    }
     if (mod) return;
-    if (e.key === "Escape") { if (!$("files").classList.contains("hidden")) { closeFiles(); return; } ed.sel = { a: 0, b: 0 }; redraw(); return; }
+    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); edit(e.shiftKey ? "silence" : "delete"); return; }
+    if (e.key === "t" || e.key === "T") { e.preventDefault(); edit("crop"); return; }
+    if (e.key === "h" || e.key === "H") { e.preventDefault(); toggleHist(); return; }
+    if (e.key === "Escape") { if (!$("files").classList.contains("hidden")) { closeFiles(); return; } if (!$("hist").classList.contains("hidden")) { closeHist(); return; } ed.sel = { a: 0, b: 0 }; redraw(); return; }
     if (e.key === "Home") { e.preventDefault(); ed.cursor = 0; ensureVisible(0); if (ed.play.on) startPlay(0); redraw(); return; }
     if (e.key === "End") { e.preventDefault(); ed.cursor = ed.doc.frames; ensureVisible(ed.doc.frames); stopPlay(); redraw(); return; }
     if (e.key === "=" || e.key === "+") { e.preventDefault(); zoomAt(0.5); return; }
@@ -1181,7 +1398,25 @@ function wireUi() {
   $("lkQ").addEventListener("input", renderLocker);
   $("lkQ").addEventListener("keydown", e => { if (e.key === "Escape") closeFiles(); });
   $("files").addEventListener("click", ev => ev.stopPropagation());
-  document.addEventListener("click", () => { closeFiles(); document.querySelectorAll(".dd.open").forEach(o => o.classList.remove("open")); });
+  $("hist").addEventListener("click", ev => ev.stopPropagation());
+  $("histX").addEventListener("click", closeHist);
+  document.addEventListener("click", () => { closeFiles(); closeHist(); document.querySelectorAll(".dd.open").forEach(o => o.classList.remove("open")); });
+  $("edTools").addEventListener("click", ev => {
+    const b = ev.target.closest("button[data-cmd]");
+    if (!b || b.disabled) return;
+    ev.stopPropagation();
+    b.blur();
+    const c = b.dataset.cmd;
+    if (c === "undo") undo();
+    else if (c === "redo") redo();
+    else if (c === "insert") insertSilenceDlg();
+    else if (c === "hist") toggleHist();
+    else edit(c);
+  });
+  ddInit($("xfadeDd"), [{ v: "0", label: "Off" }, { v: "1", label: "1 ms" }, { v: "3", label: "3 ms" }, { v: "5", label: "5 ms" }, { v: "10", label: "10 ms" }, { v: "20", label: "20 ms" }], String(ed.xfade), v => { ed.xfade = Number(v); localStorage.setItem("studioXfade", v); });
+  const snapSeg = () => document.querySelectorAll("#snapSeg button").forEach(b => b.classList.toggle("on", (b.dataset.v === "1") === ed.snap));
+  $("snapSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ed.snap = b.dataset.v === "1"; localStorage.setItem("studioSnap", ed.snap ? "1" : "0"); snapSeg(); });
+  snapSeg();
   $("busyCancel").addEventListener("click", () => ed.worker.postMessage({ t: "cancel" }));
   $("playBtn").addEventListener("click", togglePlay);
   $("stopBtn").addEventListener("click", () => stopPlay());
@@ -1220,8 +1455,10 @@ async function editorStart() {
   const last = localStorage.getItem("studioLastDoc");
   if (last) {
     try {
-      const r = await call({ t: "open", id: last });
-      showDoc(r.meta, r.peaks, r.bands);
-    } catch { try { localStorage.removeItem("studioLastDoc"); } catch {} }
+      showOpened(await call({ t: "open", id: last }));
+    } catch (e) {
+      if (e && e.message === "locked") openError(e, "");
+      else { try { localStorage.removeItem("studioLastDoc"); } catch {} }
+    }
   }
 }

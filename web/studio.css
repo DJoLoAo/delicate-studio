@@ -56,6 +56,7 @@ button,a{touch-action:manipulation}
 .empty p{margin:0;line-height:1.6}
 .status{height:24px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;border-top:1px solid var(--border);background:var(--bg2);color:var(--dim);font-size:10px}
 .status .off{color:var(--gold)}
+#stMsg{color:var(--gold)}
 
 #settings{position:fixed;inset:0;background:rgba(12,10,8,.72);display:flex;align-items:flex-start;justify-content:center;z-index:40;padding:60px 16px 16px}
 #settings .panel{background:var(--bg2);border:1px solid var(--border);width:min(440px,100%);box-shadow:0 14px 48px rgba(0,0,0,.65)}
@@ -195,3 +196,33 @@ canvas.mt{flex:none;display:block;width:100%;height:36px;cursor:pointer;border-t
 .frow .ftag{align-self:flex-start;font-size:8px;letter-spacing:.08em;color:var(--blue);border:1px solid #2c4d5c;padding:0 4px;margin-bottom:1px}
 .badge{font-size:9px;letter-spacing:.06em;color:var(--blue);border:1px solid #2c4d5c;padding:1px 6px;white-space:nowrap}
 #files{width:min(500px,calc(100vw - 24px))}
+.tools{display:flex;align-items:center;gap:3px;flex-wrap:wrap}
+.tsep{width:1px;height:20px;background:var(--border);margin:0 4px}
+.tbtn.sm{width:28px;height:26px;padding:5px}
+.tbtn:disabled{opacity:.32;cursor:default;border-color:var(--border)}
+.histw{position:relative}
+#histBtn{height:26px}
+#histN:not(:empty){margin-left:6px}
+#hist{position:absolute;left:0;top:calc(100% + 8px);width:min(400px,calc(100vw - 24px));max-height:min(440px,calc(100vh - 160px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:45;padding:10px 12px}
+#hist.hidden{display:none}
+.hhead{display:flex;align-items:center;margin-bottom:8px}
+.hhead b{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:500}
+.hlist{overflow:auto;border-top:1px solid var(--border);min-height:0;flex:1}
+.hrow{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--border);color:var(--white);font:inherit;font-size:11px;padding:7px 6px;cursor:pointer}
+.hrow:hover{background:var(--bg4)}
+.hrow.cur{background:var(--bg3);color:var(--gold)}
+.hrow.undone{color:var(--dim)}
+.hrow .hn{min-width:22px;color:var(--dim);font-variant-numeric:tabular-nums}
+.hrow .hl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hrow .ht{font-size:10px;color:var(--dim)}
+.dd.down .list{top:calc(100% + 4px);bottom:auto}
+#settings .row + .row{margin-top:10px}
+#dlg .dfield{display:flex;flex-direction:column;gap:4px}
+#dlg .dfield span{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+#dlg .dfield input{background:var(--bg);border:1px solid var(--border);color:var(--white);padding:8px 10px;font:inherit;font-size:13px;outline:none;width:100%;font-variant-numeric:tabular-nums}
+#dlg .dfield input:focus{border-color:var(--gold)}
+#dlg .dnote{font-size:11px;color:var(--gray)}
+@media (max-width:760px){
+  .tools{order:3;flex-basis:100%}
+  #hist{position:fixed;left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:55vh}
+}
