@@ -650,6 +650,14 @@ async function applyEdit(m) {
       after = { a, b, cursor: a };
       break;
     }
+    case "spheal":
+    case "spdel": {
+      const r = await shApply(c, m);
+      lists = r.lists;
+      info = { op: m.op === "spdel" ? "spdel" : m.src === "brush" ? "spot" : "spheal", a: r.a, b: r.b, n: r.clicks, ch: r.ch };
+      after = { a: before.a, b: before.b, cursor: before.cursor };
+      break;
+    }
     case "markadd":
     case "markset":
     case "markdel": {
@@ -1633,7 +1641,8 @@ function rpOverlay(p0, run, tmp, stride) {
 
 async function healSel(c, a, b, chans) {
   const sr = c.meta.sampleRate, F = c.len, m = b - a;
-  if (m > Math.round(sr * 0.1)) throw new Error("heal-long");
+  if (m > Math.round(sr * SH_TIME)) throw new Error("heal-long");
+  if (m > Math.round(sr * 0.1)) return shTime(c, a, b, chans);
   const x = await dspExports();
   const p = x.rp_order(sr, m, 1);
   const ctx = Math.min(x.rp_context(p, m, 1), sr);
@@ -1652,6 +1661,241 @@ async function healSel(c, a, b, chans) {
   }
   const id = allocEnd(w);
   return opPatch(c.lists, spans.map(off => off === null ? null : [[a, b, [[id, 0, off, m]]]]));
+}
+
+const SH_TIME = 4, SH_LIMIT = 60, SH_SHORT = 0.12, SH_SENS = 60;
+
+function shN(sr, un) {
+  const auto = sr <= 50000 ? 2048 : sr <= 100000 ? 4096 : 8192;
+  const v = Number(un);
+  return Math.max(1024, Math.min(8192, v > 0 && (v & (v - 1)) === 0 ? v : auto));
+}
+
+function shU(f, un, sr, log) {
+  const nyq = sr / 2;
+  if (!log) return f / nyq;
+  const lo = Math.max(20, sr / un);
+  return Math.log(Math.max(f, 1e-9) / lo) / Math.log(nyq / lo);
+}
+
+function shF(u, un, sr, log) {
+  const nyq = sr / 2;
+  if (u <= 0.001) return 0;
+  if (u >= 0.999) return nyq;
+  if (!log) return nyq * u;
+  const lo = Math.max(20, sr / un);
+  return lo * Math.pow(nyq / lo, u);
+}
+
+function shShapes(raw, ch, F, un, sr, log) {
+  const out = [], num = v => Number.isFinite(Number(v)) ? Number(v) : NaN;
+  for (const s of Array.isArray(raw) ? raw.slice(0, 64) : []) {
+    if (!s || typeof s !== "object") continue;
+    const chs = Array.isArray(s.ch) && s.ch.length === ch ? s.ch.map(Boolean) : new Array(ch).fill(true);
+    if (!chs.some(Boolean)) continue;
+    if (s.kind === "rect") {
+      const a = num(s.a), b = num(s.b), f0 = num(s.f0), f1 = num(s.f1);
+      if (![a, b, f0, f1].every(Number.isFinite)) continue;
+      out.push({ kind: "rect", a: Math.max(0, Math.min(a, b)), b: Math.min(F, Math.max(a, b)), f0: Math.max(0, Math.min(f0, f1)), f1: Math.min(sr / 2, Math.max(f0, f1)), ch: chs });
+      continue;
+    }
+    if (s.kind !== "poly" && s.kind !== "brush") continue;
+    const pts = (Array.isArray(s.pts) ? s.pts.slice(0, 8000) : []).map(q => Array.isArray(q) ? [num(q[0]), num(q[1])] : [NaN, NaN]).filter(q => q.every(Number.isFinite)).map(([t, f]) => [Math.max(-F, Math.min(2 * F, t)), Math.max(0, Math.min(1, shU(Math.max(0, f), un, sr, log)))]);
+    if (!pts.length || (s.kind === "poly" && pts.length < 3)) continue;
+    if (s.kind === "poly") { out.push({ kind: "poly", pts, ch: chs }); continue; }
+    const rx = Math.max(1, num(s.rx) || 0), ru = Math.max(0.001, Math.min(0.5, num(s.ru) || 0));
+    out.push({ kind: "brush", pts, rx, ru, ch: chs });
+  }
+  return out;
+}
+
+function shSpan(s) {
+  if (s.kind === "rect") return [s.a, s.b];
+  let a = Infinity, b = -Infinity;
+  for (const p of s.pts) { a = Math.min(a, p[0]); b = Math.max(b, p[0]); }
+  return s.kind === "brush" ? [a - s.rx, b + s.rx] : [a, b];
+}
+
+function shCross(pts, x) {
+  const ys = [];
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length];
+    if ((p[0] <= x && q[0] > x) || (q[0] <= x && p[0] > x)) ys.push(p[1] + (q[1] - p[1]) * (x - p[0]) / (q[0] - p[0]));
+  }
+  return ys.sort((u, v) => u - v);
+}
+
+function shRaster(shapes, k, n, H, sr, un, log) {
+  const bins = n / 2 + 1, bw = sr / n, rows = new Map();
+  const addHz = (J, f0, f1) => {
+    if (J < 0) return;
+    if (f1 < f0) [f0, f1] = [f1, f0];
+    let k0 = Math.max(0, Math.ceil(f0 / bw - 0.5)), k1 = Math.min(bins - 1, Math.floor(f1 / bw + 0.5));
+    if (k1 < k0) k0 = k1 = Math.min(bins - 1, Math.max(0, Math.round((f0 + f1) / 2 / bw)));
+    let l = rows.get(J);
+    if (!l) rows.set(J, l = []);
+    l.push([k0, k1]);
+  };
+  const addU = (J, u0, u1) => addHz(J, shF(Math.max(0, Math.min(u0, u1)), un, sr, log), shF(Math.min(1, Math.max(u0, u1)), un, sr, log));
+  for (const s of shapes) {
+    if (!s.ch[k]) continue;
+    if (s.kind === "rect") {
+      for (let J = Math.ceil((s.a - H / 2) / H); J <= Math.floor((s.b + H / 2) / H); J++) addHz(J, s.f0, s.f1);
+      continue;
+    }
+    if (s.kind === "poly") {
+      const [x0, x1] = shSpan(s);
+      for (let J = Math.ceil((x0 - H / 2) / H); J <= Math.floor((x1 + H / 2) / H); J++) {
+        const t = J * H;
+        for (const xl of [t - H / 2, t, t + H / 2]) {
+          if (xl < x0 || xl > x1) continue;
+          const ys = shCross(s.pts, xl);
+          for (let i = 0; i + 1 < ys.length; i += 2) addU(J, ys[i], ys[i + 1]);
+        }
+        let lo = Infinity, hi = -Infinity;
+        for (const p of s.pts) if (p[0] >= t - H / 2 && p[0] <= t + H / 2) { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }
+        if (hi >= lo) addU(J, lo, hi);
+      }
+      continue;
+    }
+    const dabs = [s.pts[0]];
+    for (let i = 1; i < s.pts.length; i++) {
+      const p = s.pts[i - 1], q = s.pts[i], d = Math.hypot((q[0] - p[0]) / s.rx, (q[1] - p[1]) / s.ru), m = Math.max(1, Math.ceil(d * 3));
+      for (let j = 1; j <= m; j++) dabs.push([p[0] + (q[0] - p[0]) * j / m, p[1] + (q[1] - p[1]) * j / m]);
+    }
+    for (const p of dabs) {
+      for (let J = Math.ceil((p[0] - s.rx - H / 2) / H); J <= Math.floor((p[0] + s.rx + H / 2) / H); J++) {
+        const dt = Math.max(0, Math.abs(J * H - p[0]) - H / 2);
+        if (dt > s.rx) continue;
+        const hh = s.ru * Math.sqrt(1 - (dt / s.rx) ** 2);
+        addU(J, p[1] - hh, p[1] + hh);
+      }
+    }
+  }
+  for (const [J, l] of rows) {
+    l.sort((p, q) => p[0] - q[0]);
+    const m = [l[0].slice()];
+    for (let i = 1; i < l.length; i++) { const last = m[m.length - 1]; if (l[i][0] <= last[1] + 1) last[1] = Math.max(last[1], l[i][1]); else m.push(l[i].slice()); }
+    rows.set(J, m);
+  }
+  return rows;
+}
+
+function shRegion(x, c, k, J0, J1, rowsOf, mode, gain, seed, n) {
+  const H = x.sh_hop(), C = x.sh_context() + 1, bins = n / 2 + 1;
+  const fa = J0 - C, frames = J1 - J0 + 1 + 2 * C, s0 = fa * H - n / 2, len = (frames - 1) * H + n;
+  const buf = new Float32Array(len);
+  readList(c.lists[k], c.cum[k], s0, len, buf, 0, (src, cc, f, m, out, off) => readSrcOf(c, src, cc, f, m, out, off));
+  wasmF32(x, x.sh_buf(len), len).set(buf);
+  const mp = x.sh_mask(frames);
+  const mask = new Uint8Array(x.memory.buffer, mp, frames * bins);
+  let any = false;
+  for (let J = J0; J <= J1; J++) {
+    const l = rowsOf(J);
+    if (!l) continue;
+    const base = (J - fa) * bins;
+    for (const [k0, k1] of l) { mask.fill(1, base + k0, base + k1 + 1); any = true; }
+  }
+  if (!any) return null;
+  const r = x.sh_run(frames, mode, gain, seed >>> 0 || 1);
+  if (r < 0) throw new Error(dspError(x));
+  if (r !== 0) return null;
+  const sp = x.sh_span();
+  const span = new Uint32Array(x.memory.buffer, sp, 2), a = span[0], b = span[1];
+  const A = Math.max(0, s0 + a), B = Math.min(c.len, s0 + b);
+  if (B <= A) return null;
+  const op = x.sh_out();
+  return { a: A, b: B, data: new Float32Array(x.memory.buffer, op, len).slice(A - s0, B - s0) };
+}
+
+function shGroup(x, c, k, J0, J1, rowsOf, mode, gain, seed, n) {
+  const H = x.sh_hop(), most = Math.max(64, Math.floor(6 * c.meta.sampleRate / H));
+  if (J1 - J0 + 1 <= most) return shRegion(x, c, k, J0, J1, rowsOf, mode, gain, seed, n);
+  const parts = [];
+  for (let j = J0; j <= J1; j += most) { const r = shRegion(x, c, k, j, Math.min(J1, j + most - 1), rowsOf, mode, gain, seed + j, n); if (r) parts.push(r); }
+  if (!parts.length) return null;
+  const A = Math.min(...parts.map(p => p.a)), B = Math.max(...parts.map(p => p.b));
+  const orig = new Float32Array(B - A), data = new Float32Array(B - A);
+  readList(c.lists[k], c.cum[k], A, B - A, orig, 0, (src, cc, f, m, out, off) => readSrcOf(c, src, cc, f, m, out, off));
+  data.set(orig);
+  for (const p of parts) for (let i = 0; i < p.data.length; i++) data[p.a - A + i] += p.data[i] - orig[p.a - A + i];
+  return { a: A, b: B, data };
+}
+
+function shClicks(x, c, k, t0, t1) {
+  const sr = c.meta.sampleRate, F = c.len, M = sr <= 50000 ? 2048 : sr <= 100000 ? 4096 : 8192;
+  const lo = Math.max(0, Math.floor(t0) - M), hi = Math.min(F, Math.ceil(t1) + M), n = hi - lo;
+  if (n <= 0) return null;
+  const buf = new Float32Array(n);
+  readList(c.lists[k], c.cum[k], lo, n, buf, 0, (src, cc, f, m, out, off) => readSrcOf(c, src, cc, f, m, out, off));
+  wasmF32(x, x.rp_buf(n), n).set(buf);
+  const cnt = x.dc_scan(n, sr, SH_SENS, 20);
+  if (cnt <= 0) return null;
+  const out = wasmF32(x, x.dc_out(), cnt * 4), hits = [];
+  for (let i = 0; i < cnt; i++) {
+    const a = lo + out[i * 4], b = lo + out[i * 4 + 1];
+    if (b > t0 && a < t1) { const last = hits[hits.length - 1]; if (last && a <= last[1]) last[1] = Math.max(last[1], b); else hits.push([a, b]); }
+  }
+  if (!hits.length) return null;
+  const p = x.rp_order(sr, 0, 0), ctx = x.rp_context(p, hits.reduce((v, h) => Math.max(v, h[1] - h[0]), 1), 0);
+  const ra = Math.max(0, hits[0][0] - ctx), rb = Math.min(F, hits[hits.length - 1][1] + ctx);
+  if (hits[0][0] - ra < p || rb - hits[hits.length - 1][1] < p) return null;
+  const y = rpSolve(x, c, c.lists, c.cum, k, ra, rb, hits, p, 0);
+  if (!y) return null;
+  return hits.map(([a, b]) => ({ a, b, data: y.slice(a - ra, b - ra) }));
+}
+
+function shPatch(c, parts) {
+  const ch = c.meta.channels, w = allocBegin(), spans = Array.from({ length: ch }, () => []);
+  for (let k = 0; k < ch; k++) for (const p of parts[k]) { spans[k].push([p.a, p.b, w.n]); allocPush(w, p.data, p.data.length); }
+  const id = allocEnd(w);
+  return opPatch(c.lists, spans.map(l => l.length ? l.sort((p, q) => p[0] - q[0]).map(([a, b, off]) => [a, b, [[id, 0, off, b - a]]]) : null));
+}
+
+async function shTime(c, a, b, chans) {
+  const x = await dspExports(), sr = c.meta.sampleRate, n = shN(sr, 0);
+  if (x.sh_open(n) !== 0) throw new Error(dspError(x));
+  const H = x.sh_hop(), all = [[0, n / 2]];
+  const J0 = Math.ceil((a - n / 4) / H), J1 = Math.floor((b + n / 4) / H);
+  const parts = chans.map((on, k) => {
+    if (!on) return [];
+    const r = shGroup(x, c, k, Math.max(0, J0), J1, () => all, 1, 1, ((a * 2654435761 + k * 40503) >>> 0) || 1, n);
+    return r ? [r] : [];
+  });
+  if (!parts.some(l => l.length)) throw new Error("heal-failed");
+  return shPatch(c, parts);
+}
+
+async function shApply(c, m) {
+  const x = await dspExports(), sr = c.meta.sampleRate, ch = c.meta.channels, F = c.len;
+  const un = shN(sr, m.un), log = m.log !== false, n = un;
+  if (x.sh_open(n) !== 0) throw new Error(dspError(x));
+  const H = x.sh_hop(), C = x.sh_context() + 1;
+  const shapes = shShapes(m.shapes, ch, F, Number(m.un) || n, sr, log);
+  if (!shapes.length) throw new Error("nothing");
+  let t0 = Infinity, t1 = -Infinity;
+  for (const s of shapes) { const [p, q] = shSpan(s); t0 = Math.min(t0, p); t1 = Math.max(t1, q); }
+  if (t1 - t0 > SH_LIMIT * sr) throw new Error("spec-long");
+  const del = m.op === "spdel", parts = Array.from({ length: ch }, () => []);
+  let clicks = 0, A = Infinity, B = -Infinity;
+  for (let k = 0; k < ch; k++) {
+    const rows = shRaster(shapes, k, n, H, sr, Number(m.un) || n, log);
+    if (!rows.size) continue;
+    const Js = [...rows.keys()].sort((p, q) => p - q), groups = [];
+    for (const J of Js) { const g = groups[groups.length - 1]; if (g && J - g.J1 <= 2 * C + 2) g.J1 = J; else groups.push({ J0: J, J1: J }); }
+    for (const g of groups) {
+      let got = null;
+      if (!del && (g.J1 - g.J0 + 1) * H <= SH_SHORT * sr) {
+        got = shClicks(x, c, k, g.J0 * H - H / 2, g.J1 * H + H / 2);
+        if (got) clicks += got.length;
+      }
+      if (!got) { const r = shGroup(x, c, k, g.J0, g.J1, J => rows.get(J), del ? 2 : 0, del ? 0 : 1, ((g.J0 * 2654435761 + k * 40503) >>> 0) || 1, n); got = r ? [r] : []; }
+      for (const p of got) { parts[k].push(p); A = Math.min(A, p.a); B = Math.max(B, p.b); }
+    }
+  }
+  if (!parts.some(l => l.length)) throw new Error(del ? "nothing" : "spot-nothing");
+  const touched = parts.map(l => l.length > 0);
+  return { lists: shPatch(c, parts), a: Math.round(A), b: Math.round(B), clicks, ch: touched.every(Boolean) ? null : chanLabel(touched) };
 }
 
 function wasmF32(x, ptr, n) { return new Float32Array(x.memory.buffer, ptr, n); }

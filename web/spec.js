@@ -23,7 +23,12 @@ const SPV = {
   bkey: "",
   buf: null,
   hover: null,
-  err: ""
+  err: "",
+  tool: spStored("studioSpecTool", "time", v => ["time", "rect", "lasso", "brush"].includes(v)),
+  brush: Number(spStored("studioSpecBrush", "24", v => Number(v) >= 4 && Number(v) <= 120)),
+  sel: null,
+  sver: 0,
+  draft: null
 };
 
 const SP_LUT = (() => {
@@ -79,6 +84,7 @@ function spLayout() {
   sp.style.top = top + "px";
   sp.style.height = Math.max(1, H - top) + "px";
   bar.style.top = Math.max(0, top - Math.floor((bar.offsetHeight || 9) / 2)) + "px";
+  $("spTools").style.top = (top + 6) + "px";
 }
 
 function spDoc() {
@@ -91,6 +97,9 @@ function spDoc() {
   SPV.bkey = "";
   SPV.hover = null;
   SPV.err = "";
+  SPV.sel = null;
+  SPV.draft = null;
+  SPV.sver++;
 }
 
 function spSame(A, B, a, b) {
@@ -212,7 +221,8 @@ function drawSpec() {
     spRequest(pkey, n, rows, spp, miss);
   }
   const marks = shownMarks().map(m => m.a + ":" + (m.kind === "range" ? m.b : "")).join(",");
-  const bkey = [SPV.lkey, ed.sel.a, ed.sel.b, ed.cursor, ed.chans.join(), marks, SPV.err].join("|");
+  if (SPV.sel && (SPV.sel.a !== ed.sel.a || SPV.sel.b !== ed.sel.b)) { SPV.sel = null; SPV.sver++; }
+  const bkey = [SPV.lkey, ed.sel.a, ed.sel.b, ed.cursor, ed.chans.join(), marks, SPV.err, SPV.sver, SPV.log].join("|");
   if (bkey !== SPV.bkey) {
     const B = SPV.buf || (SPV.buf = document.createElement("canvas"));
     B.width = W;
@@ -227,12 +237,16 @@ function drawSpec() {
     const px = Math.round(xOf(playhead()) * dpr);
     if (px >= 0 && px <= W) { g.fillStyle = "#f2efe9"; g.fillRect(px, 0, Math.max(1, dpr), H); }
   }
-  if (SPV.hover) spReadout(g, G);
+  if (SPV.draft) spDrawShape(g, G, SPV.draft, true);
+  if (SPV.hover) {
+    if (SPV.tool === "brush" && !SPV.draft) spBrushRing(g, G);
+    spReadout(g, G);
+  }
 }
 
 function spOverlay(g, G) {
   const { W, H, ch, laneH, dpr, n, sr } = G;
-  if (selOn()) {
+  if (selOn() && !spSelLive()) {
     const sx0 = Math.max(0, Math.floor(xOf(ed.sel.a) * dpr)), sx1 = Math.min(W, Math.ceil(xOf(ed.sel.b) * dpr));
     for (let k = 0; k < ch; k++) {
       if (!ed.chans[k]) continue;
@@ -253,6 +267,7 @@ function spOverlay(g, G) {
       for (let y = 0; y < H; y += 7 * dpr) g.fillRect(x, y, Math.max(1, dpr), 4 * dpr);
     }
   }
+  if (spSelLive()) for (const s of SPV.sel.shapes) spDrawShape(g, G, s, false);
   spLabels(g, W, laneH, ch, dpr, n, sr);
   const cx = Math.round(xOf(ed.cursor) * dpr);
   if (cx >= 0 && cx <= W) { g.fillStyle = "#DF9A24"; g.fillRect(cx, 0, Math.max(1, dpr), H); }
@@ -338,6 +353,165 @@ function spReadout(g, G) {
   g.fillText(txt, x + 5 * dpr, y + bh / 2);
 }
 
+function spSelLive() {
+  return !!(SPV.sel && SPV.on && ed.doc && SPV.sel.shapes.length && SPV.sel.a === ed.sel.a && SPV.sel.b === ed.sel.b);
+}
+
+function spY(G, f, k) {
+  const u = Math.max(0, Math.min(1, f <= 0 ? 0 : spU(f, G.n, G.sr)));
+  return k * G.laneH + (1 - u) * G.laneH;
+}
+
+function spPoint(G, cssX, cssY, k) {
+  const yl = cssY * G.dpr - k * G.laneH;
+  const u = Math.max(0, Math.min(1, 1 - yl / G.laneH));
+  const f = u <= 0.001 ? 0 : u >= 0.999 ? G.sr / 2 : spF(u, G.n, G.sr);
+  return [Math.max(0, Math.min(ed.doc.frames, frameAt(cssX))), f];
+}
+
+function spDrawShape(g, G, s, live) {
+  const { dpr } = G;
+  for (let k = 0; k < G.ch; k++) {
+    if (!s.ch[k]) continue;
+    g.save();
+    g.beginPath();
+    g.rect(0, k * G.laneH, G.W, G.laneH);
+    g.clip();
+    if (s.kind === "brush") {
+      g.strokeStyle = "rgba(223,57,187,0.42)";
+      g.lineWidth = SPV.brush * dpr;
+      g.lineCap = "round";
+      g.lineJoin = "round";
+      g.beginPath();
+      s.pts.forEach(([t0, f], i) => { const x = xOf(t0) * dpr, y = spY(G, f, k); if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+      if (s.pts.length === 1) g.lineTo(xOf(s.pts[0][0]) * dpr + 0.01, spY(G, s.pts[0][1], k));
+      g.stroke();
+      g.restore();
+      continue;
+    }
+    g.beginPath();
+    if (s.kind === "rect") {
+      const x0 = xOf(s.a) * dpr, x1 = xOf(s.b) * dpr, y0 = spY(G, s.f1, k), y1 = spY(G, s.f0, k);
+      g.rect(x0, y0, Math.max(dpr, x1 - x0), Math.max(dpr, y1 - y0));
+    } else {
+      s.pts.forEach(([t0, f], i) => { const x = xOf(t0) * dpr, y = spY(G, f, k); if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+      if (!live) g.closePath();
+    }
+    g.fillStyle = "rgba(90,193,249,0.16)";
+    g.fill();
+    g.setLineDash([4 * dpr, 3 * dpr]);
+    g.lineWidth = Math.max(1, dpr);
+    g.strokeStyle = "rgba(140,214,255,0.95)";
+    g.stroke();
+    g.restore();
+  }
+}
+
+function spBrushRing(g, G) {
+  const h = SPV.hover, r = SPV.brush / 2 * G.dpr;
+  g.save();
+  g.beginPath();
+  g.arc(h.x * G.dpr, h.y * G.dpr, r, 0, Math.PI * 2);
+  g.lineWidth = Math.max(1, G.dpr);
+  g.strokeStyle = "rgba(242,239,233,0.85)";
+  g.stroke();
+  g.restore();
+}
+
+function spSpan(shapes) {
+  let a = Infinity, b = -Infinity;
+  for (const s of shapes) {
+    if (s.kind === "rect") { a = Math.min(a, s.a); b = Math.max(b, s.b); continue; }
+    for (const p of s.pts) { a = Math.min(a, p[0]); b = Math.max(b, p[0]); }
+  }
+  return [Math.max(0, Math.floor(a)), Math.min(ed.doc.frames, Math.ceil(b))];
+}
+
+function spCommit(s, add) {
+  const shapes = (add && spSelLive() ? SPV.sel.shapes : []).concat([s]);
+  const [a, b] = spSpan(shapes);
+  if (b <= a) return;
+  ed.sel = { a, b };
+  ed.cursor = a;
+  SPV.sel = { shapes, a, b };
+  SPV.sver++;
+}
+
+function spEdit(op, shapes, src) {
+  if (!ed.doc || !shapes || !shapes.length) return;
+  const clean = shapes.map(s => s.kind === "rect" ? { kind: "rect", a: s.a, b: s.b, f0: s.f0, f1: s.f1, ch: s.ch } : s.kind === "poly" ? { kind: "poly", pts: s.pts, ch: s.ch } : { kind: "brush", pts: s.pts, rx: s.rx, ru: s.ru, ch: s.ch });
+  return runEdit({ t: "edit", op, shapes: clean, un: spN(), log: SPV.log, src }, false, true);
+}
+
+function spSetTool(tool, toggle) {
+  if (toggle && SPV.tool === tool) tool = "time";
+  SPV.tool = tool;
+  spSave("studioSpecTool", tool);
+  if (tool !== "time" && !SPV.on && ed.doc) spToggle();
+  SPV.draft = null;
+  spToolsUi();
+  redraw();
+}
+
+function spToolsUi() {
+  const box = $("spTools");
+  if (!box) return;
+  box.querySelectorAll("button[data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === SPV.tool));
+  box.classList.toggle("brush", SPV.tool === "brush");
+  $("spBrush").value = SPV.brush;
+  $("spBrushV").textContent = SPV.brush + " px";
+  const sp = $("sp");
+  sp.style.cursor = SPV.tool === "brush" ? "none" : SPV.tool === "time" ? "text" : "crosshair";
+}
+
+function spDown(e) {
+  const sp = $("sp");
+  if (!ed.doc || SPV.tool === "time" || e.button > 0 || (IS_MAC && e.ctrlKey)) return;
+  e.preventDefault();
+  sp.setPointerCapture(e.pointerId);
+  const r = sp.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  const G = spGeom(), k = Math.min(G.ch - 1, Math.max(0, Math.floor(y * G.dpr / G.laneH)));
+  const ch = ed.chans.every(Boolean) ? ed.chans.map(() => true) : ed.chans.map((_, i) => i === k);
+  const p = spPoint(G, x, y, k);
+  const base = { ch, lane: k, x0: x, y0: y, moved: false, add: e.shiftKey };
+  if (SPV.tool === "rect") SPV.draft = Object.assign(base, { kind: "rect", p0: p, a: p[0], b: p[0], f0: p[1], f1: p[1] });
+  else if (SPV.tool === "lasso") SPV.draft = Object.assign(base, { kind: "poly", pts: [p] });
+  else SPV.draft = Object.assign(base, { kind: "brush", pts: [p], rx: SPV.brush / 2 * ed.view.spp, ru: SPV.brush / 2 / (G.laneH / G.dpr) });
+  redraw();
+}
+
+function spMove(e) {
+  const d = SPV.draft;
+  if (!d) return;
+  const sp = $("sp"), r = sp.getBoundingClientRect(), x = Math.max(0, Math.min(r.width, e.clientX - r.left)), y = e.clientY - r.top;
+  if (!d.moved && Math.hypot(x - d.x0, y - d.y0) < 3) return;
+  d.moved = true;
+  const G = spGeom(), p = spPoint(G, x, y, d.lane);
+  if (d.kind === "rect") { d.a = Math.min(d.p0[0], p[0]); d.b = Math.max(d.p0[0], p[0]); d.f0 = Math.min(d.p0[1], p[1]); d.f1 = Math.max(d.p0[1], p[1]); }
+  else {
+    const last = d.pts[d.pts.length - 1], lx = xOf(last[0]), ly = spY(G, last[1], d.lane) / G.dpr;
+    if (Math.hypot(x - lx, y - ly) >= 2) d.pts.push(p);
+  }
+  redraw();
+}
+
+function spUp() {
+  const d = SPV.draft;
+  if (!d) return;
+  SPV.draft = null;
+  if (!d.moved && d.kind !== "brush") {
+    ed.sel = { a: 0, b: 0 };
+    ed.cursor = Math.round(d.kind === "rect" ? d.p0[0] : d.pts[0][0]);
+    if (ed.play.on) startPlay(ed.cursor);
+    redraw();
+    return;
+  }
+  if (d.kind === "brush") { spEdit("spheal", [{ kind: "brush", pts: d.pts, rx: d.rx, ru: d.ru, ch: d.ch }], "brush"); redraw(); return; }
+  if (d.kind === "rect") spCommit({ kind: "rect", a: Math.round(d.a), b: Math.round(d.b), f0: d.f0, f1: d.f1, ch: d.ch }, d.add);
+  else if (d.pts.length >= 3) spCommit({ kind: "poly", pts: d.pts, ch: d.ch }, d.add);
+  redraw();
+}
+
 function spToggle() {
   SPV.on = !SPV.on;
   spSave("studioSpec", SPV.on ? "1" : "0");
@@ -393,6 +567,13 @@ function wireSpec() {
   bar.addEventListener("pointerup", end);
   bar.addEventListener("pointercancel", end);
   bar.addEventListener("dblclick", () => { SPV.split = SPV.split > 0.04 ? 0 : 0.42; spSave("studioSpecSplit", SPV.split); redraw(); });
+  sp.addEventListener("pointerdown", spDown);
+  sp.addEventListener("pointermove", spMove);
+  sp.addEventListener("pointerup", spUp);
+  sp.addEventListener("pointercancel", () => { if (SPV.draft) { SPV.draft = null; redraw(); } });
+  $("spTools").addEventListener("click", e => { const b = e.target.closest("button[data-tool]"); if (!b) return; e.stopPropagation(); b.blur(); spSetTool(b.dataset.tool); });
+  $("spBrush").addEventListener("input", e => { SPV.brush = Math.max(4, Math.min(120, Number(e.target.value) || 24)); spSave("studioSpecBrush", SPV.brush); spToolsUi(); redraw(); });
+  spToolsUi();
   $("specSeg").addEventListener("click", e => { if (e.target.closest("button")) { e.currentTarget.querySelector("button").blur(); spToggle(); } });
   $("spScaleSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b) spSetScale(b.dataset.v === "log"); });
   ddInit($("spResDd"), [{ v: "auto", label: "Auto" }, ...[512, 1024, 2048, 4096, 8192, 16384].map(v => ({ v: String(v), label: String(v) }))], SPV.res, v => { SPV.res = v; spSave("studioSpecRes", v); SPV.want = new Set(); redraw(); });

@@ -439,5 +439,18 @@
  "How far below full scale the colours reach before black": "Hasta dónde por debajo de la escala completa llegan los colores antes del negro",
  "Linear frequency scale": "Escala de frecuencia lineal",
  "Logarithmic frequency scale": "Escala de frecuencia logarítmica",
- "Hide the spectrogram": "Ocultar el espectrograma"
+ "Hide the spectrogram": "Ocultar el espectrograma",
+ "Time selection tool": "Herramienta de selección de tiempo",
+ "Marquee selection tool": "Herramienta de selección rectangular",
+ "Lasso selection tool": "Herramienta lazo",
+ "Spot Healing Brush": "Pincel corrector puntual",
+ "Size": "Tamaño",
+ "Spot Healing": "Corrección puntual",
+ "Spectral heal": "Reparación espectral",
+ "Remove frequencies": "Quitar frecuencias",
+ "Heal works on selections of up to 4 s. Select just the damaged part, or use the DeClicker for many clicks.": "Reparar funciona con selecciones de hasta 4 s. Selecciona solo la parte dañada o usa el DeClicker para muchos clics.",
+ "Nothing there stands out from its surroundings, so nothing was changed.": "Ahí nada destaca de su entorno, así que no se cambió nada.",
+ "A spectral selection can be healed up to 60 s at a time.": "Una selección espectral se puede reparar hasta 60 s de una vez.",
+ "Heal the spectral selection": "Reparar la selección espectral",
+ "Remove the selected frequencies": "Quitar las frecuencias seleccionadas"
 }

@@ -1106,7 +1106,7 @@ function drawMeters() {
   if (active || ed.play.on) ed.meterRaf = requestAnimationFrame(drawMeters);
 }
 
-const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", repair: "Repair", nr: "Noise Reduction", hum: "DeHummer", declip: "DeClipper" };
+const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", repair: "Repair", nr: "Noise Reduction", hum: "DeHummer", declip: "DeClipper", spot: "Spot Healing", spheal: "Spectral heal", spdel: "Remove frequencies" };
 
 function selOn() { return ed.sel.b > ed.sel.a; }
 
@@ -1145,7 +1145,9 @@ function editError(e) {
   if (m === "empty") { tell(t("A file can't be empty. Select less, or close the file instead.")); return; }
   if (m.startsWith("rate:")) { tell(t("The clipboard holds audio at a different sample rate") + " (" + (Number(m.slice(5)) / 1000).toLocaleString() + " kHz). " + t("Sample-rate conversion arrives with export."), t("Could not paste")); return; }
   if (m === "quota") { tell(t("Browser storage is full. Remove files from Studio's list to make room.")); return; }
-  if (m === "heal-long") { tell(t("Heal works on selections of up to 0.1 s. Select just the damaged part, or use the DeClicker for many clicks."), t("Could not heal")); return; }
+  if (m === "heal-long") { tell(t("Heal works on selections of up to 4 s. Select just the damaged part, or use the DeClicker for many clicks."), t("Could not heal")); return; }
+  if (m === "spot-nothing") { flash(t("Nothing there stands out from its surroundings, so nothing was changed.")); return; }
+  if (m === "spec-long") { tell(t("A spectral selection can be healed up to 60 s at a time."), t("Could not heal")); return; }
   if (m === "heal-edge") { tell(t("Heal needs some audio on both sides of the selection."), t("Could not heal")); return; }
   if (m === "heal-failed") { tell(t("This selection could not be healed."), t("Could not heal")); return; }
   tell(m, t("Could not edit"));
@@ -1428,7 +1430,7 @@ function wireWave(cv) {
   };
   const cancelPress = () => { if (press) { clearTimeout(press.timer); press = null; } };
   cv.addEventListener("pointerdown", e => {
-    if (!ed.doc || e.button > 0 || (IS_MAC && e.ctrlKey)) return;
+    if (!ed.doc || e.button > 0 || (IS_MAC && e.ctrlKey) || (spec && SPV.tool !== "time")) return;
     e.preventDefault();
     cv.setPointerCapture(e.pointerId);
     const p = local(e);
@@ -1466,6 +1468,7 @@ function wireWave(cv) {
     const p = local(e);
     if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) cancelPress();
     if (!ed.dragging) {
+      if (spec && SPV.tool !== "time") return;
       const selOn = ed.sel.b > ed.sel.a;
       cv.style.cursor = selOn && (Math.abs(xOf(ed.sel.a) - p.x) < 6 || Math.abs(xOf(ed.sel.b) - p.x) < 6) ? "ew-resize" : "text";
       return;

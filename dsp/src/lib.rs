@@ -93,6 +93,7 @@ pub mod hum;
 pub mod nr;
 pub mod restore;
 pub mod rs;
+pub mod sheal;
 pub mod spec;
 
 #[cfg(target_arch = "wasm32")]
@@ -647,6 +648,76 @@ mod wasm {
     #[unsafe(no_mangle)]
     pub extern "C" fn sp_img() -> *const u8 {
         spm().map(|s| s.img.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    static mut SH: Option<crate::sheal::Heal> = None;
+
+    fn shm() -> Option<&'static mut crate::sheal::Heal> {
+        unsafe { (*std::ptr::addr_of_mut!(SH)).as_mut() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sh_open(n: u32) -> i32 {
+        if !n.is_power_of_two() || !(256..=16384).contains(&n) {
+            return fail("spectral heal size out of range".into());
+        }
+        if shm().map(|h| h.n() != n as usize).unwrap_or(true) {
+            unsafe { *std::ptr::addr_of_mut!(SH) = Some(crate::sheal::Heal::new(n as usize)); }
+        }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sh_hop() -> u32 {
+        shm().map(|h| h.hop() as u32).unwrap_or(0)
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sh_context() -> u32 {
+        shm().map(|h| crate::sheal::context(h.n(), h.hop()) as u32).unwrap_or(0)
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sh_buf(len: u32) -> *mut f32 {
+        match shm() {
+            Some(h) => {
+                h.x.resize(len as usize, 0.0);
+                h.x.as_mut_ptr()
+            }
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sh_mask(frames: u32) -> *mut u8 {
+        match shm() {
+            Some(h) => {
+                let len = frames as usize * h.bins();
+                h.mask.clear();
+                h.mask.resize(len, 0);
+                h.mask.as_mut_ptr()
+            }
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sh_run(frames: u32, mode: u32, gain: f32, seed: u32) -> i32 {
+        let Some(h) = shm() else { return fail("spectral heal is not open".into()) };
+        match h.run(frames as usize, mode, gain, seed) {
+            Some(_) => 0,
+            None => 1,
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sh_span() -> *const u32 {
+        shm().map(|h| h.span.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sh_out() -> *const f32 {
+        shm().map(|h| h.x.as_ptr()).unwrap_or(std::ptr::null())
     }
 
     static mut RS: Option<crate::rs::Rs> = None;

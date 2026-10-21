@@ -439,5 +439,18 @@
  "How far below full scale the colours reach before black": "फ़ुल स्केल से कितने नीचे तक रंग जाते हैं, उसके बाद काला",
  "Linear frequency scale": "लीनियर फ़्रीक्वेंसी स्केल",
  "Logarithmic frequency scale": "लॉगरिदमिक फ़्रीक्वेंसी स्केल",
- "Hide the spectrogram": "स्पेक्ट्रोग्राम छिपाएँ"
+ "Hide the spectrogram": "स्पेक्ट्रोग्राम छिपाएँ",
+ "Time selection tool": "टाइम सिलेक्शन टूल",
+ "Marquee selection tool": "आयत सिलेक्शन टूल",
+ "Lasso selection tool": "लैसो टूल",
+ "Spot Healing Brush": "स्पॉट हीलिंग ब्रश",
+ "Size": "आकार",
+ "Spot Healing": "स्पॉट हीलिंग",
+ "Spectral heal": "स्पेक्ट्रल हील",
+ "Remove frequencies": "फ़्रीक्वेंसी हटाएँ",
+ "Heal works on selections of up to 4 s. Select just the damaged part, or use the DeClicker for many clicks.": "हील 4 s तक के सिलेक्शन पर काम करता है। सिर्फ़ खराब हिस्सा चुनें, या कई क्लिक के लिए DeClicker इस्तेमाल करें।",
+ "Nothing there stands out from its surroundings, so nothing was changed.": "वहाँ कुछ भी आसपास से अलग नहीं दिखता, इसलिए कुछ नहीं बदला गया।",
+ "A spectral selection can be healed up to 60 s at a time.": "एक स्पेक्ट्रल सिलेक्शन एक बार में 60 s तक हील किया जा सकता है।",
+ "Heal the spectral selection": "स्पेक्ट्रल सिलेक्शन हील करें",
+ "Remove the selected frequencies": "चुनी गई फ़्रीक्वेंसी हटाएँ"
 }

@@ -136,6 +136,12 @@ canvas.ru{flex:none;display:block;width:100%;height:22px;cursor:pointer}
 .wvwrap.spec #sp,.wvwrap.spec #spSplit{display:block}
 .wvwrap.spec #wv{bottom:auto}
 #wv.gone{visibility:hidden}
+.sptools{position:absolute;left:24px;display:none;align-items:center;gap:2px;z-index:7;background:rgba(12,10,9,.8);border:1px solid var(--border);padding:2px}
+.wvwrap.spec .sptools{display:flex}
+.sptools .spbrush{display:none;align-items:center;gap:6px;padding:0 6px;font-size:10px;color:var(--gray)}
+.sptools.brush .spbrush{display:flex}
+.sptools #spBrush{width:96px;accent-color:var(--pink)}
+.sptools #spBrushV{min-width:38px;text-align:right;font-variant-numeric:tabular-nums}
 @media (pointer:coarse){#spSplit{height:21px}#spSplit::after{top:10px}}
 canvas.mt{flex:none;display:block;width:100%;height:36px;cursor:pointer;border-top:1px solid var(--border)}
 

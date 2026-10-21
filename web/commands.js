@@ -87,8 +87,8 @@ const CMDS = [
   { id: "cut", g: "Edit", label: "Cut", run: () => edit("cut"), doc: true, when: () => selOn() },
   { id: "copy", g: "Edit", label: "Copy", run: () => edit("copy"), doc: true, when: () => selOn() },
   { id: "paste", g: "Edit", label: "Paste", run: () => edit("paste"), doc: true, when: () => !!ed.clipInfo },
-  { id: "delete", g: "Edit", label: "Delete the selection", run: () => edit("delete"), doc: true, when: () => selOn() },
-  { id: "silence", g: "Edit", label: "Silence the selection", run: () => edit("silence"), doc: true, when: () => selOn() },
+  { id: "delete", g: "Edit", label: "Delete the selection", run: () => spSelLive() ? spEdit("spdel", SPV.sel.shapes, "sel") : edit("delete"), doc: true, when: () => selOn() },
+  { id: "silence", g: "Edit", label: "Silence the selection", run: () => spSelLive() ? spEdit("spdel", SPV.sel.shapes, "sel") : edit("silence"), doc: true, when: () => selOn() },
   { id: "crop", g: "Edit", label: "Crop to the selection", run: () => edit("crop"), doc: true, when: () => selOn() },
   { id: "insert", g: "Edit", label: "Insert silence…", run: () => insertSilenceDlg(), doc: true },
   { id: "hist", g: "Edit", label: "History", run: () => toggleHist(), doc: true, kw: "undo list steps" },
@@ -98,7 +98,11 @@ const CMDS = [
   { id: "hum", g: "Repair", label: "DeHummer…", run: () => toggleHum(), doc: true, kw: "dehum hum buzz mains 50 60 hz ground loop notch" },
   { id: "nr", g: "Repair", label: "Noise Reduction…", run: () => toggleNr(), doc: true, kw: "denoise noise reduction hiss surface noise vinyl print process" },
   { id: "nrCap", g: "Repair", label: "Capture noise print", run: () => nrCapture(), doc: true, when: () => selOn(), kw: "noise print profile learn denoise" },
-  { id: "heal", g: "Repair", label: "Heal the selection", run: () => edit("heal"), doc: true, when: () => selOn(), kw: "automatic heal repair click pop fix interpolate" },
+  { id: "heal", g: "Repair", label: "Heal the selection", run: () => spSelLive() ? spEdit("spheal", SPV.sel.shapes, "sel") : edit("heal"), doc: true, when: () => selOn(), kw: "automatic heal repair click pop fix interpolate spectral" },
+  { id: "toolTime", g: "Repair", label: "Time selection tool", run: () => spSetTool("time"), doc: true, when: () => SPV.on, kw: "spectrogram select time" },
+  { id: "toolRect", g: "Repair", label: "Marquee selection tool", run: () => spSetTool("rect", true), doc: true, kw: "spectrogram spectral rectangle frequency select" },
+  { id: "toolLasso", g: "Repair", label: "Lasso selection tool", run: () => spSetTool("lasso", true), doc: true, kw: "spectrogram spectral freehand frequency select" },
+  { id: "toolBrush", g: "Repair", label: "Spot Healing Brush", run: () => spSetTool("brush", true), doc: true, kw: "spectrogram spectral paint heal repair click thump whistle cough" },
   { id: "markAdd", g: "Locations", label: "Add marker (or a range from the selection)", run: () => addMarker(false), doc: true, kw: "cue memory location" },
   { id: "rangeAdd", g: "Locations", label: "Add a range from the selection", run: () => addMarker(true), doc: true, when: () => selOn(), kw: "region memory location" },
   { id: "locAdd", g: "Locations", label: "New memory location…", run: () => addLocationDlg(), doc: true, kw: "marker zoom view named" },
@@ -122,7 +126,7 @@ const BASE_KEYS = {
   selAll: ["Mod+A"], deselect: ["Escape"],
   undo: ["Mod+Z"], redo: ["Mod+Shift+Z", "Mod+Y"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
   delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"], heal: ["Mod+U"], nrCap: ["Shift+P"],
-  markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"], spec: ["Shift+D"],
+  markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"], spec: ["Shift+D"], toolRect: ["E"], toolLasso: ["D"], toolBrush: ["B"],
   open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"]
 };
 
@@ -213,7 +217,7 @@ function runCmd(c) {
 
 function runCmdById(id) { return runCmd(CMD[id]); }
 
-const TIP_IDS = { homeBtn: "home", playBtn: "play", stopBtn: "stop", loopBtn: "loop", zinBtn: "zoomIn", zoutBtn: "zoomOut", zselBtn: "zoomSel", zfitBtn: "zoomFull", keysBtn: "keys", palBtn: "palette", specBtn: "spec" };
+const TIP_IDS = { homeBtn: "home", playBtn: "play", stopBtn: "stop", loopBtn: "loop", zinBtn: "zoomIn", zoutBtn: "zoomOut", zselBtn: "zoomSel", zfitBtn: "zoomFull", keysBtn: "keys", palBtn: "palette", specBtn: "spec", spToolTime: "toolTime", spToolRect: "toolRect", spToolLasso: "toolLasso", spToolBrush: "toolBrush" };
 
 function applyTitles() {
   const set = (el, id) => {
@@ -609,7 +613,8 @@ function waveMenuAt(clientX, clientY, touch, pid, spec) {
   ];
   if (stereo) items.push(ctxCmd("chanL"), ctxCmd("chanR"));
   items.push("-", ctxCmd("markAdd", selOn() ? t("Add a range from the selection") : t("Add marker")), ctxCmd("locAdd"));
-  if (spec) items.push("-", ctxCmd("specScale", SPV.log ? t("Linear frequency scale") : t("Logarithmic frequency scale")), ctxCmd("spec", t("Hide the spectrogram")));
+  if (spec && spSelLive()) items.splice(1, 0, "-", ctxCmd("heal", t("Heal the spectral selection")), ctxCmd("delete", t("Remove the selected frequencies")));
+  if (spec) items.push("-", ctxCmd("toolTime"), ctxCmd("toolRect"), ctxCmd("toolLasso"), ctxCmd("toolBrush"), "-", ctxCmd("specScale", SPV.log ? t("Linear frequency scale") : t("Logarithmic frequency scale")), ctxCmd("spec", t("Hide the spectrogram")));
   if (mk) {
     const m = mk.m, name = m.n + (m.name ? " · " + m.name : "");
     items.push("-",
