@@ -266,6 +266,7 @@ function origLists(meta) {
 }
 
 function setLists(lists) {
+  cur.marks = cur.hist[cur.idx].marks;
   cur.lists = lists;
   cur.cum = lists.map(cumOf);
   cur.len = clipLen(lists[0]);
@@ -291,7 +292,7 @@ function edgeOf(seg) {
 }
 
 function histInfo(h) {
-  return { op: h.op, a: h.a, b: h.b, n: h.n || 0, ch: h.ch || null, t: h.t };
+  return { op: h.op, a: h.a, b: h.b, n: h.n || 0, ch: h.ch || null, t: h.t, mk: h.mk || null };
 }
 
 function clipInfo() {
@@ -306,7 +307,7 @@ function statePayload(have, extra) {
     allocs.push({ id, n: c.allocs[id][1], pk: s.pk, bd: s.bd });
   }
   c.ver++;
-  return Object.assign({ len: c.len, lists: c.lists, edges: c.lists.map(l => l.map(edgeOf)), allocs, hist: c.hist.map(histInfo), idx: c.idx, ver: c.ver, clip: clipInfo(), saveErr: c.saveErr }, extra || {});
+  return Object.assign({ len: c.len, lists: c.lists, edges: c.lists.map(l => l.map(edgeOf)), allocs, hist: c.hist.map(histInfo), idx: c.idx, marks: c.marks, ver: c.ver, clip: clipInfo(), saveErr: c.saveErr }, extra || {});
 }
 
 function validLists(lists, meta, allocs) {
@@ -328,6 +329,18 @@ function validLists(lists, meta, allocs) {
   return len > 0;
 }
 
+function validMarks(marks, len) {
+  if (!Array.isArray(marks)) return false;
+  const ids = new Set(), nums = new Set();
+  for (const m of marks) {
+    if (!m || !Number.isInteger(m.id) || !Number.isInteger(m.n) || m.n < 1 || ids.has(m.id) || nums.has(m.n)) return false;
+    if (!["point", "range", "view"].includes(m.kind) || !Number.isInteger(m.a) || m.a < 0 || m.a > len) return false;
+    if (m.kind === "range" && (!Number.isInteger(m.b) || m.b <= m.a || m.b > len)) return false;
+    ids.add(m.id); nums.add(m.n);
+  }
+  return true;
+}
+
 function rebuild(j, meta, heapFrames, pkFloats) {
   try {
     if (!j || j.v !== 1 || !Array.isArray(j.allocs) || j.allocs[0] !== null || !Array.isArray(j.hist) || !j.hist.length) return null;
@@ -336,9 +349,10 @@ function rebuild(j, meta, heapFrames, pkFloats) {
       const a = allocs[i];
       if (!Array.isArray(a) || a.length !== 3 || !a.every(Number.isInteger) || a[1] <= 0 || a[0] + a[1] > heapFrames || a[2] + Math.ceil(a[1] / BUCKET) * 5 > pkFloats) return null;
     }
-    const pick = h => ({ op: String(h.op || ""), a: h.a | 0, b: h.b | 0, n: h.n | 0, ch: h.ch || null, t: h.t || 0, before: h.before || null, after: h.after || null });
-    let prev = origLists(meta);
-    const hist = [Object.assign(pick(j.hist[0]), { lists: prev })];
+    const pick = h => ({ op: String(h.op || ""), a: h.a | 0, b: h.b | 0, n: h.n | 0, ch: h.ch || null, mk: h.mk || null, t: h.t || 0, before: h.before || null, after: h.after || null });
+    let prev = origLists(meta), prevMarks = Array.isArray(j.hist[0].m) ? j.hist[0].m : [];
+    if (!validMarks(prevMarks, meta.frames)) return null;
+    const hist = [Object.assign(pick(j.hist[0]), { lists: prev, marks: prevMarks })];
     for (let i = 1; i < j.hist.length; i++) {
       const h = j.hist[i];
       let lists;
@@ -346,8 +360,11 @@ function rebuild(j, meta, heapFrames, pkFloats) {
       else if (Array.isArray(h.d) && h.d.length === meta.channels) lists = h.d.map((d, k) => applyDiff(prev[k], d));
       else return null;
       if (!validLists(lists, meta, allocs)) return null;
-      hist.push(Object.assign(pick(h), { lists, d: h.full ? null : h.d, full: !!h.full }));
+      const marks = Array.isArray(h.m) ? h.m : prevMarks;
+      if (marks !== prevMarks && !validMarks(marks, clipLen(lists[0]))) return null;
+      hist.push(Object.assign(pick(h), { lists, marks, d: h.full ? null : h.d, full: !!h.full }));
       prev = lists;
+      prevMarks = marks;
     }
     if (!Number.isInteger(j.idx) || j.idx < 0 || j.idx >= hist.length) return null;
     return { allocs, hist, idx: j.idx, seq: j.seq };
@@ -384,7 +401,9 @@ async function persistNow(c) {
     v: 1, seq: c.seq, id: c.meta.id, allocs: c.allocs, idx: c.idx,
     hist: c.hist.map((h, i) => {
       const o = { op: h.op, a: h.a, b: h.b, n: h.n || 0, ch: h.ch || null, t: h.t, before: h.before, after: h.after };
+      if (h.mk) o.mk = h.mk;
       if (i > 0) { if (h.full) o.full = h.lists; else o.d = h.d; }
+      if (i === 0 ? h.marks.length : h.full || h.marks !== c.hist[i - 1].marks) o.m = h.marks;
       return o;
     })
   });
@@ -410,12 +429,12 @@ function persist() {
   return c.saving;
 }
 
-function pushHist(info, lists, before, after) {
+function pushHist(info, lists, before, after, marks) {
   const c = cur;
   c.hist.length = c.idx + 1;
   const prev = c.hist[c.idx].lists;
   const d = lists.map((l, k) => diffList(prev[k], l));
-  c.hist.push(Object.assign({ t: Date.now(), lists, d, full: false, before, after }, info));
+  c.hist.push(Object.assign({ t: Date.now(), lists, marks: marks || mapMarks(c.hist[c.idx].marks, info), d, full: false, before, after }, info));
   if (c.hist.length > HIST_MAX + 1) {
     c.hist.splice(1, 1);
     c.hist[1].full = true;
@@ -432,8 +451,8 @@ function chanLabel(chans) {
   return on.map(i => i + 1).join(",");
 }
 
-function snapZero(pos, chans, dir) {
-  const c = cur, w = Math.max(1, Math.round(c.meta.sampleRate * 0.01));
+function snapZero(pos, chans, dir, side, ms) {
+  const c = cur, w = Math.max(1, Math.round(c.meta.sampleRate * (ms || 10) / 1000));
   const a0 = Math.max(0, pos - w), a1 = Math.min(c.len, pos + w);
   if (a1 - a0 < 2) return { p: pos, d: 0 };
   const n = a1 - a0, buf = new Float32Array(n), m = new Float32Array(n);
@@ -448,6 +467,7 @@ function snapZero(pos, chans, dir) {
     const dd = x < 0 && y >= 0 ? 1 : x > 0 && y <= 0 ? -1 : 0;
     if (!dd || (dir && dd !== dir)) continue;
     const p = a0 + i, dist = Math.abs(p - pos);
+    if ((side > 0 && p < pos) || (side < 0 && p > pos)) continue;
     if (dist < bestD) { bestD = dist; best = p; bestDir = dd; }
   }
   return best < 0 ? { p: pos, d: 0 } : { p: best, d: bestDir };
@@ -616,12 +636,68 @@ async function applyEdit(m) {
       }
       break;
     }
+    case "markadd":
+    case "markset":
+    case "markdel": {
+      const r = markOp(m, before);
+      pushHist(r.info, c.lists, before, before, r.marks);
+      persist();
+      return statePayload(m.have, { t: "state", sel: null, mark: r.id });
+    }
     default:
       throw new Error("unknown edit");
   }
   pushHist(info, lists, before, after);
   persist();
   return statePayload(m.have, { t: "state", sel: after });
+}
+
+function markOp(m, before) {
+  const c = cur, F = c.len, marks = c.marks;
+  const used = new Set(marks.map(x => x.n));
+  const freeN = () => { let n = 1; while (used.has(n)) n++; return n; };
+  const shape = (x, src) => {
+    const kind = ["point", "range", "view"].includes(src.kind) ? src.kind : x.kind;
+    const out = Object.assign({}, x, { kind });
+    if (src.name !== undefined) out.name = String(src.name).slice(0, 120);
+    if (src.view !== undefined) out.view = src.view && Number.isFinite(src.view.start) && Number.isFinite(src.view.spp) && src.view.spp > 0 ? { start: src.view.start, spp: src.view.spp } : null;
+    if (src.chans !== undefined) out.chans = Array.isArray(src.chans) && src.chans.length === c.meta.channels && src.chans.some(Boolean) ? src.chans.map(Boolean) : null;
+    if (src.a !== undefined) out.a = clampI(src.a, 0, F);
+    if (src.b !== undefined) out.b = clampI(src.b, 0, F);
+    if (kind === "view") { out.a = 0; delete out.b; }
+    else if (kind === "point") delete out.b;
+    else { if (!(out.b > out.a)) throw new Error("nosel"); }
+    return out;
+  };
+  if (m.op === "markadd") {
+    let id = 1;
+    for (const h of c.hist) for (const x of h.marks) if (x.id >= id) id = x.id + 1;
+    const want = Number.isInteger(m.mark && m.mark.n) && m.mark.n > 0 && m.mark.n <= 999 && !used.has(m.mark.n) ? m.mark.n : freeN();
+    const mk = shape({ id, n: want, kind: "point", a: 0, name: "", view: null, chans: null }, m.mark || {});
+    const out = marks.concat([mk]).sort((x, y) => x.n - y.n);
+    return { id, marks: out, info: { op: "markadd", a: mk.a, b: mk.b || mk.a, n: 0, ch: null, mk: { n: mk.n, name: mk.name, kind: mk.kind } } };
+  }
+  const old = marks.find(x => x.id === m.markId);
+  if (!old) throw new Error("stale");
+  if (m.op === "markdel") return { id: old.id, marks: marks.filter(x => x !== old), info: { op: "markdel", a: old.a, b: old.b || old.a, n: 0, ch: null, mk: { n: old.n, name: old.name, kind: old.kind } } };
+  const patch = m.mark || {};
+  const mk = shape(old, patch);
+  if (Number.isInteger(patch.n) && patch.n !== old.n) { if (patch.n < 1 || patch.n > 999 || used.has(patch.n)) throw new Error("number"); mk.n = patch.n; }
+  const what = mk.a !== old.a || mk.b !== old.b ? "move" : mk.name !== old.name ? "rename" : "change";
+  return { id: old.id, marks: marks.map(x => x === old ? mk : x).sort((x, y) => x.n - y.n), info: { op: "markset", a: mk.a, b: mk.b || mk.a, n: 0, ch: null, mk: { n: mk.n, name: mk.name, kind: mk.kind, was: what === "rename" ? old.name : null, what } } };
+}
+
+function adjustSel(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const ch = c.meta.channels;
+  const chans = Array.isArray(m.chans) && m.chans.length === ch && m.chans.some(Boolean) ? m.chans.map(Boolean) : new Array(ch).fill(true);
+  let a = clampI(m.a, 0, c.len), b = clampI(m.b, 0, c.len);
+  if (b <= a) throw new Error("nosel");
+  const inward = m.mode === "in";
+  const sa = snapZero(a, chans, 0, inward ? 1 : -1, 50), sb = snapZero(b, chans, sa.d, inward ? -1 : 1, 50);
+  if (sb.p > sa.p) { a = sa.p; b = sb.p; }
+  return { t: "adjusted", a, b };
 }
 
 function moveHist(m) {
@@ -828,7 +904,7 @@ async function openDoc(id, have) {
       cur.sums[i] = { pk: all.slice(a[2], a[2] + n0 * 2), bd: all.slice(a[2] + n0 * 2, a[2] + n0 * 5) };
     }
   } else {
-    cur.hist = [{ op: "open", a: 0, b: 0, n: 0, ch: null, t: meta.created || Date.now(), lists: origLists(meta), d: null, full: false, before: null, after: null }];
+    cur.hist = [{ op: "open", a: 0, b: 0, n: 0, ch: null, t: meta.created || Date.now(), lists: origLists(meta), marks: [], d: null, full: false, before: null, after: null }];
   }
   setLists(cur.hist[cur.idx].lists);
   cur.io = makeIo();
@@ -968,6 +1044,7 @@ async function handle(m) {
   }
   if (m.t === "edit") { postMessage(Object.assign({ req: m.req }, await enqueue(() => applyEdit(m)))); return; }
   if (m.t === "undo" || m.t === "redo" || m.t === "jump") { postMessage(Object.assign({ req: m.req }, await enqueue(() => moveHist(m)))); return; }
+  if (m.t === "adjust") { postMessage(Object.assign({ req: m.req }, await enqueue(() => adjustSel(m)))); return; }
   if (m.t === "flush") { await enqueue(async () => { if (cur && cur.saving) await cur.saving; }); postMessage({ t: "flushed", req: m.req, err: cur ? cur.saveErr : null }); return; }
 }
 

@@ -1,7 +1,7 @@
 const I18N_LANGS = { en: "English", de: "Deutsch", fr: "Français", es: "Español", it: "Italiano", pt: "Português", hi: "हिन्दी" };
 const I18N_COUNTRIES = ["GB", "DE", "FR", "ES", "IT", "PT", "IN", "US", "AT", "CH", "BR", "MX"];
 const i18n = { lang: "en", dict: {}, rev: {}, obs: null, pickers: [] };
-const I18N_SKIP = "#whoami, #acctName, #docName, #docInfo, #tnow, #tlen, #busyName, #busyPct, #stMsg, #histN, .hl, .fn, .fi, canvas, svg, script, style, .lp";
+const I18N_SKIP = "#whoami, #acctName, #docName, #docInfo, #tnow, #tlen, #busyName, #busyPct, #stMsg, #histN, #histList, #locsList, #palList, .hl, .fn, .fi, canvas, svg, script, style, .lp";
 
 function i18nDetect() {
   const stored = localStorage.getItem("djLang");
@@ -27,6 +27,7 @@ async function i18nLoad(lang) {
   i18nWalk(document.body);
   const country = { en: "GB", de: "DE", fr: "FR", es: "ES", it: "IT", pt: "PT", hi: "IN" }[lang] || "GB";
   for (const p of i18n.pickers) { try { p.setLocale(lang); p.setValue(country); p.setLabels({ featured: t("App languages"), search: t("Search country or language"), empty: t("No match"), button: t("Language"), all: t("All") }); } catch {} }
+  document.dispatchEvent(new Event("i18n"));
 }
 
 function i18nText(node) {

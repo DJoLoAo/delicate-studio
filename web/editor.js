@@ -425,6 +425,14 @@ function drawWaveBase(g, W, H, dpr) {
   g.fillStyle = "rgba(255,255,255,0.12)";
   for (let c = 1; c < ch; c++) g.fillRect(0, Math.round(c * laneH), W, 1);
   drawAmpLabels(g, W, laneH, ch, dpr);
+  g.fillStyle = "rgba(90,193,249,0.6)";
+  for (const m of shownMarks()) {
+    for (const f of m.kind === "range" ? [m.a, m.b] : [m.a]) {
+      const x = Math.round(xOf(f) * dpr);
+      if (x < 0 || x > W) continue;
+      for (let y = 0; y < H; y += 7 * dpr) g.fillRect(x, y, Math.max(1, dpr), 4 * dpr);
+    }
+  }
   const cx = Math.round(xOf(ed.cursor) * dpr);
   if (cx >= 0 && cx <= W) { g.fillStyle = "#DF9A24"; g.fillRect(cx, 0, Math.max(1, dpr), H); }
 }
@@ -473,35 +481,85 @@ function tickStep(sppCss) {
   return { major: major * sr, minor: major * sr / div, sec: major };
 }
 
+const MARK_LANE = 12;
+
 function drawRuler() {
   const cv = $("ru"), dpr = canvasFit(cv), g = cv.getContext("2d");
-  const W = cv.width, H = cv.height;
+  const W = cv.width, H = cv.height, T = H - MARK_LANE * dpr;
   g.fillStyle = "#12100e";
   g.fillRect(0, 0, W, H);
+  g.fillStyle = "#0e0c0a";
+  g.fillRect(0, T, W, H - T);
   if (ed.sel.b > ed.sel.a) {
     const a = xOf(ed.sel.a) * dpr, b = xOf(ed.sel.b) * dpr;
     g.fillStyle = "rgba(223,154,36,0.22)";
-    g.fillRect(a, 0, Math.max(1, b - a), H);
+    g.fillRect(a, 0, Math.max(1, b - a), T);
   }
   const st = tickStep(ed.view.spp);
   const startF = ed.view.start, endF = startF + cv.clientWidth * ed.view.spp;
   g.fillStyle = "#3a352f";
-  for (let f = Math.ceil(startF / st.minor) * st.minor; f <= endF; f += st.minor) g.fillRect(Math.round(xOf(f) * dpr), H - 5 * dpr, Math.max(1, dpr), 5 * dpr);
+  for (let f = Math.ceil(startF / st.minor) * st.minor; f <= endF; f += st.minor) g.fillRect(Math.round(xOf(f) * dpr), T - 5 * dpr, Math.max(1, dpr), 5 * dpr);
   g.font = (9.5 * dpr) + "px JetBrains Mono, monospace";
   g.textBaseline = "top";
   g.textAlign = "left";
   for (let f = Math.ceil(startF / st.major) * st.major; f <= endF; f += st.major) {
     const x = Math.round(xOf(f) * dpr);
     g.fillStyle = "#6f695f";
-    g.fillRect(x, H - 10 * dpr, Math.max(1, dpr), 10 * dpr);
+    g.fillRect(x, T - 10 * dpr, Math.max(1, dpr), 10 * dpr);
     g.fillStyle = "#a39d93";
     g.fillText(fmtTime(f, ed.fmt, st.sec), x + 3 * dpr, 3 * dpr);
   }
   g.fillStyle = "#2a2520";
+  g.fillRect(0, T - dpr, W, dpr);
   g.fillRect(0, H - dpr, W, dpr);
+  drawMarkLane(g, W, T, H, dpr);
   const cx = xOf(ed.cursor) * dpr;
   g.fillStyle = "#DF9A24";
   g.beginPath(); g.moveTo(cx - 5 * dpr, 0); g.lineTo(cx + 5 * dpr, 0); g.lineTo(cx, 7 * dpr); g.fill();
+}
+
+function shownMarks() {
+  const d = ed.markDrag;
+  return (ed.marks || []).filter(m => m.kind !== "view").map(m => d && d.id === m.id ? Object.assign({}, m, { a: d.a, b: d.b }) : m);
+}
+
+function markBoxes(g, dpr) {
+  g.font = (8.5 * dpr) + "px JetBrains Mono, monospace";
+  return shownMarks().map(m => {
+    const x = xOf(m.a) * dpr, w = g.measureText(String(m.n)).width + 6 * dpr;
+    return { m, x, w, x2: m.kind === "range" ? xOf(m.b) * dpr : x };
+  });
+}
+
+function drawMarkLane(g, W, T, H, dpr) {
+  const sel = ed.markSel;
+  for (const bx of markBoxes(g, dpr)) {
+    const { m, x, w, x2 } = bx, on = sel === m.id;
+    if (x2 < 0 || x > W + w) continue;
+    if (m.kind === "range") {
+      g.fillStyle = on ? "rgba(90,193,249,0.45)" : "rgba(90,193,249,0.22)";
+      g.fillRect(x, T + 3 * dpr, Math.max(dpr, x2 - x), H - T - 6 * dpr);
+      g.fillStyle = "#5AC1F9";
+      g.fillRect(Math.round(x2), T, Math.max(1, dpr), H - T);
+    }
+    g.fillStyle = on ? "#f2efe9" : "#5AC1F9";
+    g.fillRect(Math.round(x), T, Math.max(1, dpr), H - T);
+    g.fillRect(Math.round(x), T + 1 * dpr, w, H - T - 2 * dpr);
+    g.fillStyle = "#0c0a08";
+    g.textBaseline = "middle";
+    g.textAlign = "left";
+    g.fillText(String(m.n), x + 3 * dpr, T + (H - T) / 2 + 0.5 * dpr);
+  }
+}
+
+function markAt(cssX, cssY) {
+  const cv = $("ru"), Hc = cv.clientHeight;
+  if (cssY < Hc - MARK_LANE - 2) return null;
+  const g = cv.getContext("2d"), boxes = markBoxes(g, 1).reverse();
+  for (const b of boxes) if (cssX >= b.x - 4 && cssX <= b.x + b.w) return { m: b.m, part: "a", grab: cssX - b.x };
+  for (const b of boxes) if (b.m.kind === "range" && Math.abs(cssX - b.x2) <= 5) return { m: b.m, part: "b", grab: 0 };
+  for (const b of boxes) if (b.m.kind === "range" && cssX > b.x && cssX < b.x2) return { m: b.m, part: "move", grab: cssX - b.x };
+  return null;
 }
 
 function drawOverview() {
@@ -542,6 +600,8 @@ function drawOverviewBase(g, W, H, dpr) {
   g.lineWidth = dpr;
   g.strokeRect(vx + dpr / 2, dpr / 2, vw - dpr, H - dpr);
   if (ed.sel.b > ed.sel.a) { g.fillStyle = "rgba(223,154,36,0.25)"; g.fillRect(ed.sel.a / sppD, 0, Math.max(dpr, (ed.sel.b - ed.sel.a) / sppD), H); }
+  g.fillStyle = "#5AC1F9";
+  for (const m of shownMarks()) { g.fillRect(Math.round(m.a / sppD), 0, dpr, 6 * dpr); if (m.kind === "range") g.fillRect(Math.round(m.b / sppD), 0, dpr, 6 * dpr); }
   g.fillStyle = "#DF9A24";
   g.fillRect(Math.round(ed.cursor / sppD), 0, dpr, H);
 }
@@ -602,6 +662,8 @@ function applyState(st) {
   ed.hist = st.hist;
   ed.histIdx = st.idx;
   ed.clipInfo = st.clip;
+  ed.marks = st.marks || [];
+  ed.markDrag = null;
   if (st.saveErr && st.saveErr !== ed.saveErr) tell(t("Studio could not save your latest edits in this browser.") + " (" + (st.saveErr === "quota" ? t("Browser storage is full. Remove files from Studio's list to make room.") : st.saveErr) + ")");
   ed.saveErr = st.saveErr || null;
   ed.raw = null;
@@ -609,6 +671,7 @@ function applyState(st) {
   $("docInfo").textContent = docInfoText();
   editButtons();
   if (!$("hist").classList.contains("hidden")) renderHist();
+  if (!$("locs").classList.contains("hidden")) renderLocs();
 }
 
 function showOpened(r) {
@@ -622,6 +685,8 @@ function showDoc(meta, peaks, bands, state) {
   ed.srcs = [{ levels: poolPyr(meta, peaks, bands) }];
   applyState(state);
   ed.chans = new Array(meta.channels).fill(true);
+  ed.markSel = null;
+  ed.zoomBack = null;
   ed.sel = { a: 0, b: 0 };
   ed.cursor = 0;
   $("empty").classList.add("hidden");
@@ -658,7 +723,11 @@ function closeDoc() {
   ed.srcs = [];
   ed.clip = null;
   ed.raw = null;
+  ed.marks = [];
+  ed.markSel = null;
+  ed.zoomBack = null;
   closeHist();
+  closeLocs();
   $("ed").classList.add("hidden");
   $("empty").classList.remove("hidden");
   try { localStorage.removeItem("studioLastDoc"); } catch {}
@@ -1057,7 +1126,7 @@ function editError(e) {
   tell(m, t("Could not edit"));
 }
 
-async function runEdit(msg, structural) {
+async function runEdit(msg, structural, keepView) {
   if (!ed.doc || ed.editing) return;
   const wasPlaying = ed.play.on && structural, ph = wasPlaying ? playhead() : 0;
   if (wasPlaying) stopPlay();
@@ -1076,7 +1145,7 @@ async function runEdit(msg, structural) {
     const h = msg.t === "edit" ? r.hist[r.idx] : null;
     applyState(r);
     setSelFrom(r.sel);
-    ensureVisible(ed.cursor);
+    if (!keepView) ensureVisible(ed.cursor);
     clampView();
     redraw();
     if (wasPlaying) startPlay(Math.max(0, Math.min(ed.doc.frames - 1, Math.round(h ? mapPos(ph, h) : ph))));
@@ -1097,8 +1166,9 @@ function flash(text) {
   clearTimeout(ed.flashT);
   ed.flashT = setTimeout(() => { el.textContent = ""; }, 3000);
 }
-function undo() { if (ed.histIdx > 0) runEdit({ t: "undo" }, true); }
-function redo() { if (ed.histIdx < ed.hist.length - 1) runEdit({ t: "redo" }, true); }
+const isMarkOp = h => !!h && h.op.startsWith("mark");
+function undo() { if (ed.histIdx > 0) { const m = isMarkOp(ed.hist[ed.histIdx]); runEdit({ t: "undo" }, !m, m); } }
+function redo() { if (ed.histIdx < ed.hist.length - 1) { const m = isMarkOp(ed.hist[ed.histIdx + 1]); runEdit({ t: "redo" }, !m, m); } }
 function jumpHist(idx) { if (idx !== ed.histIdx) runEdit({ t: "jump", idx }, true); }
 
 async function insertSilenceDlg() {
@@ -1112,6 +1182,14 @@ async function insertSilenceDlg() {
 }
 
 function histLabel(h) {
+  if (isMarkOp(h)) {
+    const k = h.mk || {}, nm = k.name ? " · " + k.name : "";
+    if (h.op === "markadd") return t(k.kind === "range" ? "Add range" : k.kind === "view" ? "Add view" : "Add marker") + " " + k.n + nm;
+    if (h.op === "markdel") return t("Delete location") + " " + k.n + nm;
+    if (k.what === "rename") return t("Rename location") + " " + k.n + " → " + (k.name || "");
+    if (k.what === "move") return t("Move location") + " " + k.n + " → " + fmtTime(h.a) + nm;
+    return t("Change location") + " " + k.n + nm;
+  }
   const name = t(EDIT_LABELS[h.op] || h.op);
   if (h.op === "open") return name;
   const ch = h.ch ? " · " + h.ch : "";
@@ -1138,7 +1216,143 @@ function renderHist() {
   $("histInfo").textContent = ed.hist.length > 1 ? t("Click a step to go back to it. Later steps stay until you make a new edit.") : t("No edits yet. Every edit is listed here and can be undone.");
 }
 
-function openHist() { if (!ed.doc) return; closeFiles(); $("hist").classList.remove("hidden"); renderHist(); }
+function nextFreeN() {
+  const used = new Set((ed.marks || []).map(m => m.n));
+  let n = 1;
+  while (used.has(n)) n++;
+  return n;
+}
+
+function markEdit(op, markId, mark) {
+  return runEdit({ t: "edit", op, markId, mark }, false, true);
+}
+
+function markTime(m) {
+  if (m.kind === "view") return t("View");
+  if (m.kind === "range") return fmtTime(m.a) + "–" + fmtTime(m.b);
+  return fmtTime(m.a);
+}
+
+function addMarker(rangeOnly) {
+  if (!ed.doc) return;
+  const n = nextFreeN();
+  if (rangeOnly || (selOn() && !ed.play.on)) {
+    if (!selOn()) return;
+    markEdit("markadd", null, { n, kind: "range", a: ed.sel.a, b: ed.sel.b, chans: ed.chans.every(Boolean) ? null : ed.chans.slice(), name: t("Range") + " " + n });
+    return;
+  }
+  const pos = ed.play.on ? Math.floor(playhead()) : ed.cursor;
+  markEdit("markadd", null, { n, kind: "point", a: pos, name: t("Marker") + " " + n });
+  flash(t("Marker") + " " + n + " @ " + fmtTime(pos));
+}
+
+function segHtml(name, items, v) {
+  return `<div class="seg dseg" data-name="${name}">` + items.map(([k, label]) => `<button type="button" class="segbtn${k === v ? " on" : ""}" data-v="${k}">${esc(t(label))}</button>`).join("") + `</div>`;
+}
+
+function segSetup(form) {
+  form.querySelectorAll(".dseg").forEach(seg => seg.addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    seg.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+  }));
+}
+
+function segRead(form) {
+  const out = {};
+  form.querySelectorAll(".dseg").forEach(seg => { const on = seg.querySelector(".on"); out[seg.dataset.name] = on ? on.dataset.v : ""; });
+  return out;
+}
+
+async function addLocationDlg() {
+  if (!ed.doc) return;
+  const n = nextFreeN(), hasSel = selOn();
+  const html = `<label class="dfield"><span>${esc(t("Name"))}</span><input name="name" value="${esc((hasSel ? t("Range") : t("Marker")) + " " + n)}" spellcheck="false" autocomplete="off"></label>`
+    + `<div class="dfield"><span>${esc(t("Time"))}</span>${segHtml("time", [["point", "Marker at the cursor"], ["range", "Selection"], ["view", "None"]], hasSel ? "range" : "point")}</div>`
+    + `<div class="dfield"><span>${esc(t("Zoom and view"))}</span>${segHtml("zoom", [["0", "Don't store"], ["1", "Store"]], "0")}</div>`;
+  const v = await askForm(t("New location") + " " + n, html, { ok: t("add"), setup: f => { segSetup(f); requestAnimationFrame(() => { const i = f.querySelector("input"); if (i) i.select(); }); }, read: () => segRead(document.querySelector("#dlg .dform")) });
+  if (!v) return;
+  if (v.time === "range" && !hasSel) { tell(t("Select a range first.")); return; }
+  const mark = { n, kind: v.time, name: (v.name || "").trim() || t("Marker") + " " + n, view: v.zoom === "1" || v.time === "view" ? { start: ed.view.start, spp: ed.view.spp } : null };
+  if (v.time === "point") mark.a = ed.play.on ? Math.floor(playhead()) : ed.cursor;
+  if (v.time === "range") { mark.a = ed.sel.a; mark.b = ed.sel.b; mark.chans = ed.chans.every(Boolean) ? null : ed.chans.slice(); }
+  markEdit("markadd", null, mark);
+}
+
+async function renameMark(m) {
+  const v = await askText(t("Rename location") + " " + m.n, m.name || "");
+  if (v === null || v === undefined) return;
+  const name = String(v).trim();
+  if (name !== m.name) markEdit("markset", m.id, { name });
+}
+
+function recallMark(m) {
+  if (!ed.doc || !m) return;
+  ed.markSel = m.id;
+  if (m.view) { ed.view.spp = m.view.spp; ed.view.start = m.view.start; }
+  if (m.kind === "point") { ed.sel = { a: 0, b: 0 }; ed.cursor = Math.min(ed.doc.frames, m.a); }
+  if (m.kind === "range") { ed.sel = { a: m.a, b: Math.min(ed.doc.frames, m.b) }; ed.cursor = m.a; if (m.chans && m.chans.length === ed.doc.channels) ed.chans = m.chans.slice(); else ed.chans = ed.chans.map(() => true); }
+  clampView();
+  if (!m.view && m.kind !== "view") ensureVisible(ed.cursor);
+  if (ed.play.on && m.kind !== "view") startPlay(ed.cursor);
+  flash(t("Location") + " " + m.n + (m.name ? " · " + m.name : ""));
+  redraw();
+}
+
+function recallNumber(n) {
+  const m = (ed.marks || []).find(x => x.n === n);
+  if (m) recallMark(m); else flash(t("No location") + " " + n);
+}
+
+function markPositions() {
+  const out = [];
+  for (const m of ed.marks || []) { if (m.kind === "view") continue; out.push(m.a); if (m.kind === "range") out.push(m.b); }
+  return out;
+}
+
+function jumpTo(f, keepSel) {
+  ed.cursor = Math.max(0, Math.min(ed.doc.frames, Math.round(f)));
+  if (!keepSel) ed.sel = { a: 0, b: 0 };
+  ensureVisible(ed.cursor);
+  if (ed.play.on) startPlay(Math.min(ed.cursor, ed.doc.frames - 1));
+  redraw();
+}
+
+function stepTo(dir, withEdges) {
+  if (!ed.doc) return;
+  const here = ed.play.on ? Math.floor(playhead()) : ed.cursor;
+  const pos = markPositions();
+  if (withEdges) { pos.push(0, ed.doc.frames); if (selOn()) pos.push(ed.sel.a, ed.sel.b); }
+  let best = null;
+  for (const p of pos) if (dir > 0 ? p > here + 0.5 && (best === null || p < best) : p < here - 0.5 && (best === null || p > best)) best = p;
+  if (best !== null) jumpTo(best, withEdges);
+}
+
+function renderLocs() {
+  const box = $("locsList"), marks = ed.marks || [];
+  box.innerHTML = "";
+  for (const m of marks) {
+    const row = document.createElement("div");
+    row.className = "lrow" + (ed.markSel === m.id ? " cur" : "");
+    row.innerHTML = `<button class="lgo"><span class="hn"></span><span class="hl"></span><span class="lt"></span><span class="lz"></span></button><button class="x lren" title="Rename" aria-label="Rename">✎</button><button class="x ldel" title="Delete" aria-label="Delete">×</button>`;
+    row.querySelector(".hn").textContent = m.n;
+    row.querySelector(".hl").textContent = m.name || "";
+    row.querySelector(".lt").textContent = markTime(m);
+    row.querySelector(".lz").textContent = m.view ? t("zoom") : "";
+    row.querySelector(".lgo").addEventListener("click", () => recallMark(m));
+    row.querySelector(".lren").addEventListener("click", () => renameMark(m));
+    row.querySelector(".ldel").addEventListener("click", () => markEdit("markdel", m.id));
+    box.appendChild(row);
+  }
+  const mk = typeof cmdKeyText === "function" ? cmdKeyText("markAdd") : "M";
+  $("locsInfo").textContent = marks.length ? t("Click to go there. Drag markers on the ruler to move them; double-click to rename.") : t("No locations yet.") + " " + (mk ? mk + " — " : "") + t("adds a marker at the cursor, or keeps the selection as a range. New… can also store the zoom.");
+}
+
+function openLocs() { if (!ed.doc) return; closeFiles(); closeHist(); $("locs").classList.remove("hidden"); renderLocs(); }
+function closeLocs() { $("locs").classList.add("hidden"); }
+function toggleLocs() { if ($("locs").classList.contains("hidden")) openLocs(); else closeLocs(); }
+
+function openHist() { if (!ed.doc) return; closeFiles(); closeLocs(); $("hist").classList.remove("hidden"); renderHist(); }
 function closeHist() { $("hist").classList.add("hidden"); }
 function toggleHist() { if ($("hist").classList.contains("hidden")) openHist(); else closeHist(); }
 
@@ -1270,17 +1484,51 @@ function wireOverview() {
 
 function wireRuler() {
   const cv = $("ru");
-  let drag = false;
-  const go = e => {
-    const r = cv.getBoundingClientRect();
-    ed.cursor = Math.round(Math.max(0, Math.min(ed.doc.frames, frameAt(e.clientX - r.left))));
+  let drag = null;
+  const local = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const clampF = f => Math.round(Math.max(0, Math.min(ed.doc.frames, f)));
+  const go = e => { ed.cursor = clampF(frameAt(local(e).x)); redraw(); };
+  cv.addEventListener("pointerdown", e => {
+    if (!ed.doc || e.button > 0) return;
+    cv.setPointerCapture(e.pointerId);
+    const p = local(e), hit = markAt(p.x, p.y);
+    if (hit) {
+      ed.markSel = hit.m.id;
+      drag = { mark: hit, x0: p.x, moved: false };
+      ed.markDrag = { id: hit.m.id, a: hit.m.a, b: hit.m.b };
+      redraw();
+      return;
+    }
+    drag = { cursor: true };
+    go(e);
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!ed.doc) return;
+    const p = local(e);
+    if (!drag) { const h = markAt(p.x, p.y); cv.style.cursor = h ? (h.part === "move" ? "grab" : "ew-resize") : "pointer"; cv.title = h ? h.m.n + " · " + (h.m.name || "") : t("Click to place the cursor"); return; }
+    if (drag.cursor) { go(e); return; }
+    if (!drag.moved && Math.abs(p.x - drag.x0) < 3) return;
+    drag.moved = true;
+    const m = drag.mark.m, part = drag.mark.part, f = clampF(frameAt(p.x - drag.mark.grab));
+    if (m.kind === "point") ed.markDrag = { id: m.id, a: f };
+    else if (part === "a") ed.markDrag = { id: m.id, a: Math.min(f, m.b - 1), b: m.b };
+    else if (part === "b") ed.markDrag = { id: m.id, a: m.a, b: Math.max(clampF(frameAt(p.x)), m.a + 1) };
+    else { const len = m.b - m.a, a = Math.max(0, Math.min(ed.doc.frames - len, f)); ed.markDrag = { id: m.id, a, b: a + len }; }
     redraw();
+  });
+  const end = () => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (d.cursor) { if (ed.play.on) startPlay(ed.cursor); return; }
+    const md = ed.markDrag;
+    if (d.moved && md && (md.a !== d.mark.m.a || md.b !== d.mark.m.b)) { markEdit("markset", d.mark.m.id, d.mark.m.kind === "range" ? { a: md.a, b: md.b } : { a: md.a }); return; }
+    ed.markDrag = null;
+    recallMark(d.mark.m);
   };
-  cv.addEventListener("pointerdown", e => { if (!ed.doc) return; drag = true; cv.setPointerCapture(e.pointerId); go(e); });
-  cv.addEventListener("pointermove", e => { if (drag) go(e); });
-  const end = () => { if (!drag) return; drag = false; if (ed.play.on) startPlay(ed.cursor); };
   cv.addEventListener("pointerup", end);
   cv.addEventListener("pointercancel", end);
+  cv.addEventListener("dblclick", e => { if (!ed.doc) return; const p = local(e), hit = markAt(p.x, p.y); if (hit) renameMark(hit.m); });
 }
 
 function ddInit(el, items, value, onChange) {
@@ -1299,71 +1547,44 @@ function ddInit(el, items, value, onChange) {
   set(value);
 }
 
-function shortcuts() {
-  const rows = [
-    ["Space", t("Play / stop")],
-    ["Ctrl/⌘ Z", t("Undo")],
-    ["Ctrl/⌘ Shift Z · Ctrl/⌘ Y", t("Redo")],
-    ["Ctrl/⌘ X / C / V", t("Cut / copy / paste")],
-    ["Del · Backspace", t("Delete the selection")],
-    ["Shift + Del", t("Silence the selection")],
-    ["T", t("Crop to the selection")],
-    ["H", t("History")],
-    ["L", t("Loop on / off")],
-    ["Home / End", t("Cursor to start / end")],
-    ["= / −", t("Zoom in / out")],
-    ["\\", t("Zoom to the whole file")],
-    ["Z", t("Zoom to the selection")],
-    ["Ctrl/⌘ A", t("Select all")],
-    ["Esc", t("Clear the selection")],
-    ["Ctrl/⌘ O", t("Open a file")],
-    ["Shift + " + t("click"), t("Extend the selection")],
-    [t("Wheel"), t("Zoom · Shift+wheel scrolls")],
-    ["?", t("This list")]
-  ];
-  askForm(t("Keyboard shortcuts"), `<div class="keys">${rows.map(r => `<div><kbd>${esc(r[0])}</kbd><span>${esc(r[1])}</span></div>`).join("")}</div>`, { ok: t("close") });
-  const c = document.querySelector("#dlg .dcancel");
-  if (c) c.style.display = "none";
-}
-
 function typing(e) {
   const tg = e.target;
   return tg && (tg.tagName === "INPUT" || tg.tagName === "TEXTAREA" || tg.isContentEditable || tg.closest("#dlg:not(.hidden)") || tg.closest(".lp"));
 }
 
-function wireKeys() {
-  document.addEventListener("keydown", e => {
-    const modal = ($("dlg") && !$("dlg").classList.contains("hidden")) || !$("settings").classList.contains("hidden");
-    if (typing(e) || modal) return;
-    if (!$("app") || $("app").classList.contains("hidden")) return;
-    const mod = e.ctrlKey || e.metaKey;
-    if (mod && (e.key === "o" || e.key === "O")) { e.preventDefault(); pickFiles(); return; }
-    if (e.key === "?") { e.preventDefault(); shortcuts(); return; }
-    if (!ed.doc) return;
-    if (e.key === " " && !mod) { e.preventDefault(); togglePlay(); return; }
-    if (mod && (e.key === "a" || e.key === "A")) { e.preventDefault(); ed.sel = { a: 0, b: ed.doc.frames }; ed.cursor = 0; redraw(); return; }
-    if (mod && !e.altKey) {
-      const k = e.key.toLowerCase();
-      if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
-      if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); redo(); return; }
-      if (k === "x") { e.preventDefault(); edit("cut"); return; }
-      if (k === "c") { e.preventDefault(); edit("copy"); return; }
-      if (k === "v") { e.preventDefault(); edit("paste"); return; }
-    }
-    if (mod) return;
-    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); edit(e.shiftKey ? "silence" : "delete"); return; }
-    if (e.key === "t" || e.key === "T") { e.preventDefault(); edit("crop"); return; }
-    if (e.key === "h" || e.key === "H") { e.preventDefault(); toggleHist(); return; }
-    if (e.key === "Escape") { if (!$("files").classList.contains("hidden")) { closeFiles(); return; } if (!$("hist").classList.contains("hidden")) { closeHist(); return; } ed.sel = { a: 0, b: 0 }; redraw(); return; }
-    if (e.key === "Home") { e.preventDefault(); ed.cursor = 0; ensureVisible(0); if (ed.play.on) startPlay(0); redraw(); return; }
-    if (e.key === "End") { e.preventDefault(); ed.cursor = ed.doc.frames; ensureVisible(ed.doc.frames); stopPlay(); redraw(); return; }
-    if (e.key === "=" || e.key === "+") { e.preventDefault(); zoomAt(0.5); return; }
-    if (e.key === "-" || e.key === "_") { e.preventDefault(); zoomAt(2); return; }
-    if (e.key === "\\") { e.preventDefault(); zoomFit(); return; }
-    if (e.key === "z" || e.key === "Z") { e.preventDefault(); zoomSel(); return; }
-    if (e.key === "l" || e.key === "L") { e.preventDefault(); ed.loop = !ed.loop; if (ed.play.on) startPlay(); redraw(); return; }
-  });
+function toggleLoop() { ed.loop = !ed.loop; if (ed.play.on) startPlay(); redraw(); }
+function cursorHome() { ed.cursor = 0; ensureVisible(0); if (ed.play.on) startPlay(0); redraw(); }
+function cursorEnd() { ed.cursor = ed.doc.frames; ensureVisible(ed.doc.frames); stopPlay(); redraw(); }
+function selectAll() { ed.sel = { a: 0, b: ed.doc.frames }; ed.cursor = 0; redraw(); }
+function deselect() { ed.sel = { a: 0, b: 0 }; redraw(); }
+
+function chanOnly(c) {
+  const ch = ed.doc.channels;
+  if (ch < 2) return;
+  const only = ed.chans.every((v, i) => v === (i === c));
+  ed.chans = only ? new Array(ch).fill(true) : ed.chans.map((_, i) => i === c);
+  redraw();
 }
+
+function zoomToggle() {
+  if (ed.zoomBack) { ed.view.start = ed.zoomBack.start; ed.view.spp = ed.zoomBack.spp; ed.zoomBack = null; clampView(); redraw(); return; }
+  if (!selOn()) return;
+  ed.zoomBack = { start: ed.view.start, spp: ed.view.spp };
+  zoomSel();
+}
+
+async function adjustZero(mode) {
+  if (!ed.doc || !selOn()) return;
+  try {
+    const r = await call({ t: "adjust", id: ed.doc.id, a: ed.sel.a, b: ed.sel.b, chans: ed.chans, mode });
+    ed.sel = { a: r.a, b: r.b };
+    ed.cursor = r.a;
+    redraw();
+  } catch (e) { editError(e); }
+}
+
+function scaleToggle() { ed.scale = ed.scale === "db" ? "lin" : "db"; localStorage.setItem("studioScale", ed.scale); redraw(); }
+function colourToggle() { ed.colour = ed.colour === "spectral" ? "plain" : "spectral"; localStorage.setItem("studioColour", ed.colour); redraw(); }
 
 function wireDrop() {
   let depth = 0;
@@ -1400,18 +1621,16 @@ function wireUi() {
   $("files").addEventListener("click", ev => ev.stopPropagation());
   $("hist").addEventListener("click", ev => ev.stopPropagation());
   $("histX").addEventListener("click", closeHist);
-  document.addEventListener("click", () => { closeFiles(); closeHist(); document.querySelectorAll(".dd.open").forEach(o => o.classList.remove("open")); });
+  $("locs").addEventListener("click", ev => ev.stopPropagation());
+  $("locsX").addEventListener("click", closeLocs);
+  $("locsAdd").addEventListener("click", () => addLocationDlg());
+  document.addEventListener("click", () => { closeFiles(); closeHist(); closeLocs(); document.querySelectorAll(".dd.open").forEach(o => o.classList.remove("open")); });
   $("edTools").addEventListener("click", ev => {
     const b = ev.target.closest("button[data-cmd]");
     if (!b || b.disabled) return;
     ev.stopPropagation();
     b.blur();
-    const c = b.dataset.cmd;
-    if (c === "undo") undo();
-    else if (c === "redo") redo();
-    else if (c === "insert") insertSilenceDlg();
-    else if (c === "hist") toggleHist();
-    else edit(c);
+    runCmdById(b.dataset.cmd);
   });
   ddInit($("xfadeDd"), [{ v: "0", label: "Off" }, { v: "1", label: "1 ms" }, { v: "3", label: "3 ms" }, { v: "5", label: "5 ms" }, { v: "10", label: "10 ms" }, { v: "20", label: "20 ms" }], String(ed.xfade), v => { ed.xfade = Number(v); localStorage.setItem("studioXfade", v); });
   const snapSeg = () => document.querySelectorAll("#snapSeg button").forEach(b => b.classList.toggle("on", (b.dataset.v === "1") === ed.snap));
@@ -1443,7 +1662,7 @@ function wireUi() {
   wireWave();
   wireOverview();
   wireRuler();
-  wireKeys();
+  wireCommands();
   wireDrop();
 }
 

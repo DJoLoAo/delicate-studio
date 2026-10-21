@@ -23,6 +23,7 @@ function dlgValue() {
 
 function dlgClose(v) {
   if (!dlg.resolve) return;
+  if (dlg.el.contains(document.activeElement)) document.activeElement.blur();
   dlg.el.classList.add("hidden");
   const r = dlg.resolve;
   dlg.resolve = null;

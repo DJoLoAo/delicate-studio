@@ -180,4 +180,34 @@ function readList(list, cum, start, count, out, off, readSrc) {
   }
 }
 
-if (typeof module !== "undefined") module.exports = { SIL, clipLen, mergeList, sliceList, joinFix, opDelete, opInsert, opSilence, opReplace, opOverwrite, opCrop, opCopy, diffList, applyDiff, cumOf, readList, fadeMix };
+function mapMarks(marks, h) {
+  if (!marks.length || h.ch) return marks;
+  const op = h.op;
+  if (op !== "delete" && op !== "cut" && op !== "paste" && op !== "insert" && op !== "crop") return marks;
+  const a = h.a, b = h.b, n = op === "paste" || op === "insert" ? h.n : 0, d = n - (b - a);
+  const out = [];
+  let changed = false;
+  for (const m of marks) {
+    if (m.kind === "view") { out.push(m); continue; }
+    let s, e;
+    if (op === "crop") {
+      if (m.kind === "point") { if (m.a < a || m.a > b) { changed = true; continue; } s = m.a - a; e = s; }
+      else { s = Math.max(m.a, a) - a; e = Math.min(m.b, b) - a; if (e - s < 1) { changed = true; continue; } }
+    } else if (m.kind === "point") {
+      const p = m.a;
+      if (p < a || (p === a && a < b)) s = p;
+      else if (p >= b) s = p + d;
+      else { changed = true; continue; }
+      e = s;
+    } else {
+      s = m.a < a ? m.a : m.a >= b ? m.a + d : a + n;
+      e = m.b <= a ? m.b : m.b >= b ? m.b + d : a;
+      if (e - s < 1) { changed = true; continue; }
+    }
+    if (s !== m.a || (m.kind === "range" && e !== m.b)) { changed = true; out.push(Object.assign({}, m, m.kind === "range" ? { a: s, b: e } : { a: s })); }
+    else out.push(m);
+  }
+  return changed ? out : marks;
+}
+
+if (typeof module !== "undefined") module.exports = { SIL, clipLen, mergeList, sliceList, joinFix, opDelete, opInsert, opSilence, opReplace, opOverwrite, opCrop, opCopy, diffList, applyDiff, cumOf, readList, fadeMix, mapMarks };
