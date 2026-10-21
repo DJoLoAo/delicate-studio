@@ -1,0 +1,16 @@
+[package]
+name = "studio-dsp"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+symphonia = { version = "0.6.1", default-features = false, features = ["aac", "aiff", "alac", "caf", "flac", "isomp4", "mp2", "mp3", "ogg", "pcm", "vorbis", "wav", "all-meta"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

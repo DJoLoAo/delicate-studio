@@ -24,6 +24,7 @@ function start(me) {
   appEl.classList.remove("hidden");
   document.getElementById("whoami").textContent = me.username + " · " + me.plan;
   document.getElementById("acctName").textContent = me.username + " · " + me.plan;
+  editorStart();
 }
 
 function twoFactorStep(ticket, username) {
@@ -91,6 +92,7 @@ document.getElementById("logoutbtn").addEventListener("click", async () => {
   if (!(await ask(t("Log out?"), t("This also logs you out of Delicate DJ in this browser."), { ok: t("log out") }))) return;
   try { await fetch("/api/logout", { method: "POST" }); } catch {}
   studio.me = null;
+  if (ed.doc) closeDoc();
   showLogin("");
 });
 
