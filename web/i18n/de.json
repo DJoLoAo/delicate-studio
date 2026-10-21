@@ -418,5 +418,14 @@
  "Repair {n} clipped spans": "{n} übersteuerte Stellen reparieren",
  "Repair panel": "Reparatur-Fenster",
  "Diagnostics: DeClipper…": "Diagnose: DeClipper…",
- "DeHummer…": "DeHummer…"
+ "DeHummer…": "DeHummer…",
+ "Noise profile": "Rauschprofil",
+ "Quiet parts": "Leise Stellen",
+ "Finding the quiet parts…": "Suche die leisen Stellen…",
+ "No stretch with only noise was found: the quiet parts are silent or there are none. Capture a noise print instead.": "Keine Stelle mit nur Rauschen gefunden: Die leisen Stellen sind still oder es gibt keine. Erfasse stattdessen ein Rauschprofil.",
+ "Learned from 1 quiet stretch": "Aus 1 leisen Stelle gelernt",
+ "Learned from {n} quiet stretches": "Aus {n} leisen Stellen gelernt",
+ "The profile follows the noise from one to the next.": "Das Profil folgt dem Rauschen von einer zur nächsten.",
+ "No clear noise-only stretch here, so quiet music may count as noise. A noise print is safer.": "Hier gibt es keine klare Stelle mit nur Rauschen, leise Musik könnte als Rauschen gelten. Ein Rauschprofil ist sicherer.",
+ "Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.": "Findet die Stellen mit nur Rauschen, etwa Einlaufrille, Pausen zwischen den Titeln und Auslaufrille, und folgt dem Rauschen von einer zur nächsten."
 }

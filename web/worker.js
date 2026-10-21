@@ -742,6 +742,7 @@ async function closeCur() {
   if (FX.job) FX.job.cancel = true;
   FX.mode = "off";
   FX.pv = null;
+  NR.auto = null;
   if (c.saving) { try { await c.saving; } catch {} }
   if (clip && !clip.file && clip.doc === c.meta.id) { try { await materializeClip(); } catch { clip = null; } }
   if (c.busy > 0) lingering.set(c.meta.id, c); else closeHandles(c);
@@ -1655,7 +1656,7 @@ async function healSel(c, a, b, chans) {
 
 function wasmF32(x, ptr, n) { return new Float32Array(x.memory.buffer, ptr, n); }
 
-const NR = { print: null, loaded: null, stats: null };
+const NR = { print: null, loaded: null, stats: null, auto: null };
 const FX = { mode: "off", kind: "nr", raw: null, pv: null, job: null, graph: 0 };
 const NR_MAX = 20;
 const NR_FEED = 8192;
@@ -1670,7 +1671,7 @@ function nrCfg(m, sr) {
   const num = (v, lo, hi, d) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
   const o = m && typeof m === "object" ? m : {};
   const curve = Array.isArray(o.curve) ? o.curve.filter(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)).slice(0, 64) : [];
-  return { n: nrFft(o.n, sr), k: Math.round(num(o.k, 3, 16, 7)), floor: num(o.floor, 0, 40, 12), amount: num(o.amount, 0, 100, 100) / 100, thr: num(o.thr, -10, 10, 0), decay: num(o.decay, 0, 100, 50) / 100, link: o.link !== false, curve };
+  return { n: nrFft(o.n, sr), k: Math.round(num(o.k, 3, 16, 7)), floor: num(o.floor, 0, 40, 12), amount: num(o.amount, 0, 100, 100) / 100, thr: num(o.thr, -10, 10, 0), decay: num(o.decay, 0, 100, 50) / 100, link: o.link !== false, curve, auto: o.profile === "auto" };
 }
 
 function nrCurveBins(pts, bins, sr, n) {
@@ -1744,15 +1745,22 @@ function nrTune(x, slot, cfg, only) {
 }
 
 function nrSetup(x, slot, cfg, ch, sr, only) {
-  const P = NR.print;
-  if (!P) throw new Error("print-none");
-  if (P.sr !== sr) throw new Error("print-rate:" + P.sr);
-  const st = nrStats(x, cfg.n, cfg.k);
+  let st;
+  if (cfg.auto) {
+    if (!NR.auto || NR.auto.doc !== cur || NR.auto.lists !== cur.lists) throw new Error("stale");
+    st = nrAutoStats(x, cfg.n, cfg.k);
+    if (!st.pts.length) throw new Error("auto-none");
+  } else {
+    const P = NR.print;
+    if (!P) throw new Error("print-none");
+    if (P.sr !== sr) throw new Error("print-rate:" + P.sr);
+    st = nrStats(x, cfg.n, cfg.k);
+  }
   if (x.nr_open(slot, ch, sr, cfg.n, cfg.k) !== 0) throw new Error(dspError(x));
-  for (let c = 0; c < ch; c++) wasmF32(x, x.nr_print(slot, c), st.bins).set(nrLam(st, c, ch));
+  for (let c = 0; c < ch; c++) wasmF32(x, x.nr_print(slot, c), st.bins).set(cfg.auto ? nrAutoLam(st, 0, c) : nrLam(st, c, ch));
   wasmF32(x, x.nr_curve(slot), st.bins).set(nrCurveBins(cfg.curve, st.bins, sr, cfg.n));
   nrTune(x, slot, cfg, only);
-  return { n: cfg.n, k: cfg.k, hop: x.nr_hop(slot), bins: st.bins };
+  return { n: cfg.n, k: cfg.k, hop: x.nr_hop(slot), bins: st.bins, auto: cfg.auto ? st : null };
 }
 
 function nrInfo() {
@@ -1793,17 +1801,18 @@ function fxSetup(x, kind, slot, raw, c, only) {
   }
   const cfg = nrCfg(raw, sr);
   const s = nrSetup(x, slot, cfg, ch, sr, only);
-  return { warm: s.n + 16 * s.hop, key: cfg.n + ":" + cfg.k, bins: s.bins, n: s.n, curveKey: JSON.stringify(cfg.curve) };
+  return { warm: s.n + 16 * s.hop, key: cfg.n + ":" + cfg.k + (cfg.auto ? ":auto" : ""), bins: s.bins, n: s.n, curveKey: JSON.stringify(cfg.curve), auto: s.auto };
 }
 
 function fxPreview(x, c) {
   const kind = FX.kind, only = FX.mode === "noise";
   const cfg = kind === "nr" ? nrCfg(FX.raw, c.meta.sampleRate) : null;
-  const key = kind === "hum" ? "hum" : cfg.n + ":" + cfg.k;
+  const key = kind === "hum" ? "hum" : cfg.n + ":" + cfg.k + (cfg.auto ? ":auto" : "");
+  const ref = kind === "nr" ? (cfg.auto ? NR.auto : NR.print) : null;
   let pv = FX.pv;
-  if (!pv || pv.doc !== c || pv.kind !== kind || pv.key !== key || (kind === "nr" && pv.print !== NR.print)) {
+  if (!pv || pv.doc !== c || pv.kind !== kind || pv.key !== key || pv.ref !== ref || (cfg && cfg.auto && pv.autoKey !== NR.auto.key)) {
     const s = fxSetup(x, kind, 0, FX.raw, c, only);
-    pv = FX.pv = { doc: c, kind, x, key, print: NR.print, warm: s.warm, bins: s.bins, n: s.n, curveKey: s.curveKey, api: fxApi(x, kind, 0), ch: c.meta.channels, q: null, qStart: 0, qOff: 0, qLen: 0, drop: 0, inPos: 0, ver: -1 };
+    pv = FX.pv = { doc: c, kind, x, key, ref, autoKey: NR.auto ? NR.auto.key : "", auto: s.auto || null, warm: s.warm, bins: s.bins, n: s.n, curveKey: s.curveKey, api: fxApi(x, kind, 0), ch: c.meta.channels, q: null, qStart: 0, qOff: 0, qLen: 0, drop: 0, inPos: 0, ver: -1 };
     return;
   }
   if (kind === "hum") pv.warm = humWarm(humTune(x, 0, FX.raw, only), c.meta.sampleRate);
@@ -1825,6 +1834,7 @@ async function fxConfig(m) {
   const c = cur;
   if (mode === "off" || !c) { FX.mode = "off"; FX.pv = null; ringFlush(); return { t: "fxok", info: nrInfo() }; }
   if (FX.kind === "nr") await nrLoadPrint();
+  if (FX.kind === "nr" && nrCfg(FX.raw, c.meta.sampleRate).auto) await nrAutoFind(c, m.jobId);
   const x = await dspExports();
   if (cur !== c) return { t: "fxok", info: nrInfo() };
   FX.mode = mode;
@@ -1848,6 +1858,7 @@ function fxSeek(pv, p0) {
 
 function fxFeed(pv) {
   const x = pv.x, ch = pv.ch, m = NR_FEED;
+  if (pv.auto) fxLam(x, 0, pv.auto, pv.inPos + m / 2, ch);
   const inb = wasmF32(x, pv.api.inp(m), m * ch);
   readClip(pv.inPos, m, inb, m);
   pv.inPos += m;
@@ -1887,6 +1898,131 @@ function ringFlush() {
   Atomics.store(ctrl, 1, r + keep);
   if (Atomics.load(ctrl, 2) > r + keep - 256) { Atomics.store(ctrl, 1, w); return; }
   try { fillRing(); } catch (e) { stopPlay(); postMessage({ t: "playerror", msg: errText(e) }); }
+}
+
+const AUTO_STEP = 0.5, AUTO_ABOVE = 3, AUTO_DRIFT = 8, AUTO_SPAN = 10, AUTO_SEGS = 200;
+
+async function nrAutoFind(c, id) {
+  const A = NR.auto;
+  if (A && A.doc === c && A.lists === c.lists) return A;
+  const sr = c.meta.sampleRate, ch = c.meta.channels, F = c.len, lists = c.lists, cums = c.cum;
+  const H = Math.max(1, Math.round(sr * AUTO_STEP)), W = 2 * H, nb = Math.ceil(F / H);
+  const e = new Float64Array(nb);
+  const w0 = 2 * Math.PI * 40 / sr, cs = Math.cos(w0), al = Math.sin(w0) / (2 * Math.SQRT1_2), a0 = 1 + al;
+  const b0 = (1 + cs) / 2 / a0, b1 = -(1 + cs) / a0, a1 = -2 * cs / a0, a2 = (1 - al) / a0;
+  let z1 = 0, z2 = 0, last = 0;
+  const B = 65536, mono = new Float32Array(B), tmp = new Float32Array(B);
+  const rd = (src, cc, f, n, out, off) => readSrcOf(c, src, cc, f, n, out, off);
+  for (let s0 = 0; s0 < F; s0 += B) {
+    const n = Math.min(B, F - s0);
+    mono.fill(0, 0, n);
+    for (let k = 0; k < ch; k++) {
+      readList(lists[k], cums[k], s0, n, tmp, 0, rd);
+      for (let i = 0; i < n; i++) mono[i] += tmp[i] / ch;
+    }
+    for (let i = 0; i < n; i++) {
+      const v = mono[i], y = b0 * v + z1;
+      z1 = b1 * v - a1 * y + z2;
+      z2 = b0 * v - a2 * y;
+      e[Math.floor((s0 + i) / H)] += y * y;
+    }
+    const now = performance.now();
+    if (now - last > 120) {
+      last = now;
+      postMessage({ t: "aprog", id, frac: (s0 + n) / F });
+      await new Promise(r => setTimeout(r, 0));
+      if (cur !== c || c.lists !== lists) throw new Error("stale");
+    }
+  }
+  const L = [];
+  for (let i = 0; i + 1 < nb || (nb === 1 && i === 0); i++) {
+    const span = Math.min(W, F - i * H);
+    L.push({ a: i * H, b: i * H + span, db: 10 * Math.log10(((e[i] + (i + 1 < nb ? e[i + 1] : 0)) / Math.max(1, span)) + 1e-30) });
+    if (nb === 1) break;
+  }
+  const valid = L.filter(w => w.db > -110 && w.b - w.a >= H);
+  const segs = [];
+  let clarity = 0;
+  if (valid.length) {
+    const min = Math.min(...valid.map(w => w.db));
+    const sorted = valid.map(w => w.db).sort((p, q) => p - q);
+    clarity = sorted[Math.floor(sorted.length / 2)] - min;
+    const R = Math.round(AUTO_SPAN / AUTO_STEP);
+    for (let i = 0; i < valid.length; i++) {
+      const w = valid[i];
+      if (w.db > min + AUTO_DRIFT) continue;
+      let local = Infinity;
+      for (let j = Math.max(0, i - R); j <= Math.min(valid.length - 1, i + R); j++) if (Math.abs(valid[j].a - w.a) <= AUTO_SPAN * sr) local = Math.min(local, valid[j].db);
+      if (w.db > local + AUTO_ABOVE) continue;
+      const lastSeg = segs[segs.length - 1];
+      if (lastSeg && w.a <= lastSeg.b) lastSeg.b = Math.max(lastSeg.b, w.b);
+      else segs.push({ a: w.a, b: w.b });
+    }
+  }
+  let keep = segs.filter(s => s.b - s.a >= sr * 0.5);
+  if (keep.length > AUTO_SEGS) { const step = keep.length / AUTO_SEGS; keep = Array.from({ length: AUTO_SEGS }, (_, i) => keep[Math.floor(i * step)]); }
+  NR.auto = { doc: c, lists, sr, ch, segs: keep, clarity, key: "", stats: null };
+  return NR.auto;
+}
+
+function nrAutoStats(x, n, k) {
+  const A = NR.auto, key = n + ":" + k;
+  if (A.key === key) return A.stats;
+  const c = A.doc, bins = n / 2 + 1, sr = A.sr, ch = A.ch;
+  const rd = (src, cc, f, m, out, off) => readSrcOf(c, src, cc, f, m, out, off);
+  const pts = [];
+  for (const s of A.segs) {
+    const len = Math.min(s.b - s.a, Math.round(sr * NR_MAX));
+    if (len < n) continue;
+    const mean = [];
+    let ok = true;
+    for (let q = 0; q < ch && ok; q++) {
+      const buf = new Float32Array(len);
+      readList(A.lists[q], A.lists[q] === c.lists[q] ? c.cum[q] : cumOf(A.lists[q]), s.a, len, buf, 0, rd);
+      wasmF32(x, x.np_buf(len), len).set(buf);
+      const fr = x.np_stats(len, n, k);
+      if (fr < 8) { ok = false; break; }
+      mean.push(wasmF32(x, x.np_out(), bins).slice());
+    }
+    if (ok) pts.push({ c: (s.a + s.b) / 2, a: s.a, b: s.b, mean });
+  }
+  const avg = [], lo = [], hi = [];
+  for (let q = 0; q < ch; q++) {
+    const m = new Float32Array(bins), l = new Float32Array(bins).fill(Infinity), h = new Float32Array(bins);
+    for (const p of pts) for (let b = 0; b < bins; b++) { const v = p.mean[q][b]; m[b] += v / pts.length; if (v < l[b]) l[b] = v; if (v > h[b]) h[b] = v; }
+    avg.push(m); lo.push(l); hi.push(h);
+  }
+  A.key = key;
+  A.stats = { n, k, bins, pts, mean: avg, lo, hi, frames: pts.length };
+  return A.stats;
+}
+
+function nrAutoLam(st, pos, q) {
+  const p = st.pts;
+  if (p.length === 1 || pos <= p[0].c) return p[0].mean[q];
+  if (pos >= p[p.length - 1].c) return p[p.length - 1].mean[q];
+  let i = 1;
+  while (i < p.length - 1 && p[i].c < pos) i++;
+  const u = (pos - p[i - 1].c) / Math.max(1, p[i].c - p[i - 1].c), A = p[i - 1].mean[q], B = p[i].mean[q];
+  const out = new Float32Array(st.bins);
+  for (let b = 0; b < st.bins; b++) out[b] = Math.exp((1 - u) * Math.log(A[b] + 1e-30) + u * Math.log(B[b] + 1e-30));
+  return out;
+}
+
+function fxLam(x, slot, st, pos, ch) {
+  for (let q = 0; q < ch; q++) wasmF32(x, x.nr_print(slot, q), st.bins).set(nrAutoLam(st, pos, q));
+  x.nr_prep(slot);
+}
+
+async function nrAutoGet(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const A = await nrAutoFind(c, m.jobId);
+  const x = await dspExports();
+  const cfg = nrCfg(m.cfg, c.meta.sampleRate);
+  const st = nrAutoStats(x, cfg.n, cfg.k);
+  const total = st.pts.reduce((v, p) => v + Math.min(p.b - p.a, A.sr * NR_MAX), 0);
+  return { t: "npauto", info: { segs: st.pts.map(p => ({ a: p.a, b: p.b })), clarity: Math.round(A.clarity * 10) / 10, total }, stats: { n: st.n, k: st.k, bins: st.bins, frames: st.frames, mean: st.mean, lo: st.lo, hi: st.hi } };
 }
 
 async function nrCapture(m) {
@@ -1934,6 +2070,7 @@ async function fxApply(m) {
   if (!c || c.meta.id !== m.id) throw new Error("stale");
   const kind = m.kind === "hum" ? "hum" : "nr";
   if (kind === "nr") await nrLoadPrint();
+  if (kind === "nr" && nrCfg(m.cfg, c.meta.sampleRate).auto) await nrAutoFind(c, m.jobId);
   const x = await dspExports();
   if (cur !== c) throw new Error("stale");
   const sr = c.meta.sampleRate, ch = c.meta.channels, F = c.len;
@@ -1972,6 +2109,7 @@ async function fxApply(m) {
   api.reset();
   try {
     while (outPos < b) {
+      if (s.auto) fxLam(x, 1, s.auto, inPos + FEED / 2, ch);
       const inb = wasmF32(x, api.inp(FEED), FEED * ch);
       for (let k = 0; k < ch; k++) readList(lists[k], cums[k], inPos, FEED, inb, k * FEED, rd);
       inPos += FEED;
@@ -2116,8 +2254,8 @@ async function handle(m) {
   if (m.t === "dlisten") { RP.listen = ["repaired", "removed"].includes(m.mode) ? m.mode : "off"; return; }
   if (m.t === "dclear") { RP.scan = null; RP.listen = "off"; return; }
   if (m.t === "dstate") { postMessage({ t: "dresult", req: m.req, diag: rpSummary() }); return; }
-  if (m.t === "npget" || m.t === "npcap" || m.t === "fxcfg" || m.t === "humfind" || m.t === "humresp") {
-    const f = { npget: nrGet, npcap: nrCapture, fxcfg: fxConfig, humfind: humFind, humresp: humResp }[m.t];
+  if (m.t === "npget" || m.t === "npcap" || m.t === "npauto" || m.t === "fxcfg" || m.t === "humfind" || m.t === "humresp") {
+    const f = { npget: nrGet, npcap: nrCapture, npauto: nrAutoGet, fxcfg: fxConfig, humfind: humFind, humresp: humResp }[m.t];
     try { postMessage(Object.assign({ req: m.req }, await f(m))); }
     catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
     return;

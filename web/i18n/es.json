@@ -418,5 +418,14 @@
  "Repair {n} clipped spans": "Reparar {n} tramos recortados",
  "Repair panel": "Panel Reparar",
  "Diagnostics: DeClipper…": "Diagnóstico: DeClipper…",
- "DeHummer…": "DeHummer…"
+ "DeHummer…": "DeHummer…",
+ "Noise profile": "Perfil de ruido",
+ "Quiet parts": "Partes tranquilas",
+ "Finding the quiet parts…": "Buscando las partes tranquilas…",
+ "No stretch with only noise was found: the quiet parts are silent or there are none. Capture a noise print instead.": "No se encontró ningún tramo con solo ruido: las partes tranquilas son silencio o no hay ninguna. Captura una impresión de ruido en su lugar.",
+ "Learned from 1 quiet stretch": "Aprendido de 1 tramo tranquilo",
+ "Learned from {n} quiet stretches": "Aprendido de {n} tramos tranquilos",
+ "The profile follows the noise from one to the next.": "El perfil sigue al ruido de uno a otro.",
+ "No clear noise-only stretch here, so quiet music may count as noise. A noise print is safer.": "Aquí no hay un tramo claro con solo ruido, la música suave podría contar como ruido. Una impresión de ruido es más segura.",
+ "Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.": "Encuentra los tramos con solo ruido, como el surco de entrada, las pausas entre pistas y el surco de salida, y sigue al ruido de uno a otro."
 }

@@ -409,6 +409,13 @@ mod wasm {
     }
 
     #[unsafe(no_mangle)]
+    pub extern "C" fn nr_prep(slot: u32) {
+        if let Some(r) = nrm(slot) {
+            r.gn.prepare();
+        }
+    }
+
+    #[unsafe(no_mangle)]
     pub extern "C" fn nr_reset(slot: u32) {
         if let Some(r) = nrm(slot) {
             r.reset();

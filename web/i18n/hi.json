@@ -418,5 +418,14 @@
  "Repair {n} clipped spans": "{n} क्लिप हुए हिस्से ठीक करें",
  "Repair panel": "रिपेयर पैनल",
  "Diagnostics: DeClipper…": "डायग्नोस्टिक्स: DeClipper…",
- "DeHummer…": "DeHummer…"
+ "DeHummer…": "DeHummer…",
+ "Noise profile": "नॉइज़ प्रोफ़ाइल",
+ "Quiet parts": "शांत हिस्से",
+ "Finding the quiet parts…": "शांत हिस्से ढूँढ रहा है…",
+ "No stretch with only noise was found: the quiet parts are silent or there are none. Capture a noise print instead.": "सिर्फ़ नॉइज़ वाला कोई हिस्सा नहीं मिला: शांत हिस्से पूरी तरह चुप हैं या हैं ही नहीं। इसकी जगह नॉइज़ प्रिंट कैप्चर करें।",
+ "Learned from 1 quiet stretch": "1 शांत हिस्से से सीखा",
+ "Learned from {n} quiet stretches": "{n} शांत हिस्सों से सीखा",
+ "The profile follows the noise from one to the next.": "प्रोफ़ाइल एक से अगले तक नॉइज़ के साथ चलती है।",
+ "No clear noise-only stretch here, so quiet music may count as noise. A noise print is safer.": "यहाँ सिर्फ़ नॉइज़ वाला कोई साफ़ हिस्सा नहीं है, धीमा संगीत भी नॉइज़ माना जा सकता है। नॉइज़ प्रिंट ज़्यादा सुरक्षित है।",
+ "Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.": "सिर्फ़ नॉइज़ वाले हिस्से ढूँढता है, जैसे लीड-इन ग्रूव, ट्रैक के बीच के खाली हिस्से और रन-आउट, और एक से अगले तक नॉइज़ के साथ चलता है।"
 }

@@ -64,6 +64,7 @@ ed.worker.onmessage = e => {
   if (m.t === "xjob") { xpJob(m); return; }
   if (m.t === "dprog") { dgProg(m); return; }
   if (m.t === "nprog") { nrProg(m); humProg(m); return; }
+  if (m.t === "aprog") { nrAutoProg(m); return; }
   const p = ed.pending.get(m.req);
   if (!p) return;
   ed.pending.delete(m.req);
@@ -1130,7 +1131,7 @@ function editError(e) {
   const m = e && e.message || String(e);
   if (m === "stale" || m === "nothing" || m === "cancelled") return;
   if (m === "hum-short") { tell(t("Select at least a second of audio to look for hum."), t("DeHummer")); return; }
-  if (m === "print-none" || m.startsWith("print-rate:") || m.startsWith("print-short:") || m === "changed") { tell(nrErrText(m), t("Noise Reduction")); return; }
+  if (m === "print-none" || m.startsWith("print-rate:") || m.startsWith("print-short:") || m === "changed" || m === "auto-none") { tell(nrErrText(m), t("Noise Reduction")); return; }
   if (m === "nosel") { tell(t("Select a range first.")); return; }
   if (m === "noclip") { tell(t("The clipboard is empty.")); return; }
   if (m === "empty") { tell(t("A file can't be empty. Select less, or close the file instead.")); return; }

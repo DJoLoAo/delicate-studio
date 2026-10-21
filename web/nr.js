@@ -1,7 +1,7 @@
-const NR_DEF = { amount: 100, floor: 12, thr: 0, decay: 50, k: 7, n: 0, link: true, lo: 100, hi: 100, pts: [], scale: "log" };
+const NR_DEF = { amount: 100, floor: 12, thr: 0, decay: 50, k: 7, n: 0, link: true, lo: 100, hi: 100, pts: [], scale: "log", profile: "print" };
 const NR_FFTS = [0, 1024, 2048, 4096, 8192, 16384, 32768];
 const NR_LO = 20;
-const nr = { cfg: null, info: null, stats: null, err: null, listen: "off", job: null, show: 0, drag: null, hover: -1, seq: 0, busy: false, again: false, cols: null, colKey: "", geo: null, fetchSeq: 0, done: null };
+const nr = { cfg: null, info: null, auto: null, aprog: null, stats: null, err: null, listen: "off", job: null, show: 0, drag: null, hover: -1, seq: 0, busy: false, again: false, cols: null, colKey: "", geo: null, fetchSeq: 0, done: null };
 
 function nrLoad() {
   let v = null;
@@ -28,7 +28,7 @@ function nrFlat() { const c = nr.cfg; return c.lo === 100 && c.hi === 100 && !c.
 
 function nrWire() {
   const c = nr.cfg;
-  return { n: c.n, k: c.k, floor: c.floor, amount: c.amount, thr: c.thr, decay: c.decay, link: c.link, curve: nrFlat() ? [] : nrPts() };
+  return { n: c.n, k: c.k, floor: c.floor, amount: c.amount, thr: c.thr, decay: c.decay, link: c.link, curve: nrFlat() ? [] : nrPts(), profile: c.profile === "auto" ? "auto" : "print" };
 }
 
 function nrCurveAt(f) {
@@ -40,7 +40,18 @@ function nrCurveAt(f) {
   return p[p.length - 1][1];
 }
 
-function nrUsable() { return !!(ed.doc && nr.info && nr.stats && !nr.err && nr.info.sr === ed.doc.sampleRate); }
+function nrIsAuto() { return nr.cfg.profile === "auto"; }
+
+function nrUsable() {
+  if (nrIsAuto()) return !!(ed.doc && nr.auto && nr.stats && !nr.err && nr.auto.segs.length);
+  return !!(ed.doc && nr.info && nr.stats && !nr.err && nr.info.sr === ed.doc.sampleRate);
+}
+
+function nrAutoProg(m) {
+  if (!nr.aprog || m.id !== nr.aprog.id) return;
+  nr.aprog.frac = m.frac;
+  if (rp.open && rp.tab === "nr") $("nrPrint").textContent = t("Finding the quiet parts…") + " " + Math.round(m.frac * 100) + " %";
+}
 
 function nrRange() {
   if (selOn()) return { a: ed.sel.a, b: ed.sel.b, sel: true };
@@ -53,6 +64,7 @@ function nrErrText(m) {
   if (m.startsWith("print-rate:")) return t("The noise print was captured at {r} kHz. Capture one from this file.").replace("{r}", (Number(m.slice(11)) / 1000).toLocaleString());
   if (m.startsWith("print-short:")) return t("The noise print is too short for this FFT size. Capture a longer stretch of noise or pick a smaller FFT size.") + " (" + t("at least") + " " + fmtTime(Number(m.slice(12))) + ")";
   if (m === "changed") return t("The audio changed while it was processed. Run it again.");
+  if (m === "auto-none") return t("No stretch with only noise was found: the quiet parts are silent or there are none. Capture a noise print instead.");
   return m;
 }
 
@@ -70,13 +82,26 @@ async function nrFetch(open) {
   if (!ed.doc) return;
   const seq = ++nr.fetchSeq;
   try {
-    const r = await call({ t: "npget", cfg: { n: nrN(), k: nr.cfg.k } });
-    if (seq !== nr.fetchSeq) return;
-    nr.info = r.info;
-    nr.stats = r.stats;
-    nr.err = r.err || (r.info && ed.doc && r.info.sr !== ed.doc.sampleRate ? "print-rate:" + r.info.sr : null);
+    if (nrIsAuto()) {
+      const id = "a" + seq;
+      nr.aprog = { id, frac: 0 };
+      nr.stats = null;
+      nrRender();
+      const r = await call({ t: "npauto", id: ed.doc.id, jobId: id, cfg: { n: nrN(), k: nr.cfg.k } });
+      if (seq !== nr.fetchSeq) return;
+      nr.auto = r.info;
+      nr.stats = r.info.segs.length ? r.stats : null;
+      nr.err = r.info.segs.length ? null : "auto-none";
+    } else {
+      const r = await call({ t: "npget", cfg: { n: nrN(), k: nr.cfg.k } });
+      if (seq !== nr.fetchSeq) return;
+      nr.info = r.info;
+      nr.stats = r.stats;
+      nr.err = r.err || (r.info && ed.doc && r.info.sr !== ed.doc.sampleRate ? "print-rate:" + r.info.sr : null);
+    }
     nr.cols = null;
-  } catch (e) { if (seq === nr.fetchSeq) nr.err = String(e.message || e); }
+  } catch (e) { if (seq === nr.fetchSeq && e.message !== "stale") nr.err = String(e.message || e); }
+  finally { if (seq === nr.fetchSeq) nr.aprog = null; }
   if (!nrUsable() && nr.listen !== "off") nrListen("off");
   else if (open && nrUsable() && nr.listen === "off" && !nr.job) nrListen("proc");
   else if (nr.listen !== "off") nrSend();
@@ -103,6 +128,7 @@ async function nrCapture() {
   if (!selOn()) { tell(t("Select a stretch that holds only noise first, for example the lead-in groove or a gap between tracks."), t("Capture noise print")); return; }
   try {
     const r = await call({ t: "npcap", id: ed.doc.id, a: ed.sel.a, b: ed.sel.b, cfg: { n: nrN(), k: nr.cfg.k } });
+    if (nrIsAuto()) { nr.cfg.profile = "print"; nrSave(); }
     nr.info = r.info;
     nr.stats = r.stats;
     nr.err = null;
@@ -149,6 +175,7 @@ function nrProg(m) {
 
 function nrDoc() {
   nr.cols = null;
+  nr.auto = null;
   nr.done = null;
   if (nr.listen !== "off") nr.listen = "off";
   if (rp.open && rp.tab === "nr") nrFetch(true);
@@ -193,8 +220,17 @@ function nrRender() {
   $("nrShow").classList.toggle("hidden", !multi);
   document.querySelectorAll("#nrShow button").forEach(b => b.classList.toggle("on", Number(b.dataset.v) === nr.show));
   $("nrCurveReset").disabled = nrFlat();
+  document.querySelectorAll("#nrSrc button").forEach(b => b.classList.toggle("on", b.dataset.v === (nrIsAuto() ? "auto" : "print")));
+  $("nrCapRow").classList.toggle("hidden", nrIsAuto());
   let p = "";
-  if (!nr.info) p = t("No noise print yet. Select a stretch with noise only, at least half a second, such as the lead-in groove or a gap between tracks, then capture it.");
+  if (nrIsAuto()) {
+    const a = nr.auto;
+    if (nr.aprog) p = t("Finding the quiet parts…") + " " + Math.round(nr.aprog.frac * 100) + " %";
+    else if (a && a.segs.length) {
+      p = (a.segs.length === 1 ? t("Learned from 1 quiet stretch") : t("Learned from {n} quiet stretches").replace("{n}", a.segs.length)) + " · " + fmtTime(a.total) + ". " + t("The profile follows the noise from one to the next.");
+      if (a.clarity < 10) p += " " + t("No clear noise-only stretch here, so quiet music may count as noise. A noise print is safer.");
+    } else p = t("Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.");
+  } else if (!nr.info) p = t("No noise print yet. Select a stretch with noise only, at least half a second, such as the lead-in groove or a gap between tracks, then capture it.");
   else {
     const i = nr.info;
     p = t("Noise print") + ": " + fmtTime(Math.round(i.len * (ed.doc ? ed.doc.sampleRate : i.sr) / i.sr)) + " · " + (i.ch === 1 ? t("mono") : i.ch === 2 ? t("stereo") : i.ch + " ch") + " · " + (i.sr / 1000).toLocaleString() + " kHz";
@@ -432,6 +468,18 @@ function nrPointer(cv) {
 }
 
 function drawNrPrint(g, W, H, dpr) {
+  if (nrIsAuto()) {
+    if (!nr.auto || !ed.doc) return;
+    for (const s of nr.auto.segs) {
+      const x0 = Math.floor(xOf(s.a) * dpr), x1 = Math.max(x0 + 1, Math.ceil(xOf(s.b) * dpr));
+      if (x1 < 0 || x0 > W) continue;
+      g.fillStyle = "rgba(201,169,110,.85)";
+      g.fillRect(x0, 0, x1 - x0, Math.round(4 * dpr));
+      g.fillStyle = "rgba(201,169,110,.07)";
+      g.fillRect(x0, Math.round(4 * dpr), x1 - x0, H);
+    }
+    return;
+  }
   const i = nr.info;
   if (!i || !ed.doc || i.doc !== ed.doc.id || i.b <= i.a) return;
   const x0 = Math.floor(xOf(i.a) * dpr), x1 = Math.max(x0 + 1, Math.ceil(xOf(i.b) * dpr));
@@ -459,6 +507,7 @@ function wireNr() {
   seg("nrScale", v => { nr.cfg.scale = v === "lin" ? "lin" : "log"; nr.cols = null; });
   seg("nrShow", v => { nr.show = Number(v) || 0; nr.cols = null; });
   seg("nrListen", v => nrListen(v));
+  seg("nrSrc", v => { nr.cfg.profile = v === "auto" ? "auto" : "print"; nr.cols = null; nr.err = null; nr.done = null; nrFetch(rp.open && rp.tab === "nr"); });
   $("nrCap").addEventListener("click", nrCapture);
   $("nrApply").addEventListener("click", nrApply);
   $("nrCancel").addEventListener("click", () => ed.worker.postMessage({ t: "fxcancel" }));

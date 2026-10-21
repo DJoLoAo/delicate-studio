@@ -364,6 +364,7 @@ canvas.ru{height:34px}
 #diag .unit{font-size:10px;color:var(--dim);margin-left:-4px}
 #dgTol{flex:1;min-width:90px;accent-color:var(--pink)}
 #diag .row.hidden{display:none}
+#nrCapRow.hidden{display:none}
 #diag .hhead .rptabs{margin-left:0}
 #dgFx{min-width:140px}
 @media (max-width:760px){
