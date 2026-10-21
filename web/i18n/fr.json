@@ -427,5 +427,17 @@
  "Learned from {n} quiet stretches": "Appris sur {n} passages calmes",
  "The profile follows the noise from one to the next.": "Le profil suit le bruit de l'un à l'autre.",
  "No clear noise-only stretch here, so quiet music may count as noise. A noise print is safer.": "Aucun passage net ne contient que du bruit ici, la musique douce pourrait compter comme du bruit. Une empreinte du bruit est plus sûre.",
- "Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.": "Trouve les passages qui ne contiennent que du bruit, comme le sillon d'entrée, les blancs entre les morceaux et le sillon de sortie, et suit le bruit de l'un à l'autre."
+ "Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.": "Trouve les passages qui ne contiennent que du bruit, comme le sillon d'entrée, les blancs entre les morceaux et le sillon de sortie, et suit le bruit de l'un à l'autre.",
+ "Spectrogram": "Spectrogramme",
+ "Spectrogram on / off": "Spectrogramme activé / désactivé",
+ "Spectrogram: logarithmic / linear frequency scale": "Spectrogramme : échelle de fréquence logarithmique / linéaire",
+ "Drag to share the space between waveform and spectrogram; double-click to show only the spectrogram": "Faites glisser pour répartir la place entre la forme d'onde et le spectrogramme ; double-cliquez pour n'afficher que le spectrogramme",
+ "Frequency scale": "Échelle de fréquence",
+ "Logarithmic": "Logarithmique",
+ "Resolution": "Résolution",
+ "FFT size: higher is finer in frequency, lower is finer in time": "Taille FFT : plus grande est plus fine en fréquence, plus petite plus fine dans le temps",
+ "How far below full scale the colours reach before black": "Jusqu'où sous la pleine échelle vont les couleurs avant le noir",
+ "Linear frequency scale": "Échelle de fréquence linéaire",
+ "Logarithmic frequency scale": "Échelle de fréquence logarithmique",
+ "Hide the spectrogram": "Masquer le spectrogramme"
 }

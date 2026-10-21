@@ -129,6 +129,14 @@ canvas.ov{flex:none;display:block;width:100%;height:34px;cursor:pointer;border-b
 canvas.ru{flex:none;display:block;width:100%;height:22px;cursor:pointer}
 .wvwrap{flex:1;min-height:120px;position:relative}
 #wv{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:text;touch-action:none}
+#sp{position:absolute;left:0;right:0;width:100%;display:none;cursor:text;touch-action:none;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+#spSplit{position:absolute;left:0;right:0;height:9px;display:none;cursor:ns-resize;z-index:6;touch-action:none}
+#spSplit::after{content:"";position:absolute;left:0;right:0;top:4px;height:1px;background:var(--border)}
+#spSplit:hover::after{background:var(--gold)}
+.wvwrap.spec #sp,.wvwrap.spec #spSplit{display:block}
+.wvwrap.spec #wv{bottom:auto}
+#wv.gone{visibility:hidden}
+@media (pointer:coarse){#spSplit{height:21px}#spSplit::after{top:10px}}
 canvas.mt{flex:none;display:block;width:100%;height:36px;cursor:pointer;border-top:1px solid var(--border)}
 
 .edfoot{flex:none;display:flex;align-items:center;gap:14px;padding:6px 10px;border-top:1px solid var(--border);background:var(--bg2);flex-wrap:wrap}

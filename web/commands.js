@@ -74,6 +74,8 @@ const CMDS = [
   { id: "zs5", g: "View", label: "Store zoom preset 5", labelT: () => t("Store zoom preset") + " 5", run: () => zpStore(4), doc: true },
   { id: "scale", g: "View", label: "Linear / dB amplitude", run: () => scaleToggle(), doc: true },
   { id: "colour", g: "View", label: "Spectral / plain colour", run: () => colourToggle(), doc: true },
+  { id: "spec", g: "View", label: "Spectrogram on / off", run: () => spToggle(), doc: true, kw: "spectral frequency display spectrum view frequencies" },
+  { id: "specScale", g: "View", label: "Spectrogram: logarithmic / linear frequency scale", run: () => spScaleToggle(), doc: true, when: () => SPV.on, kw: "spectral frequency display log linear" },
   { id: "selAll", g: "Selection", label: "Select all", run: () => selectAll(), doc: true },
   { id: "deselect", g: "Selection", label: "Clear the selection", run: () => deselect(), doc: true },
   { id: "chanL", g: "Selection", label: "Left channel only / both", run: () => chanOnly(0), doc: true, when: () => ed.doc.channels > 1 },
@@ -120,7 +122,7 @@ const BASE_KEYS = {
   selAll: ["Mod+A"], deselect: ["Escape"],
   undo: ["Mod+Z"], redo: ["Mod+Shift+Z", "Mod+Y"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
   delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"], heal: ["Mod+U"], nrCap: ["Shift+P"],
-  markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"],
+  markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"], spec: ["Shift+D"],
   open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"]
 };
 
@@ -211,7 +213,7 @@ function runCmd(c) {
 
 function runCmdById(id) { return runCmd(CMD[id]); }
 
-const TIP_IDS = { homeBtn: "home", playBtn: "play", stopBtn: "stop", loopBtn: "loop", zinBtn: "zoomIn", zoutBtn: "zoomOut", zselBtn: "zoomSel", zfitBtn: "zoomFull", keysBtn: "keys", palBtn: "palette" };
+const TIP_IDS = { homeBtn: "home", playBtn: "play", stopBtn: "stop", loopBtn: "loop", zinBtn: "zoomIn", zoutBtn: "zoomOut", zselBtn: "zoomSel", zfitBtn: "zoomFull", keysBtn: "keys", palBtn: "palette", specBtn: "spec" };
 
 function applyTitles() {
   const set = (el, id) => {
@@ -583,7 +585,7 @@ function ctxCmd(id, label) {
   return { id, label: label || cmdLabel(c), key: cmdKeyText(id), enabled: cmdEnabled(c), run: () => runCmd(c) };
 }
 
-function waveMenuAt(clientX, clientY, touch, pid) {
+function waveMenuAt(clientX, clientY, touch, pid, spec) {
   if (!ed.doc) return;
   const r = $("wv").getBoundingClientRect(), x = clientX - r.left;
   const f = Math.round(Math.max(0, Math.min(ed.doc.frames, frameAt(x))));
@@ -607,6 +609,7 @@ function waveMenuAt(clientX, clientY, touch, pid) {
   ];
   if (stereo) items.push(ctxCmd("chanL"), ctxCmd("chanR"));
   items.push("-", ctxCmd("markAdd", selOn() ? t("Add a range from the selection") : t("Add marker")), ctxCmd("locAdd"));
+  if (spec) items.push("-", ctxCmd("specScale", SPV.log ? t("Linear frequency scale") : t("Logarithmic frequency scale")), ctxCmd("spec", t("Hide the spectrogram")));
   if (mk) {
     const m = mk.m, name = m.n + (m.name ? " · " + m.name : "");
     items.push("-",

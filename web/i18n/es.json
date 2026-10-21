@@ -427,5 +427,17 @@
  "Learned from {n} quiet stretches": "Aprendido de {n} tramos tranquilos",
  "The profile follows the noise from one to the next.": "El perfil sigue al ruido de uno a otro.",
  "No clear noise-only stretch here, so quiet music may count as noise. A noise print is safer.": "Aquí no hay un tramo claro con solo ruido, la música suave podría contar como ruido. Una impresión de ruido es más segura.",
- "Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.": "Encuentra los tramos con solo ruido, como el surco de entrada, las pausas entre pistas y el surco de salida, y sigue al ruido de uno a otro."
+ "Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.": "Encuentra los tramos con solo ruido, como el surco de entrada, las pausas entre pistas y el surco de salida, y sigue al ruido de uno a otro.",
+ "Spectrogram": "Espectrograma",
+ "Spectrogram on / off": "Espectrograma sí / no",
+ "Spectrogram: logarithmic / linear frequency scale": "Espectrograma: escala de frecuencia logarítmica / lineal",
+ "Drag to share the space between waveform and spectrogram; double-click to show only the spectrogram": "Arrastra para repartir el espacio entre la forma de onda y el espectrograma; doble clic para ver solo el espectrograma",
+ "Frequency scale": "Escala de frecuencia",
+ "Logarithmic": "Logarítmica",
+ "Resolution": "Resolución",
+ "FFT size: higher is finer in frequency, lower is finer in time": "Tamaño de FFT: mayor es más fino en frecuencia, menor más fino en el tiempo",
+ "How far below full scale the colours reach before black": "Hasta dónde por debajo de la escala completa llegan los colores antes del negro",
+ "Linear frequency scale": "Escala de frecuencia lineal",
+ "Logarithmic frequency scale": "Escala de frecuencia logarítmica",
+ "Hide the spectrogram": "Ocultar el espectrograma"
 }

@@ -2182,6 +2182,54 @@ async function humResp(m) {
   return { t: "humresp", db: Float32Array.from(f, v => x.dh_resp(2, Number(v) || 1)) };
 }
 
+const SP = { gen: 0 };
+const SP_TILE = 128;
+
+async function spTiles(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id || c.ver !== m.ver) return;
+  const gen = m.gen;
+  SP.gen = gen;
+  const x = await dspExports();
+  const n = m.n, rows = m.rows, spp = m.spp, half = n / 2;
+  if (SP.gen !== gen) return;
+  if (x.sp_open(n) !== 0 || x.sp_rows(rows, c.meta.sampleRate, m.log ? 1 : 0) !== 0) { postMessage({ t: "specerr", gen, msg: dspError(x) }); return; }
+  const lists = c.lists, cums = c.cum, ver = c.ver;
+  const rd = (src, cc, f, k, out, off) => readSrcOf(c, src, cc, f, k, out, off);
+  const per = spp <= n / 4 ? 1 : Math.min(4, Math.ceil(spp / (n / 2)));
+  let last = performance.now();
+  for (const [T, k] of m.tiles) {
+    if (SP.gen !== gen || cur !== c || c.lists !== lists || c.ver !== ver) return;
+    if (k < 0 || k >= lists.length) continue;
+    const f0 = T * SP_TILE * spp, span = SP_TILE * spp, cnt = SP_TILE * per;
+    const offs = new Uint32Array(cnt);
+    let seg;
+    if (span + n <= 1 << 20) {
+      const a = Math.floor(f0) - half, len = Math.ceil(span) + n + 2;
+      seg = new Float32Array(len);
+      readList(lists[k], cums[k], a, len, seg, 0, rd);
+      for (let col = 0; col < SP_TILE; col++) for (let i = 0; i < per; i++) offs[col * per + i] = Math.max(0, Math.min(len - n, Math.round(f0 + (col + (i + 0.5) / per) * spp) - half - a));
+    } else {
+      seg = new Float32Array(cnt * n);
+      for (let col = 0; col < SP_TILE; col++) for (let i = 0; i < per; i++) {
+        const j = col * per + i;
+        readList(lists[k], cums[k], Math.round(f0 + (col + (i + 0.5) / per) * spp) - half, n, seg, j * n, rd);
+        offs[j] = j * n;
+      }
+    }
+    wasmF32(x, x.sp_seg(seg.length), seg.length).set(seg);
+    const op = x.sp_offs(cnt);
+    new Uint32Array(x.memory.buffer, op, cnt).set(offs);
+    const len = x.sp_run(SP_TILE, per, m.top, m.range);
+    if (len < 0) { postMessage({ t: "specerr", gen, msg: dspError(x) }); return; }
+    const ip = x.sp_img();
+    const data = new Uint8Array(x.memory.buffer, ip, len).slice();
+    postMessage({ t: "spectile", id: c.meta.id, ver, gen, key: m.key, T, k, data }, [data.buffer]);
+    const now = performance.now();
+    if (now - last > 12) { await new Promise(r => setTimeout(r, 0)); last = performance.now(); }
+  }
+}
+
 function opened(req, r) {
   postMessage({ t: "opened", req, meta: r.meta, peaks: r.peaks, bands: r.bands, state: r.state, recovered: r.recovered }, [r.peaks.buffer, r.bands.buffer]);
 }
@@ -2260,6 +2308,7 @@ async function handle(m) {
     catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
     return;
   }
+  if (m.t === "spec") { await spTiles(m); return; }
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
   if (m.t === "fxcancel") { if (FX.job) FX.job.cancel = true; return; }
   if (m.t === "adjust") { postMessage(Object.assign({ req: m.req }, await enqueue(() => adjustSel(m)))); return; }

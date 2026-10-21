@@ -427,5 +427,17 @@
  "Learned from {n} quiet stretches": "{n} शांत हिस्सों से सीखा",
  "The profile follows the noise from one to the next.": "प्रोफ़ाइल एक से अगले तक नॉइज़ के साथ चलती है।",
  "No clear noise-only stretch here, so quiet music may count as noise. A noise print is safer.": "यहाँ सिर्फ़ नॉइज़ वाला कोई साफ़ हिस्सा नहीं है, धीमा संगीत भी नॉइज़ माना जा सकता है। नॉइज़ प्रिंट ज़्यादा सुरक्षित है।",
- "Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.": "सिर्फ़ नॉइज़ वाले हिस्से ढूँढता है, जैसे लीड-इन ग्रूव, ट्रैक के बीच के खाली हिस्से और रन-आउट, और एक से अगले तक नॉइज़ के साथ चलता है।"
+ "Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.": "सिर्फ़ नॉइज़ वाले हिस्से ढूँढता है, जैसे लीड-इन ग्रूव, ट्रैक के बीच के खाली हिस्से और रन-आउट, और एक से अगले तक नॉइज़ के साथ चलता है।",
+ "Spectrogram": "स्पेक्ट्रोग्राम",
+ "Spectrogram on / off": "स्पेक्ट्रोग्राम चालू / बंद",
+ "Spectrogram: logarithmic / linear frequency scale": "स्पेक्ट्रोग्राम: लॉगरिदमिक / लीनियर फ़्रीक्वेंसी स्केल",
+ "Drag to share the space between waveform and spectrogram; double-click to show only the spectrogram": "वेवफ़ॉर्म और स्पेक्ट्रोग्राम के बीच जगह बाँटने के लिए खींचें; सिर्फ़ स्पेक्ट्रोग्राम दिखाने के लिए डबल-क्लिक करें",
+ "Frequency scale": "फ़्रीक्वेंसी स्केल",
+ "Logarithmic": "लॉगरिदमिक",
+ "Resolution": "रिज़ॉल्यूशन",
+ "FFT size: higher is finer in frequency, lower is finer in time": "FFT साइज़: बड़ा फ़्रीक्वेंसी में बारीक, छोटा समय में बारीक",
+ "How far below full scale the colours reach before black": "फ़ुल स्केल से कितने नीचे तक रंग जाते हैं, उसके बाद काला",
+ "Linear frequency scale": "लीनियर फ़्रीक्वेंसी स्केल",
+ "Logarithmic frequency scale": "लॉगरिदमिक फ़्रीक्वेंसी स्केल",
+ "Hide the spectrogram": "स्पेक्ट्रोग्राम छिपाएँ"
 }

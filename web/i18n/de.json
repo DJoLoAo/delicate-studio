@@ -427,5 +427,17 @@
  "Learned from {n} quiet stretches": "Aus {n} leisen Stellen gelernt",
  "The profile follows the noise from one to the next.": "Das Profil folgt dem Rauschen von einer zur nächsten.",
  "No clear noise-only stretch here, so quiet music may count as noise. A noise print is safer.": "Hier gibt es keine klare Stelle mit nur Rauschen, leise Musik könnte als Rauschen gelten. Ein Rauschprofil ist sicherer.",
- "Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.": "Findet die Stellen mit nur Rauschen, etwa Einlaufrille, Pausen zwischen den Titeln und Auslaufrille, und folgt dem Rauschen von einer zur nächsten."
+ "Finds the stretches with only noise, such as the lead-in, gaps between tracks and the run-out, and follows the noise from one to the next.": "Findet die Stellen mit nur Rauschen, etwa Einlaufrille, Pausen zwischen den Titeln und Auslaufrille, und folgt dem Rauschen von einer zur nächsten.",
+ "Spectrogram": "Spektrogramm",
+ "Spectrogram on / off": "Spektrogramm ein / aus",
+ "Spectrogram: logarithmic / linear frequency scale": "Spektrogramm: logarithmische / lineare Frequenzskala",
+ "Drag to share the space between waveform and spectrogram; double-click to show only the spectrogram": "Ziehen, um den Platz zwischen Wellenform und Spektrogramm aufzuteilen; Doppelklick zeigt nur das Spektrogramm",
+ "Frequency scale": "Frequenzskala",
+ "Logarithmic": "Logarithmisch",
+ "Resolution": "Auflösung",
+ "FFT size: higher is finer in frequency, lower is finer in time": "FFT-Größe: höher ist feiner in der Frequenz, niedriger feiner in der Zeit",
+ "How far below full scale the colours reach before black": "Wie weit unter Vollaussteuerung die Farben reichen, bevor es schwarz wird",
+ "Linear frequency scale": "Lineare Frequenzskala",
+ "Logarithmic frequency scale": "Logarithmische Frequenzskala",
+ "Hide the spectrogram": "Spektrogramm ausblenden"
 }

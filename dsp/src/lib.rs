@@ -93,6 +93,7 @@ pub mod hum;
 pub mod nr;
 pub mod restore;
 pub mod rs;
+pub mod spec;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
@@ -584,6 +585,68 @@ mod wasm {
         let mask: Vec<bool> = unsafe { (&*std::ptr::addr_of!(RP_MASK))[..n].iter().map(|&v| v != 0).collect() };
         let x = unsafe { &mut (&mut *std::ptr::addr_of_mut!(RP_BUF))[..n] };
         if crate::restore::declip(x, &mask, p as usize) { 0 } else { fail("clipping could not be repaired here".into()) }
+    }
+
+    static mut SP: Option<crate::spec::Spec> = None;
+
+    fn spm() -> Option<&'static mut crate::spec::Spec> {
+        unsafe { (*std::ptr::addr_of_mut!(SP)).as_mut() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sp_open(n: u32) -> i32 {
+        if !n.is_power_of_two() || !(256..=32768).contains(&n) {
+            return fail("spectral resolution out of range".into());
+        }
+        if spm().map(|s| s.n() != n as usize).unwrap_or(true) {
+            unsafe { *std::ptr::addr_of_mut!(SP) = Some(crate::spec::Spec::new(n as usize)); }
+        }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sp_rows(rows: u32, sr: f64, log: u32) -> i32 {
+        let Some(s) = spm() else { return fail("spectral display is not open".into()) };
+        if rows == 0 || rows > 8192 || sr <= 0.0 {
+            return fail("spectral rows out of range".into());
+        }
+        s.set_rows(rows as usize, sr, log != 0);
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sp_seg(len: u32) -> *mut f32 {
+        match spm() {
+            Some(s) => {
+                s.seg.resize(len as usize, 0.0);
+                s.seg.as_mut_ptr()
+            }
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sp_offs(count: u32) -> *mut u32 {
+        match spm() {
+            Some(s) => {
+                s.offs.resize(count as usize, 0);
+                s.offs.as_mut_ptr()
+            }
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sp_run(cols: u32, m: u32, top: f32, range: f32) -> i32 {
+        match spm() {
+            Some(s) => s.run(cols as usize, m as usize, top, range) as i32,
+            None => fail("spectral display is not open".into()),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn sp_img() -> *const u8 {
+        spm().map(|s| s.img.as_ptr()).unwrap_or(std::ptr::null())
     }
 
     static mut RS: Option<crate::rs::Rs> = None;

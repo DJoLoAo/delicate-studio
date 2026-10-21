@@ -65,6 +65,8 @@ ed.worker.onmessage = e => {
   if (m.t === "dprog") { dgProg(m); return; }
   if (m.t === "nprog") { nrProg(m); humProg(m); return; }
   if (m.t === "aprog") { nrAutoProg(m); return; }
+  if (m.t === "spectile") { spTile(m); return; }
+  if (m.t === "specerr") { spErr(m); return; }
   const p = ed.pending.get(m.req);
   if (!p) return;
   ed.pending.delete(m.req);
@@ -309,9 +311,11 @@ function redraw() {
 
 function render() {
   if (!ed.doc) return;
+  spLayout();
   drawOverview();
   drawRuler();
-  drawWave();
+  if (!$("wv").classList.contains("gone")) drawWave();
+  drawSpec();
   updatePanel();
   saveView();
 }
@@ -628,6 +632,7 @@ function updatePanel() {
   });
   document.querySelectorAll("#scaleSeg button").forEach(btn => btn.classList.toggle("on", btn.dataset.v === ed.scale));
   document.querySelectorAll("#colourSeg button").forEach(btn => btn.classList.toggle("on", btn.dataset.v === ed.colour));
+  document.querySelectorAll("#specSeg button").forEach(btn => btn.classList.toggle("on", SPV.on));
   editButtons();
   rpTick();
 }
@@ -679,6 +684,7 @@ function applyState(st) {
   if (!$("hist").classList.contains("hidden")) renderHist();
   if (!$("locs").classList.contains("hidden")) renderLocs();
   dgAfterEdit();
+  spAfterEdit();
 }
 
 function showOpened(r) {
@@ -697,6 +703,7 @@ function showDoc(meta, peaks, bands, state) {
   ed.zoomBack = null;
   ed.sel = { a: 0, b: 0 };
   ed.cursor = 0;
+  spDoc();
   $("empty").classList.add("hidden");
   $("ed").classList.remove("hidden");
   $("docName").textContent = meta.name;
@@ -738,6 +745,7 @@ function closeDoc() {
   ed.marks = [];
   ed.markSel = null;
   ed.zoomBack = null;
+  spDoc();
   closeHist();
   closeLocs();
   $("ed").classList.add("hidden");
@@ -1399,8 +1407,8 @@ function applyPanel(which) {
   redraw();
 }
 
-function wireWave() {
-  const cv = $("wv");
+function wireWave(cv) {
+  const spec = cv.id === "sp";
   let autoTimer = 0, lastX = 0, press = null;
   const local = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width }; };
   const auto = () => {
@@ -1436,7 +1444,7 @@ function wireWave() {
         try { cv.releasePointerCapture(e.pointerId); } catch {}
         ed.sel = keep.sel;
         ed.cursor = keep.cursor;
-        waveMenuAt(pr.x, pr.y, true, pr.pid);
+        waveMenuAt(pr.x, pr.y, true, pr.pid, spec);
       }, 550) };
     }
     const f = Math.max(0, Math.min(ed.doc.frames, frameAt(p.x)));
@@ -1490,7 +1498,7 @@ function wireWave() {
     e.preventDefault();
     if (!ed.doc || !$("ctx").classList.contains("hidden")) return;
     if (ed.dragging) { clearInterval(autoTimer); ed.dragging = null; }
-    waveMenuAt(e.clientX, e.clientY);
+    waveMenuAt(e.clientX, e.clientY, false, undefined, spec);
   });
   cv.addEventListener("wheel", e => {
     if (!ed.doc) return;
@@ -1703,7 +1711,9 @@ function wireUi() {
   ddInit($("fmtDd"), [{ v: "time", label: "h:m:s.ms" }, { v: "samples", label: "samples" }, { v: "cd", label: "CD frames" }], ed.fmt, v => { ed.fmt = v; localStorage.setItem("studioFmt", v); if (ed.doc) updatePanel(); redraw(); });
   window.addEventListener("resize", () => { if (ed.doc) { clampView(); redraw(); drawMeters(); } });
   window.addEventListener("pagehide", () => saveView(true));
-  wireWave();
+  wireWave($("wv"));
+  wireWave($("sp"));
+  wireSpec();
   wireOverview();
   wireRuler();
   wireCommands();
