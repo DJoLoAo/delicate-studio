@@ -90,6 +90,8 @@ const CMDS = [
   { id: "crop", g: "Edit", label: "Crop to the selection", run: () => edit("crop"), doc: true, when: () => selOn() },
   { id: "insert", g: "Edit", label: "Insert silence…", run: () => insertSilenceDlg(), doc: true },
   { id: "hist", g: "Edit", label: "History", run: () => toggleHist(), doc: true, kw: "undo list steps" },
+  { id: "diag", g: "Repair", label: "Diagnostics: DeClicker…", run: () => toggleDiag(), doc: true, kw: "declick decrackle click pop crackle vinyl scan repair restore" },
+  { id: "heal", g: "Repair", label: "Heal the selection", run: () => edit("heal"), doc: true, when: () => selOn(), kw: "automatic heal repair click pop fix interpolate" },
   { id: "markAdd", g: "Locations", label: "Add marker (or a range from the selection)", run: () => addMarker(false), doc: true, kw: "cue memory location" },
   { id: "rangeAdd", g: "Locations", label: "Add a range from the selection", run: () => addMarker(true), doc: true, when: () => selOn(), kw: "region memory location" },
   { id: "locAdd", g: "Locations", label: "New memory location…", run: () => addLocationDlg(), doc: true, kw: "marker zoom view named" },
@@ -104,7 +106,7 @@ const CMDS = [
 ];
 for (let i = 1; i <= 10; i++) CMDS.push({ id: "loc" + i, g: "Locations", label: "Go to location " + i, labelT: () => t("Go to location") + " " + i, run: () => recallNumber(i), doc: true, hidden: true });
 const CMD = Object.fromEntries(CMDS.map(c => [c.id, c]));
-const GROUPS = ["Transport", "View", "Selection", "Edit", "Locations", "File", "Help"];
+const GROUPS = ["Transport", "View", "Selection", "Edit", "Repair", "Locations", "File", "Help"];
 
 const BASE_KEYS = {
   play: ["Space"], loop: ["L"], home: ["Home"], end: ["End"], prevMark: ["["], nextMark: ["]"],
@@ -112,7 +114,7 @@ const BASE_KEYS = {
   zp1: ["1"], zp2: ["2"], zp3: ["3"], zp4: ["4"], zp5: ["5"],
   selAll: ["Mod+A"], deselect: ["Escape"],
   undo: ["Mod+Z"], redo: ["Mod+Shift+Z", "Mod+Y"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
-  delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"],
+  delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"], heal: ["Mod+U"],
   markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"],
   open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"]
 };
@@ -128,7 +130,7 @@ const KEYMAPS = {
       undo: ["Mod+Z"], redo: ["Mod+Shift+Z"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
       delete: ["Delete", "Backspace"], crop: [{ k: "T", native: "Mod+T" }], selAll: ["Mod+A"], deselect: ["Mod+Shift+A"],
       markAdd: ["M", "*", "Num*"], locs: ["Alt+8"], chanL: ["ArrowUp"], chanR: ["ArrowDown"],
-      zcIn: ["Shift+I"], zcOut: ["Shift+O"], open: ["Mod+O"]
+      zcIn: ["Shift+I"], zcOut: ["Shift+O"], open: ["Mod+O"], heal: ["Mod+U"]
     }
   },
   protools: {
@@ -594,7 +596,7 @@ function waveMenuAt(clientX, clientY, touch, pid) {
     ctxCmd("undo"), ctxCmd("redo"),
     "-",
     ctxCmd("cut"), ctxCmd("copy"), ctxCmd("paste", selOn() ? t("Paste — replaces the selection") : t("Paste")),
-    ctxCmd("delete"), ctxCmd("silence"), ctxCmd("crop"), ctxCmd("insert"),
+    ctxCmd("delete"), ctxCmd("silence"), ctxCmd("crop"), ctxCmd("insert"), ctxCmd("heal"),
     "-",
     ctxCmd("selAll"), ctxCmd("deselect"), ctxCmd("zoomSel"), ctxCmd("zcIn"), ctxCmd("zcOut")
   ];

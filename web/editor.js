@@ -62,6 +62,7 @@ ed.worker.onmessage = e => {
   if (m.t === "progress") { importProgress(m); return; }
   if (m.t === "playerror") { stopPlay(); tell(t("Playback stopped") + ": " + m.msg); return; }
   if (m.t === "xjob") { xpJob(m); return; }
+  if (m.t === "dprog") { dgProg(m); return; }
   const p = ed.pending.get(m.req);
   if (!p) return;
   ed.pending.delete(m.req);
@@ -352,6 +353,7 @@ function drawWave() {
     ed.waveKey = key;
   }
   g.drawImage(ed.waveBuf, 0, 0);
+  drawDiag(g, cv.width, cv.height, dpr);
   if (ed.play.on) {
     const px = Math.round(xOf(playhead()) * dpr);
     if (px >= 0 && px <= cv.width) { g.fillStyle = "#f2efe9"; g.fillRect(px, 0, Math.max(1, dpr), cv.height); }
@@ -673,6 +675,7 @@ function applyState(st) {
   editButtons();
   if (!$("hist").classList.contains("hidden")) renderHist();
   if (!$("locs").classList.contains("hidden")) renderLocs();
+  dgAfterEdit();
 }
 
 function showOpened(r) {
@@ -682,6 +685,7 @@ function showOpened(r) {
 
 function showDoc(meta, peaks, bands, state) {
   stopPlay();
+  dgReset();
   ed.doc = Object.assign({}, meta);
   ed.srcs = [{ levels: poolPyr(meta, peaks, bands) }];
   applyState(state);
@@ -720,6 +724,8 @@ function showDoc(meta, peaks, bands, state) {
 
 function closeDoc() {
   stopPlay();
+  dgReset();
+  closeDiag();
   ed.doc = null;
   ed.srcs = [];
   ed.clip = null;
@@ -1087,7 +1093,7 @@ function drawMeters() {
   if (active || ed.play.on) ed.meterRaf = requestAnimationFrame(drawMeters);
 }
 
-const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence" };
+const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", repair: "Repair" };
 
 function selOn() { return ed.sel.b > ed.sel.a; }
 
@@ -1124,6 +1130,9 @@ function editError(e) {
   if (m === "empty") { tell(t("A file can't be empty. Select less, or close the file instead.")); return; }
   if (m.startsWith("rate:")) { tell(t("The clipboard holds audio at a different sample rate") + " (" + (Number(m.slice(5)) / 1000).toLocaleString() + " kHz). " + t("Sample-rate conversion arrives with export."), t("Could not paste")); return; }
   if (m === "quota") { tell(t("Browser storage is full. Remove files from Studio's list to make room.")); return; }
+  if (m === "heal-long") { tell(t("Heal works on selections of up to 0.1 s. Select just the damaged part, or use the DeClicker for many clicks."), t("Could not heal")); return; }
+  if (m === "heal-edge") { tell(t("Heal needs some audio on both sides of the selection."), t("Could not heal")); return; }
+  if (m === "heal-failed") { tell(t("This selection could not be healed."), t("Could not heal")); return; }
   tell(m, t("Could not edit"));
 }
 
@@ -1150,15 +1159,16 @@ async function runEdit(msg, structural, keepView) {
     clampView();
     redraw();
     if (wasPlaying) startPlay(Math.max(0, Math.min(ed.doc.frames - 1, Math.round(h ? mapPos(ph, h) : ph))));
+    return r;
   } catch (e) { editError(e); }
   finally { ed.editing = false; }
 }
 
 function edit(op, extra) {
   if (!ed.doc) return;
-  if (["cut", "copy", "delete", "silence", "crop"].includes(op) && !selOn()) return;
+  if (["cut", "copy", "delete", "silence", "crop", "heal"].includes(op) && !selOn()) return;
   if (op === "paste" && !ed.clipInfo) return;
-  return runEdit(Object.assign({ t: "edit", op }, extra || {}), op !== "copy");
+  return runEdit(Object.assign({ t: "edit", op }, extra || {}), op !== "copy" && op !== "heal", op === "heal");
 }
 
 function flash(text) {
@@ -1195,6 +1205,7 @@ function histLabel(h) {
   if (h.op === "open") return name;
   const ch = h.ch ? " · " + h.ch : "";
   if (h.op === "insert") return name + " " + fmtTime(h.n) + " @ " + fmtTime(h.a) + ch;
+  if (h.op === "repair") return (h.n === 1 ? t("Repair 1 click") : t("Repair {n} clicks").replace("{n}", h.n)) + " · " + fmtTime(h.a) + "–" + fmtTime(h.b);
   if (h.op === "paste") return name + " " + fmtTime(h.n) + " @ " + fmtTime(h.a) + (h.b > h.a && !h.ch ? " " + t("over") + " " + fmtTime(h.b - h.a) : "") + ch;
   return name + " " + fmtTime(h.a) + "–" + fmtTime(h.b) + ch;
 }
@@ -1689,6 +1700,7 @@ function wireUi() {
   wireRuler();
   wireCommands();
   wireExport();
+  wireDiag();
   wireDrop();
 }
 

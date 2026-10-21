@@ -314,6 +314,33 @@ canvas.ru{height:34px}
 .xjob.done .bbar i{background:var(--green)}
 #expN:not(:empty){margin-left:6px;color:var(--gold)}
 #expBtn{height:26px}
+#diag{position:absolute;top:8px;right:8px;bottom:8px;width:min(360px,calc(100% - 16px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:30;padding:10px 12px;font-size:11px}
+#diag.hidden{display:none}
+#diag .dgfx{margin-left:8px;color:var(--gold);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.dgbody{display:flex;flex-direction:column;gap:9px;min-height:0;flex:1}
+#diag .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#diag .row>label{color:var(--gray);min-width:92px}
+#diag .snote{font-size:10px;color:var(--dim)}
+#dgSum{color:var(--gray);min-height:14px}
+#dgSens{flex:1;min-width:120px;accent-color:var(--pink)}
+#dgBar{flex:1;height:4px;background:var(--bg4);overflow:hidden}
+#dgBar i{display:block;height:100%;width:0;background:var(--pink);transition:width .12s}
+.dglist{position:relative;flex:1;min-height:96px;overflow:auto;border-top:1px solid var(--border);border-bottom:1px solid var(--border);outline:0}
+.dglist.hidden{display:none}
+.dgin{position:relative}
+.dgrow{position:absolute;left:0;right:0;height:26px;display:grid;grid-template-columns:44px 1fr 64px 34px 46px;align-items:center;gap:6px;padding:0 6px;cursor:pointer;font-variant-numeric:tabular-nums;color:var(--gray);border-bottom:1px solid rgba(255,255,255,.03)}
+.dgrow:hover{background:var(--bg3);color:var(--white)}
+.dgrow.sel{background:var(--bg4);color:var(--white)}
+.dgrow.focus{box-shadow:inset 2px 0 0 var(--pink)}
+.dgrow.stale{opacity:.45}
+.dgrow .dgn{color:var(--dim)}
+.dgrow .dgs{text-align:right;color:var(--dim)}
+.dgfoot{margin-top:auto}
+#dgBtn{height:26px;margin-right:6px}
+@media (max-width:760px){
+  #diag{position:fixed;left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:62vh;z-index:46}
+  #diag .row>label{min-width:0;flex-basis:100%}
+}
 @media (max-width:760px){
   #exp{padding:8px}
   #exp .row > label{min-width:0;flex-basis:100%}

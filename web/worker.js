@@ -643,6 +643,13 @@ async function applyEdit(m) {
       }
       break;
     }
+    case "heal": {
+      need();
+      lists = await healSel(c, a, b, chans);
+      info = { op: "heal", a, b, n: 0, ch: label };
+      after = { a, b, cursor: a };
+      break;
+    }
     case "markadd":
     case "markset":
     case "markdel": {
@@ -729,6 +736,9 @@ async function closeCur() {
   stopPlay();
   const c = cur;
   if (!c) return;
+  if (RP.job) RP.job.cancel = true;
+  RP.scan = null;
+  RP.listen = "off";
   if (c.saving) { try { await c.saving; } catch {} }
   if (clip && !clip.file && clip.doc === c.meta.id) { try { await materializeClip(); } catch { clip = null; } }
   if (c.busy > 0) lingering.set(c.meta.id, c); else closeHandles(c);
@@ -974,6 +984,7 @@ function fillRing() {
       const p = srcPos(w + done);
       const run = play.loop ? Math.min(n - done, play.end - p) : n - done;
       readClip(p, run, play.tmp, CHUNK);
+      if (RP.listen !== "off") rpOverlay(p, run, play.tmp, CHUNK);
       for (let c = 0; c < ch; c++) {
         const tmpOff = c * CHUNK;
         for (let i = 0; i < run; i++) ring.data[c * R + ((w + done + i) % R)] = play.tmp[tmpOff + i];
@@ -1309,6 +1320,233 @@ function queueExport(m) {
   return { t: "queued", id: job.id };
 }
 
+const RP = { scan: null, job: null, listen: "off" };
+const RP_MAX = 50000;
+
+function sliceFast(list, cum, a, b) {
+  const out = [];
+  let lo = 0, hi = list.length - 1, i = 0;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (cum[m] <= a) { i = m; lo = m + 1; } else hi = m - 1; }
+  for (; i < list.length && cum[i] < b; i++) {
+    const s = list[i], s0 = cum[i], s1 = s0 + s[3];
+    const from = Math.max(a, s0), to = Math.min(b, s1);
+    if (to > from) out.push([s[0], s[1], s[0] === SIL ? 0 : s[2] + (from - s0), to - from]);
+  }
+  return mergeList(out);
+}
+
+function sameRange(l1, c1, l2, c2, a, b) {
+  if (l1 === l2) return true;
+  const x = sliceFast(l1, c1, a, b), y = sliceFast(l2, c2, a, b);
+  return x.length === y.length && x.every((s, i) => sameSeg(s, y[i]));
+}
+
+function rpValidate() {
+  const sc = RP.scan, c = cur;
+  if (!sc || !c || sc.docId !== c.meta.id) return 0;
+  if (sc.checked === c.ver) return sc.stale;
+  let stale = 0;
+  for (const e of sc.events) {
+    e.ok = !!e.data && e.rep.every(k => sameRange(sc.lists[k], sc.cums[k], c.lists[k], c.cum[k], Math.max(0, e.a - sc.p), e.b + sc.p));
+    if (!e.ok) stale++;
+  }
+  sc.checked = c.ver;
+  sc.stale = stale;
+  return stale;
+}
+
+function rpSummary() {
+  const sc = RP.scan;
+  if (!sc || !cur || sc.docId !== cur.meta.id) return null;
+  rpValidate();
+  return { a: sc.a, b: sc.b, link: sc.link, sens: sc.sens, maxMs: sc.maxMs, stale: sc.stale, capped: sc.capped, events: sc.events.map(e => ({ a: e.a, b: e.b, s: Math.round(e.s * 10) / 10, det: e.det, ok: e.ok, x: !e.data })) };
+}
+
+function rpGroups(evs, ctxOf, F) {
+  const groups = [];
+  let i = 0;
+  while (i < evs.length) {
+    let j = i, hi = evs[i].b + ctxOf(evs[i]);
+    while (j + 1 < evs.length && evs[j + 1].a - ctxOf(evs[j + 1]) < hi) { j++; hi = Math.max(hi, evs[j].b + ctxOf(evs[j])); }
+    groups.push({ lo: Math.max(0, evs[i].a - ctxOf(evs[i])), hi: Math.min(F, hi), evs: evs.slice(i, j + 1) });
+    i = j + 1;
+  }
+  return groups;
+}
+
+function rpSolve(x, c, lists, cums, k, lo, hi, gaps, p, seed) {
+  const n = hi - lo, ptr = x.rp_buf(n);
+  const buf = new Float32Array(n);
+  readList(lists[k], cums[k], lo, n, buf, 0, (src, ch, f, m, out, off) => readSrcOf(c, src, ch, f, m, out, off));
+  new Float32Array(x.memory.buffer, ptr, n).set(buf);
+  const mask = new Uint8Array(x.memory.buffer, x.rp_mask(), n);
+  mask.fill(0);
+  for (const [ga, gb] of gaps) mask.fill(1, ga - lo, gb - lo);
+  if (x.rp_fill(n, p, seed) !== 0) return null;
+  const at = x.rp_buf(n);
+  return new Float32Array(x.memory.buffer, at, n).slice();
+}
+
+async function rpScan(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  if (RP.job) RP.job.cancel = true;
+  const job = { id: m.jobId, cancel: false };
+  RP.job = job;
+  const x = await dspExports();
+  const sr = c.meta.sampleRate, ch = c.meta.channels, F = c.len;
+  const lists = c.lists, cums = lists.map(cumOf);
+  const a = clampI(m.a, 0, F), b = m.b > m.a ? clampI(m.b, 0, F) : F;
+  const sens = Math.max(0, Math.min(100, Number(m.sens) || 50)), maxMs = Math.max(0.2, Math.min(20, Number(m.maxMs) || 5));
+  const link = ch === 1 || m.link !== false;
+  const M = sr <= 50000 ? 2048 : sr <= 100000 ? 4096 : 8192, B = 65536;
+  const total = Math.max(1, (b - a) * ch);
+  const tick = async (done, phase) => {
+    const now = performance.now();
+    if (now - job.last > 120) { job.last = now; postMessage({ t: "dprog", id: job.id, frac: phase * 0.8 + (phase ? 0.2 : 0.8) * done }); await new Promise(r => setTimeout(r, 0)); }
+    if (job.cancel || cur !== c) throw new Error("cancelled");
+  };
+  job.last = 0;
+  const found = Array.from({ length: ch }, () => []);
+  let done = 0, count = 0, capped = false;
+  const buf = new Float32Array(B + 2 * M);
+  for (let k = 0; k < ch && !capped; k++) {
+    for (let s0 = a; s0 < b; s0 += B) {
+      const lo = Math.max(0, s0 - M), hi = Math.min(F, s0 + B + M), n = hi - lo;
+      readList(lists[k], cums[k], lo, n, buf, 0, (src, cc, f, mm, out, off) => readSrcOf(c, src, cc, f, mm, out, off));
+      const ptr = x.rp_buf(n);
+      new Float32Array(x.memory.buffer, ptr, n).set(buf.subarray(0, n));
+      const cnt = x.dc_scan(n, sr, sens, maxMs);
+      if (cnt < 0) throw new Error(dspError(x));
+      const out = new Float32Array(x.memory.buffer, x.dc_out(), cnt * 4);
+      for (let i = 0; i < cnt; i++) {
+        const st = lo + out[i * 4], en = lo + out[i * 4 + 1];
+        if (st >= s0 && st < Math.min(s0 + B, b) && en <= b) { found[k].push({ a: st, b: en, s: out[i * 4 + 2] }); count++; }
+      }
+      if (count > RP_MAX) { capped = true; break; }
+      done += Math.min(B, b - s0);
+      await tick(done / total, 0);
+    }
+  }
+  let events = [];
+  if (link) {
+    const all = [];
+    found.forEach((l, k) => l.forEach(e => all.push(Object.assign({ k }, e))));
+    all.sort((p, q) => p.a - q.a);
+    const near = Math.max(2, Math.round(sr / 11025));
+    for (const e of all) {
+      const last = events[events.length - 1];
+      if (last && e.a <= last.b + near) { last.b = Math.max(last.b, e.b); last.s = Math.max(last.s, e.s); last.det[e.k] = true; }
+      else { const det = new Array(ch).fill(false); det[e.k] = true; events.push({ a: e.a, b: e.b, s: e.s, det }); }
+    }
+    for (const e of events) e.rep = Array.from({ length: ch }, (_, k) => k);
+  } else {
+    found.forEach((l, k) => l.forEach(e => { const det = new Array(ch).fill(false); det[k] = true; events.push({ a: e.a, b: e.b, s: e.s, det, rep: [k] }); }));
+    events.sort((p, q) => p.a - q.a || p.rep[0] - q.rep[0]);
+  }
+  if (events.length > RP_MAX) { events = events.slice(0, RP_MAX); capped = true; }
+  const p = x.rp_order(sr, 0, 0);
+  const ctxOf = e => x.rp_context(p, e.b - e.a, 0);
+  let solved = 0;
+  for (let k = 0; k < ch; k++) {
+    const mine = events.filter(e => e.rep.includes(k));
+    for (const g of rpGroups(mine, ctxOf, F)) {
+      const lo = Math.max(0, Math.min(g.lo, g.evs[0].a - p)), hi = Math.min(F, Math.max(g.hi, g.evs[g.evs.length - 1].b + p));
+      const okEdge = g.evs[0].a - lo >= p && hi - g.evs[g.evs.length - 1].b >= p;
+      const y = okEdge ? rpSolve(x, c, lists, cums, k, lo, hi, g.evs.map(e => [e.a, e.b]), p, 0) : null;
+      for (const e of g.evs) {
+        if (!e.data) e.data = new Array(ch).fill(null);
+        if (y) e.data[k] = y.slice(e.a - lo, e.b - lo);
+        else e.bad = true;
+      }
+      solved += g.evs.length;
+      await tick(solved / Math.max(1, events.length * (link ? ch : 1)), 1);
+    }
+  }
+  for (const e of events) if (e.bad || !e.data || e.rep.some(k => !e.data[k])) e.data = null;
+  if (RP.job === job) RP.job = null;
+  const maxLen = events.reduce((v, e) => Math.max(v, e.b - e.a), 1);
+  RP.scan = { docId: c.meta.id, lists, cums, events, link, sens, maxMs, a, b, p, capped, maxLen, checked: -1, stale: 0 };
+  return { t: "dresult", id: job.id, diag: rpSummary() };
+}
+
+function rpRepair(m) {
+  const c = cur, sc = RP.scan;
+  if (!c || c.meta.id !== m.id || !sc || sc.docId !== c.meta.id) throw new Error("stale");
+  rpValidate();
+  const pick = Array.isArray(m.idx) ? new Set(m.idx) : null;
+  const chosen = sc.events.filter((e, i) => (!pick || pick.has(i)) && e.ok && e.data);
+  if (!chosen.length) throw new Error("nothing");
+  const ch = c.meta.channels;
+  const w = allocBegin();
+  const raw = Array.from({ length: ch }, () => []);
+  for (const e of chosen) for (const k of e.rep) { raw[k].push([e.a, e.b, w.n]); allocPush(w, e.data[k], e.b - e.a); }
+  const id = allocEnd(w);
+  const spans = raw.map(l => l.length ? l.map(([a, b, off]) => [a, b, [[id, 0, off, b - a]]]) : null);
+  const lists = opPatch(c.lists, spans);
+  const before = { a: clampI(m.sel && m.sel.a, 0, c.len), b: clampI(m.sel && m.sel.b, 0, c.len), cursor: clampI(m.cursor, 0, c.len) };
+  pushHist({ op: "repair", a: chosen[0].a, b: chosen[chosen.length - 1].b, n: chosen.length, ch: null }, lists, before, before);
+  persist();
+  const gone = new Set(chosen);
+  sc.events = sc.events.filter(e => !gone.has(e));
+  sc.checked = -1;
+  return statePayload(m.have, { t: "state", sel: null, diag: rpSummary() });
+}
+
+function rpOverlay(p0, run, tmp, stride) {
+  const sc = RP.scan, c = cur;
+  if (!sc || !c || sc.docId !== c.meta.id || RP.listen === "off") return;
+  rpValidate();
+  const ev = sc.events, removed = RP.listen === "removed", ch = c.meta.channels, from = p0 - sc.maxLen;
+  let lo = 0, hi = ev.length - 1, i = ev.length;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (ev[mid].a > from) { i = mid; hi = mid - 1; } else lo = mid + 1; }
+  if (removed) {
+    const keep = [];
+    for (let j = i; j < ev.length && ev[j].a < p0 + run; j++) keep.push(ev[j]);
+    const diff = new Float32Array(run * ch);
+    for (const e of keep) {
+      if (!e.ok) continue;
+      for (const k of e.rep) {
+        const d = e.data[k], s = Math.max(p0, e.a), t = Math.min(p0 + run, e.b);
+        for (let q = s; q < t; q++) diff[k * run + q - p0] += tmp[k * stride + q - p0] - d[q - e.a];
+      }
+    }
+    for (let k = 0; k < ch; k++) for (let q = 0; q < run; q++) tmp[k * stride + q] = diff[k * run + q];
+    return;
+  }
+  for (let j = i; j < ev.length && ev[j].a < p0 + run; j++) {
+    const e = ev[j];
+    if (!e.ok) continue;
+    for (const k of e.rep) {
+      const d = e.data[k], s = Math.max(p0, e.a), t = Math.min(p0 + run, e.b);
+      for (let q = s; q < t; q++) tmp[k * stride + q - p0] = d[q - e.a];
+    }
+  }
+}
+
+async function healSel(c, a, b, chans) {
+  const sr = c.meta.sampleRate, F = c.len, m = b - a;
+  if (m > Math.round(sr * 0.1)) throw new Error("heal-long");
+  const x = await dspExports();
+  const p = x.rp_order(sr, m, 1);
+  const ctx = Math.min(x.rp_context(p, m, 1), sr);
+  const lo = Math.max(0, a - ctx), hi = Math.min(F, b + ctx);
+  if (a - lo < p || hi - b < p) throw new Error("heal-edge");
+  const w = allocBegin();
+  const spans = new Array(c.meta.channels).fill(null);
+  for (let k = 0; k < chans.length; k++) {
+    if (!chans[k]) continue;
+    const seed = m > sr * 0.0015 ? ((a * 2654435761 + k * 40503) >>> 0) || 1 : 0;
+    const y = rpSolve(x, c, c.lists, c.cum, k, lo, hi, [[a, b]], p, seed);
+    if (!y) throw new Error("heal-failed");
+    const off = w.n;
+    allocPush(w, y.subarray(a - lo, b - lo), m);
+    spans[k] = off;
+  }
+  const id = allocEnd(w);
+  return opPatch(c.lists, spans.map(off => off === null ? null : [[a, b, [[id, 0, off, m]]]]));
+}
+
 function opened(req, r) {
   postMessage({ t: "opened", req, meta: r.meta, peaks: r.peaks, bands: r.bands, state: r.state, recovered: r.recovered }, [r.peaks.buffer, r.bands.buffer]);
 }
@@ -1371,6 +1609,16 @@ async function handle(m) {
     if (i >= 0 && !["queued", "rendering", "hashing", "uploading", "verifying"].includes(XP.jobs[i].state)) { const j = XP.jobs.splice(i, 1)[0]; try { await (await exportsDir()).removeEntry(j.file); } catch {} }
     return;
   }
+  if (m.t === "dscan") {
+    try { postMessage(Object.assign({ req: m.req }, await rpScan(m))); }
+    catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
+    return;
+  }
+  if (m.t === "dcancel") { if (RP.job) RP.job.cancel = true; return; }
+  if (m.t === "drepair") { postMessage(Object.assign({ req: m.req }, await enqueue(() => rpRepair(m)))); return; }
+  if (m.t === "dlisten") { RP.listen = ["repaired", "removed"].includes(m.mode) ? m.mode : "off"; return; }
+  if (m.t === "dclear") { RP.scan = null; RP.listen = "off"; return; }
+  if (m.t === "dstate") { postMessage({ t: "dresult", req: m.req, diag: rpSummary() }); return; }
   if (m.t === "adjust") { postMessage(Object.assign({ req: m.req }, await enqueue(() => adjustSel(m)))); return; }
   if (m.t === "flush") { await enqueue(async () => { if (cur && cur.saving) await cur.saving; }); postMessage({ t: "flushed", req: m.req, err: cur ? cur.saveErr : null }); return; }
 }

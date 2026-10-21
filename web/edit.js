@@ -129,6 +129,34 @@ function opOverwrite(clip, a, ins, X, io) {
   });
 }
 
+function patchList(list, spans) {
+  const out = [];
+  let i = 0, t = 0;
+  const take = (a, b) => {
+    while (i < list.length && t + list[i][3] <= a) { t += list[i][3]; i++; }
+    let j = i, tj = t;
+    while (j < list.length && tj < b) {
+      const s = list[j], s0 = tj, s1 = tj + s[3];
+      const from = Math.max(a, s0), to = Math.min(b, s1);
+      if (to > from) out.push([s[0], s[1], s[0] === SIL ? 0 : s[2] + (from - s0), to - from]);
+      tj = s1;
+      j++;
+    }
+  };
+  let pos = 0;
+  for (const [a, b, segs] of spans) {
+    take(pos, a);
+    for (const s of segs) out.push(s.slice());
+    pos = b;
+  }
+  take(pos, Infinity);
+  return mergeList(out);
+}
+
+function opPatch(clip, spans) {
+  return clip.map((list, c) => spans[c] && spans[c].length ? patchList(list, spans[c]) : list.map(s => s.slice()));
+}
+
 function sameSeg(a, b) { return a === b || (a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3]); }
 
 function diffList(prev, next) {
@@ -210,4 +238,4 @@ function mapMarks(marks, h) {
   return changed ? out : marks;
 }
 
-if (typeof module !== "undefined") module.exports = { SIL, clipLen, mergeList, sliceList, joinFix, opDelete, opInsert, opSilence, opReplace, opOverwrite, opCrop, opCopy, diffList, applyDiff, cumOf, readList, fadeMix, mapMarks };
+if (typeof module !== "undefined") module.exports = { SIL, clipLen, mergeList, sliceList, joinFix, opDelete, opInsert, opSilence, opReplace, opOverwrite, opPatch, patchList, opCrop, opCopy, diffList, applyDiff, cumOf, readList, fadeMix, mapMarks };

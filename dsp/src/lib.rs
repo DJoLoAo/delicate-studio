@@ -89,6 +89,7 @@ impl Decoder {
 }
 
 pub mod enc;
+pub mod restore;
 pub mod rs;
 
 #[cfg(target_arch = "wasm32")]
@@ -299,6 +300,68 @@ mod wasm {
         }
     }
 
+    static mut RP_BUF: Vec<f32> = Vec::new();
+    static mut RP_MASK: Vec<u8> = Vec::new();
+    static mut RP_OUT: Vec<f32> = Vec::new();
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rp_buf(n: u32) -> *mut f32 {
+        unsafe {
+            let b = &mut *std::ptr::addr_of_mut!(RP_BUF);
+            if b.len() < n as usize {
+                b.resize(n as usize, 0.0);
+            }
+            let m = &mut *std::ptr::addr_of_mut!(RP_MASK);
+            if m.len() < n as usize {
+                m.resize(n as usize, 0);
+            }
+            b.as_mut_ptr()
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rp_mask() -> *mut u8 {
+        unsafe { (*std::ptr::addr_of_mut!(RP_MASK)).as_mut_ptr() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dc_scan(n: u32, sr: u32, sens: f32, max_ms: f32) -> i32 {
+        let x = unsafe { &(&*std::ptr::addr_of!(RP_BUF))[..n as usize] };
+        let d = crate::restore::Detect::for_rate(sr as usize, sens as f64, max_ms as f64);
+        let mut found = Vec::new();
+        crate::restore::detect(x, &d, &mut found);
+        let out = unsafe { &mut *std::ptr::addr_of_mut!(RP_OUT) };
+        out.clear();
+        for c in &found {
+            out.extend_from_slice(&[c.start as f32, c.end as f32, c.strength, c.two]);
+        }
+        found.len() as i32
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dc_out() -> *const f32 {
+        unsafe { (*std::ptr::addr_of!(RP_OUT)).as_ptr() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rp_fill(n: u32, p: u32, seed: u32) -> i32 {
+        let n = n as usize;
+        let mask: Vec<bool> = unsafe { (&*std::ptr::addr_of!(RP_MASK))[..n].iter().map(|&v| v != 0).collect() };
+        let x = unsafe { &mut (&mut *std::ptr::addr_of_mut!(RP_BUF))[..n] };
+        let ok = if seed == 0 { crate::restore::fill(x, &mask, p as usize) } else { crate::restore::fill_textured(x, &mask, p as usize, seed as u64) };
+        if ok { 0 } else { fail("repair could not be computed here".into()) }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rp_order(sr: u32, m: u32, heal: u32) -> u32 {
+        if heal != 0 { crate::restore::heal_order(sr as usize, m as usize) as u32 } else { crate::restore::repair_order(sr as usize) as u32 }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rp_context(p: u32, m: u32, heal: u32) -> u32 {
+        crate::restore::context_len(p as usize, m as usize, heal != 0) as u32
+    }
+
     static mut RS: Option<crate::rs::Rs> = None;
 
     fn rsm() -> Option<&'static mut crate::rs::Rs> {
@@ -494,6 +557,107 @@ mod tests {
         let mut enc = crate::enc::Flac::new(44_100, 2, 16, 4096).unwrap();
         assert!(enc.frame(&[40_000, 0]).is_err());
         assert!(enc.frame(&[1, 2, 3]).is_err());
+    }
+
+    fn test_tone(sr: usize, secs: f64, seed: u64) -> Vec<f32> {
+        let n = (sr as f64 * secs) as usize;
+        let mut st = seed;
+        (0..n)
+            .map(|i| {
+                let t = i as f64 / sr as f64;
+                st ^= st << 13;
+                st ^= st >> 7;
+                st ^= st << 17;
+                let w = (st >> 11) as f64 / (1u64 << 53) as f64 - 0.5;
+                (0.3 * (2.0 * std::f64::consts::PI * 220.0 * t).sin() + 0.15 * (2.0 * std::f64::consts::PI * 661.0 * t + 1.0).sin() + 0.05 * (2.0 * std::f64::consts::PI * 2300.0 * t).sin() + 0.002 * w) as f32
+            })
+            .collect()
+    }
+
+    fn hf_err(clean: &[f32], test: &[f32]) -> f64 {
+        let mut e = 0.0;
+        for i in 2..clean.len() {
+            let c = clean[i] as f64 - 2.0 * clean[i - 1] as f64 + clean[i - 2] as f64;
+            let t = test[i] as f64 - 2.0 * test[i - 1] as f64 + test[i - 2] as f64;
+            e += (t - c) * (t - c);
+        }
+        e
+    }
+
+    #[test]
+    fn declick_finds_and_repairs_clicks() {
+        use crate::restore::{context_len, detect, fill, repair_order, Detect};
+        for sr in [44100usize, 96000] {
+            let clean = test_tone(sr, 6.0, 3);
+            let d = Detect::for_rate(sr, 50.0, 5.0);
+            let mut found = Vec::new();
+            detect(&clean, &d, &mut found);
+            assert!(found.is_empty(), "{sr}: false detections on clean audio: {}", found.len());
+            let mut dirty = clean.clone();
+            let mut spots = Vec::new();
+            for k in 0..20 {
+                let pos = sr / 4 + k * sr / 4 + (k * 7919) % 1000;
+                let len = sr / 2000 + k % 5;
+                for i in 0..len {
+                    let env = (-(i as f64) / len as f64 * 3.0).exp();
+                    dirty[pos + i] += (0.2 * env * if i % 2 == 0 { 1.0 } else { -0.7 }) as f32;
+                }
+                spots.push((pos, pos + len));
+            }
+            detect(&dirty, &d, &mut found);
+            let hit = spots.iter().filter(|&&(a, b)| found.iter().any(|c| c.start < b && c.end > a)).count();
+            assert!(hit >= 19, "{sr}: found {hit} of 20 clicks");
+            assert!(found.len() <= 22, "{sr}: {} detections for 20 clicks", found.len());
+            let p = repair_order(sr);
+            let mut fixed = dirty.clone();
+            for c in &found {
+                let ctx = context_len(p, c.end - c.start, false);
+                let (lo, hi) = (c.start.saturating_sub(ctx), (c.end + ctx).min(fixed.len()));
+                let mut buf = fixed[lo..hi].to_vec();
+                let mask: Vec<bool> = (lo..hi).map(|i| i >= c.start && i < c.end).collect();
+                assert!(fill(&mut buf, &mask, p));
+                fixed[lo..hi].copy_from_slice(&buf);
+            }
+            let before = hf_err(&clean, &dirty);
+            let after = hf_err(&clean, &fixed);
+            assert!(10.0 * (before / after).log10() > 20.0, "{sr}: HF error only down {:.1} dB", 10.0 * (before / after).log10());
+        }
+    }
+
+    #[test]
+    fn interpolation_reconstructs_tones_and_textured_fill_keeps_energy() {
+        use crate::restore::{fill, fill_textured, heal_order};
+        let sr = 48000;
+        let clean = test_tone(sr, 2.0, 9);
+        let (pos, gap) = (sr / 2, 240);
+        let p = heal_order(sr, gap);
+        let ctx = 16 * p;
+        let mut buf = clean[pos - ctx..pos + gap + ctx].to_vec();
+        let mask: Vec<bool> = (0..buf.len()).map(|i| i >= ctx && i < ctx + gap).collect();
+        assert!(fill(&mut buf, &mask, p));
+        let (mut s, mut e) = (0.0f64, 0.0f64);
+        for i in 0..gap {
+            s += (clean[pos + i] as f64).powi(2);
+            e += (buf[ctx + i] as f64 - clean[pos + i] as f64).powi(2);
+        }
+        assert!(10.0 * (s / e).log10() > 30.0, "tone gap SNR {:.1} dB", 10.0 * (s / e).log10());
+        let noise: Vec<f32> = { let mut st = 5u64; (0..sr).map(|_| { st ^= st << 13; st ^= st >> 7; st ^= st << 17; ((st >> 11) as f64 / (1u64 << 53) as f64 - 0.5) as f32 * 0.2 }).collect() };
+        let g = 960;
+        let p = heal_order(sr, g);
+        let ctx = 3 * g;
+        let mut a = noise[sr / 3 - ctx..sr / 3 + g + ctx].to_vec();
+        let mask: Vec<bool> = (0..a.len()).map(|i| i >= ctx && i < ctx + g).collect();
+        let mut plain = a.clone();
+        assert!(fill(&mut plain, &mask, p));
+        assert!(fill_textured(&mut a, &mask, p, 7));
+        let energy = |v: &[f32]| v[ctx..ctx + g].iter().map(|x| (*x as f64).powi(2)).sum::<f64>();
+        let orig = noise[sr / 3..sr / 3 + g].iter().map(|x| (*x as f64).powi(2)).sum::<f64>();
+        let ratio = energy(&a) / orig;
+        assert!(ratio > 0.6 && ratio < 1.5, "textured fill energy ratio {ratio:.2}");
+        assert!(energy(&plain) / orig < 0.3, "plain fill of noise should be near the mean");
+        let mut again = noise[sr / 3 - ctx..sr / 3 + g + ctx].to_vec();
+        assert!(fill_textured(&mut again, &mask, p, 7));
+        assert_eq!(again, a, "textured fill is deterministic for a seed");
     }
 
     #[test]
