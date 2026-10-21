@@ -87,7 +87,7 @@ function nrSend() {
   if (!ed.doc) return;
   if (nr.busy) { nr.again = true; return; }
   nr.busy = true;
-  call({ t: "nrcfg", cfg: nrWire(), mode: nr.listen })
+  call({ t: "fxcfg", kind: "nr", cfg: nrWire(), mode: nr.listen })
     .catch(e => { nr.listen = "off"; nr.err = String(e.message || e); nrRender(); })
     .finally(() => { nr.busy = false; if (nr.again) { nr.again = false; nrSend(); } });
 }
@@ -131,7 +131,7 @@ async function nrApply() {
   if (was !== "off") nrListen("off");
   nrRender();
   try {
-    const res = await runEdit({ t: "nrapply", jobId: id, ra: r.a, rb: r.b, cfg: nrWire() }, false, true);
+    const res = await runEdit({ t: "fxapply", kind: "nr", jobId: id, ra: r.a, rb: r.b, cfg: nrWire() }, false, true);
     if (res && res.hist) { nr.done = { a: r.a, b: r.b }; flash(t("Noise reduction applied")); }
   } finally {
     nr.job = null;
@@ -461,7 +461,7 @@ function wireNr() {
   seg("nrListen", v => nrListen(v));
   $("nrCap").addEventListener("click", nrCapture);
   $("nrApply").addEventListener("click", nrApply);
-  $("nrCancel").addEventListener("click", () => ed.worker.postMessage({ t: "nrcancel" }));
+  $("nrCancel").addEventListener("click", () => ed.worker.postMessage({ t: "fxcancel" }));
   $("nrCurveReset").addEventListener("click", () => { nr.cfg.lo = 100; nr.cfg.hi = 100; nr.cfg.pts = []; nrCurveChanged(); });
   $("nrDefaults").addEventListener("click", () => { const keep = { scale: nr.cfg.scale }; nr.cfg = Object.assign({}, NR_DEF, keep, { pts: [] }); nrSave(); nr.cols = null; nrFetch(false); nrRender(); });
   nrPointer($("nrGraph"));

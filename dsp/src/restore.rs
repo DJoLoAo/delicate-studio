@@ -41,6 +41,10 @@ pub fn repair_order(sr: usize) -> usize {
     ((sr as f64 / 1400.0).round() as usize).clamp(24, 96)
 }
 
+pub fn declip_order(sr: usize) -> usize {
+    ((sr as f64 / 350.0).round() as usize).clamp(64, 256)
+}
+
 pub fn heal_order(sr: usize, m: usize) -> usize {
     repair_order(sr).max(m / 4).min(256)
 }
@@ -529,4 +533,67 @@ pub fn fill_with(x32: &mut [f32], mask: &[bool], p: usize, floor_db: f64, textur
         x32[u] = y[u] as f32;
     }
     true
+}
+
+pub struct ClipRun {
+    pub start: usize,
+    pub end: usize,
+}
+
+pub fn clip_runs(x: &[f32], top: f32, bot: f32, tol: f32, min_run: usize, out: &mut Vec<ClipRun>) {
+    let hi = top * (1.0 - tol);
+    let lo = -bot * (1.0 - tol);
+    let at = |v: f32, pos: bool| if pos { top > 0.0 && v >= hi } else { bot > 0.0 && v <= lo };
+    let mut i = 0;
+    while i < x.len() {
+        let pos = at(x[i], true);
+        if pos || at(x[i], false) {
+            let s = i;
+            while i < x.len() && at(x[i], pos) {
+                i += 1;
+            }
+            if i - s >= min_run.max(1) {
+                out.push(ClipRun { start: s, end: i });
+            }
+        } else {
+            i += 1;
+        }
+    }
+}
+
+pub fn declip(x32: &mut [f32], mask: &[bool], p: usize) -> bool {
+    let x: Vec<f64> = x32.iter().map(|&v| v as f64).collect();
+    let mut open: Vec<usize> = (0..x.len()).filter(|&i| mask[i]).collect();
+    if open.is_empty() {
+        return true;
+    }
+    let a = ar_burg_masked(&floored(&x, mask, -70.0), mask, p);
+    let mut fixed = vec![false; x.len()];
+    for _ in 0..24 {
+        let mut y = x.clone();
+        if !lsar_core(&mut y, &open, &a, None) {
+            return false;
+        }
+        let mut moved = false;
+        for &u in &open {
+            if y[u] * x[u].signum() < x[u].abs() {
+                fixed[u] = true;
+                moved = true;
+            }
+        }
+        if !moved {
+            if open.iter().any(|&u| y[u].abs() > x[u].abs() * 4.0) {
+                return false;
+            }
+            for &u in &open {
+                x32[u] = y[u] as f32;
+            }
+            return true;
+        }
+        open.retain(|&u| !fixed[u]);
+        if open.is_empty() {
+            return true;
+        }
+    }
+    false
 }

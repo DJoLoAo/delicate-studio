@@ -63,7 +63,7 @@ ed.worker.onmessage = e => {
   if (m.t === "playerror") { stopPlay(); tell(t("Playback stopped") + ": " + m.msg); return; }
   if (m.t === "xjob") { xpJob(m); return; }
   if (m.t === "dprog") { dgProg(m); return; }
-  if (m.t === "nprog") { nrProg(m); return; }
+  if (m.t === "nprog") { nrProg(m); humProg(m); return; }
   const p = ed.pending.get(m.req);
   if (!p) return;
   ed.pending.delete(m.req);
@@ -723,6 +723,7 @@ function showDoc(meta, peaks, bands, state) {
   redraw();
   closeFiles();
   nrDoc();
+  humDoc();
 }
 
 function closeDoc() {
@@ -1096,7 +1097,7 @@ function drawMeters() {
   if (active || ed.play.on) ed.meterRaf = requestAnimationFrame(drawMeters);
 }
 
-const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", repair: "Repair", nr: "Noise Reduction" };
+const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", repair: "Repair", nr: "Noise Reduction", hum: "DeHummer", declip: "DeClipper" };
 
 function selOn() { return ed.sel.b > ed.sel.a; }
 
@@ -1128,6 +1129,7 @@ function setSelFrom(sel) {
 function editError(e) {
   const m = e && e.message || String(e);
   if (m === "stale" || m === "nothing" || m === "cancelled") return;
+  if (m === "hum-short") { tell(t("Select at least a second of audio to look for hum."), t("DeHummer")); return; }
   if (m === "print-none" || m.startsWith("print-rate:") || m.startsWith("print-short:") || m === "changed") { tell(nrErrText(m), t("Noise Reduction")); return; }
   if (m === "nosel") { tell(t("Select a range first.")); return; }
   if (m === "noclip") { tell(t("The clipboard is empty.")); return; }
@@ -1210,6 +1212,7 @@ function histLabel(h) {
   const ch = h.ch ? " · " + h.ch : "";
   if (h.op === "insert") return name + " " + fmtTime(h.n) + " @ " + fmtTime(h.a) + ch;
   if (h.op === "repair") return (h.n === 1 ? t("Repair 1 click") : t("Repair {n} clicks").replace("{n}", h.n)) + " · " + fmtTime(h.a) + "–" + fmtTime(h.b);
+  if (h.op === "declip") return (h.n === 1 ? t("Repair 1 clipped span") : t("Repair {n} clipped spans").replace("{n}", h.n)) + " · " + fmtTime(h.a) + "–" + fmtTime(h.b);
   if (h.op === "paste") return name + " " + fmtTime(h.n) + " @ " + fmtTime(h.a) + (h.b > h.a && !h.ch ? " " + t("over") + " " + fmtTime(h.b - h.a) : "") + ch;
   return name + " " + fmtTime(h.a) + "–" + fmtTime(h.b) + ch;
 }
@@ -1706,6 +1709,7 @@ function wireUi() {
   wireExport();
   wireDiag();
   wireNr();
+  wireHum();
   wireDrop();
 }
 

@@ -739,9 +739,9 @@ async function closeCur() {
   if (RP.job) RP.job.cancel = true;
   RP.scan = null;
   RP.listen = "off";
-  if (NR.job) NR.job.cancel = true;
-  NR.mode = "off";
-  NR.pv = null;
+  if (FX.job) FX.job.cancel = true;
+  FX.mode = "off";
+  FX.pv = null;
   if (c.saving) { try { await c.saving; } catch {} }
   if (clip && !clip.file && clip.doc === c.meta.id) { try { await materializeClip(); } catch { clip = null; } }
   if (c.busy > 0) lingering.set(c.meta.id, c); else closeHandles(c);
@@ -977,7 +977,7 @@ function fillRing() {
   const len = play.end - play.start;
   for (let guard = 0; guard < 64; guard++) {
     const w = Atomics.load(ctrl, 1), r = Atomics.load(ctrl, 2);
-    const lim = NR.mode !== "off" ? Math.min(R, Math.max(4 * CHUNK, Math.round(cur.meta.sampleRate * 0.5))) : R;
+    const lim = FX.mode !== "off" ? Math.min(R, Math.max(4 * CHUNK, Math.round(cur.meta.sampleRate * 0.5))) : R;
     const free = lim - (w - r);
     if (free < CHUNK) return;
     if (!play.loop && w >= len) return;
@@ -988,7 +988,7 @@ function fillRing() {
       const p = srcPos(w + done);
       const run = play.loop ? Math.min(n - done, play.end - p) : n - done;
       readClip(p, run, play.tmp, CHUNK);
-      if (NR.mode !== "off") nrView(p, run, play.tmp, CHUNK);
+      if (FX.mode !== "off") fxView(p, run, play.tmp, CHUNK);
       else if (RP.listen !== "off") rpOverlay(p, run, play.tmp, CHUNK);
       for (let c = 0; c < ch; c++) {
         const tmpOff = c * CHUNK;
@@ -1364,7 +1364,7 @@ function rpSummary() {
   const sc = RP.scan;
   if (!sc || !cur || sc.docId !== cur.meta.id) return null;
   rpValidate();
-  return { a: sc.a, b: sc.b, link: sc.link, sens: sc.sens, maxMs: sc.maxMs, stale: sc.stale, capped: sc.capped, events: sc.events.map(e => ({ a: e.a, b: e.b, s: Math.round(e.s * 10) / 10, det: e.det, ok: e.ok, x: !e.data })) };
+  return { kind: sc.kind || "click", a: sc.a, b: sc.b, link: sc.link, sens: sc.sens, maxMs: sc.maxMs, tol: sc.tol, minRun: sc.minRun, verdict: sc.verdict, levels: sc.levels, peak: sc.peak, stale: sc.stale, capped: sc.capped, events: sc.events.map(e => ({ a: e.a, b: e.b, s: Math.round(e.s * 10) / 10, det: e.det, ok: e.ok, x: !e.data, long: !!e.long })) };
 }
 
 function rpGroups(evs, ctxOf, F) {
@@ -1379,7 +1379,7 @@ function rpGroups(evs, ctxOf, F) {
   return groups;
 }
 
-function rpSolve(x, c, lists, cums, k, lo, hi, gaps, p, seed) {
+function rpSolve(x, c, lists, cums, k, lo, hi, gaps, p, seed, clip) {
   const n = hi - lo, ptr = x.rp_buf(n);
   const buf = new Float32Array(n);
   readList(lists[k], cums[k], lo, n, buf, 0, (src, ch, f, m, out, off) => readSrcOf(c, src, ch, f, m, out, off));
@@ -1387,9 +1387,110 @@ function rpSolve(x, c, lists, cums, k, lo, hi, gaps, p, seed) {
   const mask = new Uint8Array(x.memory.buffer, x.rp_mask(), n);
   mask.fill(0);
   for (const [ga, gb] of gaps) mask.fill(1, ga - lo, gb - lo);
-  if (x.rp_fill(n, p, seed) !== 0) return null;
+  if ((clip ? x.cl_fill(n, p) : x.rp_fill(n, p, seed)) !== 0) return null;
   const at = x.rp_buf(n);
   return new Float32Array(x.memory.buffer, at, n).slice();
+}
+
+async function rpScanClip(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  if (RP.job) RP.job.cancel = true;
+  const job = { id: m.jobId, cancel: false, last: 0 };
+  RP.job = job;
+  const x = await dspExports();
+  const sr = c.meta.sampleRate, ch = c.meta.channels, F = c.len;
+  const lists = c.lists, cums = lists.map(cumOf);
+  const a = clampI(m.a, 0, F), b = m.b > m.a ? clampI(m.b, 0, F) : F;
+  const tol = Math.max(0.05, Math.min(10, Number(m.tol) || 1)) / 100, minRun = clampI(m.minRun || 2, 1, 32);
+  const maxRun = Math.round(sr * 0.02), B = 65536, pad = maxRun + 1;
+  const total = Math.max(1, (b - a) * ch);
+  const tick = async (done, phase) => {
+    const now = performance.now();
+    if (now - job.last > 120) { job.last = now; postMessage({ t: "dprog", id: job.id, frac: Math.min(1, [0, 0.3, 0.75][phase] + [0.3, 0.45, 0.25][phase] * done) }); await new Promise(r => setTimeout(r, 0)); }
+    if (job.cancel || cur !== c) throw new Error("cancelled");
+  };
+  const rd = (src, cc, f, mm, out, off) => readSrcOf(c, src, cc, f, mm, out, off);
+  const buf = new Float32Array(B + pad + 1);
+  const top = new Array(ch).fill(0), bot = new Array(ch).fill(0);
+  let done = 0;
+  for (let k = 0; k < ch; k++) {
+    for (let s0 = a; s0 < b; s0 += B) {
+      const n = Math.min(B, b - s0);
+      readList(lists[k], cums[k], s0, n, buf, 0, rd);
+      let hi = top[k], lo = bot[k];
+      for (let i = 0; i < n; i++) { const v = buf[i]; if (v > hi) hi = v; else if (-v > lo) lo = -v; }
+      top[k] = hi;
+      bot[k] = lo;
+      done += n;
+      await tick(done / total, 0);
+    }
+  }
+  const runs = Array.from({ length: ch }, () => []);
+  let ntop = 0, nbel = 0, eq = 0, count = 0, capped = false;
+  done = 0;
+  for (let k = 0; k < ch && !capped; k++) {
+    const t1 = top[k] * (1 - tol), t4 = top[k] * (1 - 4 * tol), b1 = bot[k] * (1 - tol), b4 = bot[k] * (1 - 4 * tol);
+    for (let s0 = a; s0 < b; s0 += B) {
+      const from = Math.max(a, s0 - 1), to = Math.min(b, s0 + B + pad), n = to - from;
+      readList(lists[k], cums[k], from, n, buf, 0, rd);
+      const own0 = s0 - from, own1 = Math.min(B, b - s0) + own0;
+      for (let i = own0; i < own1; i++) {
+        const v = buf[i];
+        if (v >= t1 || -v >= b1) { ntop++; if (v === top[k] || -v === bot[k]) eq++; }
+        else if (v >= t4 || -v >= b4) nbel++;
+      }
+      wasmF32(x, x.rp_buf(n), n).set(buf.subarray(0, n));
+      const cnt = x.cl_runs(n, top[k], bot[k], tol, minRun);
+      if (cnt < 0) throw new Error(dspError(x));
+      const out = wasmF32(x, x.dc_out(), cnt * 4);
+      for (let i = 0; i < cnt; i++) {
+        const st = out[i * 4], en = out[i * 4 + 1];
+        if (st < own0 || st >= own1 || (st === 0 && from < s0)) continue;
+        runs[k].push({ a: from + st, b: from + en });
+        count++;
+      }
+      if (count > RP_MAX) { capped = true; break; }
+      done += Math.min(B, b - s0);
+      await tick(done / total, 1);
+    }
+  }
+  const verdict = count >= 3 && (eq - 2 * ch >= 6 || ntop >= 2 * nbel && count >= 6);
+  let events = [];
+  if (verdict) {
+    runs.forEach((l, k) => l.forEach(r => { const det = new Array(ch).fill(false); det[k] = true; events.push({ a: r.a, b: r.b, s: 0, det, rep: [k], long: r.b - r.a > maxRun }); }));
+    events.sort((p, q) => p.a - q.a || p.rep[0] - q.rep[0]);
+    if (events.length > RP_MAX) { events = events.slice(0, RP_MAX); capped = true; }
+  }
+  const p = x.cl_order(sr);
+  const ctxOf = e => x.rp_context(p, e.b - e.a, 0);
+  let solved = 0, peak = 0;
+  for (let k = 0; k < ch; k++) {
+    const mine = events.filter(e => e.rep[0] === k && !e.long);
+    const lvl = Math.max(top[k], bot[k]) || 1;
+    for (const g of rpGroups(mine, ctxOf, F)) {
+      const lo = Math.max(0, Math.min(g.lo, g.evs[0].a - p)), hi = Math.min(F, Math.max(g.hi, g.evs[g.evs.length - 1].b + p));
+      const okEdge = g.evs[0].a - lo >= p && hi - g.evs[g.evs.length - 1].b >= p;
+      const y = okEdge ? rpSolve(x, c, lists, cums, k, lo, hi, g.evs.map(e => [e.a, e.b]), p, 0, true) : null;
+      for (const e of g.evs) {
+        if (!y) { e.bad = true; continue; }
+        e.data = new Array(ch).fill(null);
+        e.data[k] = y.slice(e.a - lo, e.b - lo);
+        let mx = 0;
+        for (const v of e.data[k]) mx = Math.max(mx, Math.abs(v));
+        e.s = 20 * Math.log10(Math.max(1e-9, mx / lvl));
+        peak = Math.max(peak, mx);
+      }
+      solved += g.evs.length;
+      await tick(solved / Math.max(1, events.length), 2);
+    }
+  }
+  for (const e of events) if (e.bad || e.long || !e.data || !e.data[e.rep[0]]) e.data = null;
+  if (RP.job === job) RP.job = null;
+  const maxLen = events.reduce((v, e) => Math.max(v, e.b - e.a), 1);
+  const db = v => v > 0 ? Math.round(20 * Math.log10(v) * 100) / 100 : -120;
+  RP.scan = { kind: "clip", docId: c.meta.id, lists, cums, events, link: false, tol: tol * 100, minRun, a, b, p, capped, maxLen, checked: -1, stale: 0, verdict, levels: { top: top.map(db), bot: bot.map(db) }, peak: db(peak) };
+  return { t: "dresult", id: job.id, diag: rpSummary() };
 }
 
 async function rpScan(m) {
@@ -1490,7 +1591,7 @@ function rpRepair(m) {
   const spans = raw.map(l => l.length ? l.map(([a, b, off]) => [a, b, [[id, 0, off, b - a]]]) : null);
   const lists = opPatch(c.lists, spans);
   const before = { a: clampI(m.sel && m.sel.a, 0, c.len), b: clampI(m.sel && m.sel.b, 0, c.len), cursor: clampI(m.cursor, 0, c.len) };
-  pushHist({ op: "repair", a: chosen[0].a, b: chosen[chosen.length - 1].b, n: chosen.length, ch: null }, lists, before, before);
+  pushHist({ op: sc.kind === "clip" ? "declip" : "repair", a: chosen[0].a, b: chosen[chosen.length - 1].b, n: chosen.length, ch: null }, lists, before, before);
   persist();
   const gone = new Set(chosen);
   sc.events = sc.events.filter(e => !gone.has(e));
@@ -1554,7 +1655,8 @@ async function healSel(c, a, b, chans) {
 
 function wasmF32(x, ptr, n) { return new Float32Array(x.memory.buffer, ptr, n); }
 
-const NR = { print: null, loaded: null, stats: null, mode: "off", raw: null, pv: null, job: null };
+const NR = { print: null, loaded: null, stats: null };
+const FX = { mode: "off", kind: "nr", raw: null, pv: null, job: null, graph: 0 };
 const NR_MAX = 20;
 const NR_FEED = 8192;
 
@@ -1662,41 +1764,79 @@ function nrStatsOut(st) {
   return { n: st.n, k: st.k, bins: st.bins, frames: st.frames, mean: st.mean, lo: st.lo, hi: st.hi };
 }
 
-function nrPreview(x, c) {
-  const cfg = nrCfg(NR.raw, c.meta.sampleRate), only = NR.mode === "noise";
-  const key = cfg.n + ":" + cfg.k, curveKey = JSON.stringify(cfg.curve);
-  let pv = NR.pv;
-  if (!pv || pv.doc !== c || pv.key !== key || pv.print !== NR.print) {
-    const s = nrSetup(x, 0, cfg, c.meta.channels, c.meta.sampleRate, only);
-    pv = NR.pv = { doc: c, x, key, print: NR.print, n: s.n, hop: s.hop, bins: s.bins, curveKey, ch: c.meta.channels, q: null, qStart: 0, qOff: 0, qLen: 0, drop: 0, inPos: 0, ver: -1 };
-  } else {
+function humCfg(m) {
+  const num = (v, lo, hi, d) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
+  const o = m && typeof m === "object" ? m : {};
+  return { f0: num(o.f0, 10, 1000, 50), n: Math.round(num(o.n, 1, 30, 8)), q: num(o.q, 5, 200, 30), gain: num(o.gain, 0, 60, 30), slope: num(o.slope, -100, 100, 0) / 100 };
+}
+
+function humWarm(h, sr) { return Math.ceil(sr * Math.min(4, 5 * h.q / (Math.PI * h.f0))); }
+
+function humTune(x, slot, raw, only) {
+  const h = humCfg(raw);
+  if (x.dh_set(slot, h.f0, h.n, h.q, h.gain, h.slope, only ? 1 : 0) < 0) throw new Error(dspError(x));
+  return h;
+}
+
+function fxApi(x, kind, slot) {
+  return kind === "hum"
+    ? { reset: () => x.dh_reset(slot), inp: m => x.dh_in(slot, m), run: m => x.dh_run(slot, m), out: () => x.dh_out(slot) }
+    : { reset: () => x.nr_reset(slot), inp: m => x.nr_in(slot, m), run: m => x.nr_run(slot, m), out: () => x.nr_out(slot) };
+}
+
+function fxSetup(x, kind, slot, raw, c, only) {
+  const sr = c.meta.sampleRate, ch = c.meta.channels;
+  if (kind === "hum") {
+    if (x.dh_open(slot, ch, sr) !== 0) throw new Error(dspError(x));
+    const h = humTune(x, slot, raw, only);
+    return { warm: humWarm(h, sr), key: "hum" };
+  }
+  const cfg = nrCfg(raw, sr);
+  const s = nrSetup(x, slot, cfg, ch, sr, only);
+  return { warm: s.n + 16 * s.hop, key: cfg.n + ":" + cfg.k, bins: s.bins, n: s.n, curveKey: JSON.stringify(cfg.curve) };
+}
+
+function fxPreview(x, c) {
+  const kind = FX.kind, only = FX.mode === "noise";
+  const cfg = kind === "nr" ? nrCfg(FX.raw, c.meta.sampleRate) : null;
+  const key = kind === "hum" ? "hum" : cfg.n + ":" + cfg.k;
+  let pv = FX.pv;
+  if (!pv || pv.doc !== c || pv.kind !== kind || pv.key !== key || (kind === "nr" && pv.print !== NR.print)) {
+    const s = fxSetup(x, kind, 0, FX.raw, c, only);
+    pv = FX.pv = { doc: c, kind, x, key, print: NR.print, warm: s.warm, bins: s.bins, n: s.n, curveKey: s.curveKey, api: fxApi(x, kind, 0), ch: c.meta.channels, q: null, qStart: 0, qOff: 0, qLen: 0, drop: 0, inPos: 0, ver: -1 };
+    return;
+  }
+  if (kind === "hum") pv.warm = humWarm(humTune(x, 0, FX.raw, only), c.meta.sampleRate);
+  else {
+    const curveKey = JSON.stringify(cfg.curve);
     if (pv.curveKey !== curveKey) {
       wasmF32(x, x.nr_curve(0), pv.bins).set(nrCurveBins(cfg.curve, pv.bins, c.meta.sampleRate, pv.n));
       pv.curveKey = curveKey;
     }
     nrTune(x, 0, cfg, only);
-    pv.ver = -1;
   }
+  pv.ver = -1;
 }
 
-async function nrConfig(m) {
+async function fxConfig(m) {
   const mode = ["proc", "noise"].includes(m.mode) ? m.mode : "off";
-  NR.raw = m.cfg || null;
+  FX.raw = m.cfg || null;
+  FX.kind = m.kind === "hum" ? "hum" : "nr";
   const c = cur;
-  if (mode === "off" || !c) { NR.mode = "off"; NR.pv = null; ringFlush(); return { t: "nrok", info: nrInfo() }; }
-  await nrLoadPrint();
+  if (mode === "off" || !c) { FX.mode = "off"; FX.pv = null; ringFlush(); return { t: "fxok", info: nrInfo() }; }
+  if (FX.kind === "nr") await nrLoadPrint();
   const x = await dspExports();
-  if (cur !== c) return { t: "nrok", info: nrInfo() };
-  NR.mode = mode;
-  try { nrPreview(x, c); }
-  catch (e) { NR.mode = "off"; NR.pv = null; ringFlush(); throw e; }
+  if (cur !== c) return { t: "fxok", info: nrInfo() };
+  FX.mode = mode;
+  try { fxPreview(x, c); }
+  catch (e) { FX.mode = "off"; FX.pv = null; ringFlush(); throw e; }
   ringFlush();
-  return { t: "nrok", info: nrInfo() };
+  return { t: "fxok", info: nrInfo() };
 }
 
-function nrSeek(pv, p0) {
-  const o = Math.max(0, p0 - (pv.n + 16 * pv.hop));
-  pv.x.nr_reset(0);
+function fxSeek(pv, p0) {
+  const o = Math.max(0, p0 - pv.warm);
+  pv.api.reset();
   if (!pv.q) pv.q = Array.from({ length: pv.ch }, () => new Float32Array(1 << 17));
   pv.inPos = o;
   pv.qStart = p0;
@@ -1706,14 +1846,14 @@ function nrSeek(pv, p0) {
   pv.ver = cur.ver;
 }
 
-function nrFeed(pv) {
+function fxFeed(pv) {
   const x = pv.x, ch = pv.ch, m = NR_FEED;
-  const inb = wasmF32(x, x.nr_in(0, m), m * ch);
+  const inb = wasmF32(x, pv.api.inp(m), m * ch);
   readClip(pv.inPos, m, inb, m);
   pv.inPos += m;
-  const made = x.nr_run(0, m);
+  const made = pv.api.run(m);
   if (made < 0) throw new Error(dspError(x));
-  const out = wasmF32(x, x.nr_out(0), made * ch);
+  const out = wasmF32(x, pv.api.out(), made * ch);
   const from = Math.min(made, pv.drop);
   pv.drop -= from;
   const add = made - from;
@@ -1726,13 +1866,13 @@ function nrFeed(pv) {
   pv.qLen += add;
 }
 
-function nrView(p0, run, tmp, stride) {
-  const pv = NR.pv, c = cur;
+function fxView(p0, run, tmp, stride) {
+  const pv = FX.pv, c = cur;
   if (!pv || pv.doc !== c) return;
-  if (pv.ver !== c.ver || p0 < pv.qStart || p0 > pv.qStart + pv.qLen) nrSeek(pv, p0);
+  if (pv.ver !== c.ver || p0 < pv.qStart || p0 > pv.qStart + pv.qLen) fxSeek(pv, p0);
   const skip = p0 - pv.qStart;
   if (skip > 0) { pv.qOff += skip; pv.qLen -= skip; pv.qStart = p0; }
-  while (pv.qLen < run) nrFeed(pv);
+  while (pv.qLen < run) fxFeed(pv);
   for (let k = 0; k < pv.ch; k++) {
     const q = pv.q[k], o = k * stride;
     for (let i = 0; i < run; i++) tmp[o + i] = q[pv.qOff + i];
@@ -1765,7 +1905,7 @@ async function nrCapture(m) {
   let st;
   try { st = nrStats(x, nrFft(m.cfg && m.cfg.n, sr), Math.round(Math.max(3, Math.min(16, Number(m.cfg && m.cfg.k) || 7)))); }
   catch (e) { NR.print = prev.print; NR.stats = prev.stats; throw e; }
-  if (NR.mode !== "off" && cur === c) { try { nrPreview(x, c); ringFlush(); } catch { NR.mode = "off"; NR.pv = null; } }
+  if (FX.mode !== "off" && FX.kind === "nr" && cur === c) { try { fxPreview(x, c); ringFlush(); } catch { FX.mode = "off"; FX.pv = null; } }
   await nrSavePrint();
   return { t: "npinfo", info: nrInfo(), stats: nrStatsOut(st) };
 }
@@ -1789,24 +1929,25 @@ function nrRollback(c, s) {
   try { c.heap.truncate(s.heapEnd * 4); c.hpk.truncate(s.pkEnd * 4); } catch {}
 }
 
-async function nrApply(m) {
+async function fxApply(m) {
   const c = cur;
   if (!c || c.meta.id !== m.id) throw new Error("stale");
-  await nrLoadPrint();
+  const kind = m.kind === "hum" ? "hum" : "nr";
+  if (kind === "nr") await nrLoadPrint();
   const x = await dspExports();
   if (cur !== c) throw new Error("stale");
   const sr = c.meta.sampleRate, ch = c.meta.channels, F = c.len;
   const a = clampI(m.ra, 0, F), b = m.rb > m.ra ? clampI(m.rb, 0, F) : F;
   if (b <= a) throw new Error("nothing");
   const chans = Array.isArray(m.chans) && m.chans.length === ch && m.chans.some(Boolean) ? m.chans.map(Boolean) : new Array(ch).fill(true);
-  const cfg = nrCfg(m.cfg, sr);
-  const s = nrSetup(x, 1, cfg, ch, sr, false);
+  const s = fxSetup(x, kind, 1, m.cfg, c, false);
+  const api = fxApi(x, kind, 1);
   const lists = c.lists, cums = c.cum;
   const rd = (src, cc, f, n, out, off) => readSrcOf(c, src, cc, f, n, out, off);
-  const o = Math.max(0, a - (s.n + 16 * s.hop));
-  if (NR.job) NR.job.cancel = true;
+  const o = Math.max(0, a - s.warm);
+  if (FX.job) FX.job.cancel = true;
   const job = { id: m.jobId, cancel: false, last: 0 };
-  NR.job = job;
+  FX.job = job;
   const snap = { allocs: c.allocs.length, heapEnd: c.heapEnd, pkEnd: c.pkEnd, ver: c.ver };
   const xf = a > 0 || b < F ? Math.min(Math.round(sr * 0.02), Math.floor((b - a) / 4)) : 0;
   const orig = pos => Array.from({ length: ch }, (_, k) => { const v = new Float32Array(xf); readList(lists[k], cums[k], pos, xf, v, 0, rd); return v; });
@@ -1828,15 +1969,15 @@ async function nrApply(m) {
   };
   const FEED = 65536;
   let inPos = o, outPos = o;
-  x.nr_reset(1);
+  api.reset();
   try {
     while (outPos < b) {
-      const inb = wasmF32(x, x.nr_in(1, FEED), FEED * ch);
+      const inb = wasmF32(x, api.inp(FEED), FEED * ch);
       for (let k = 0; k < ch; k++) readList(lists[k], cums[k], inPos, FEED, inb, k * FEED, rd);
       inPos += FEED;
-      const made = x.nr_run(1, FEED);
+      const made = api.run(FEED);
       if (made < 0) throw new Error(dspError(x));
-      const out = wasmF32(x, x.nr_out(1), made * ch);
+      const out = wasmF32(x, api.out(), made * ch);
       let j = Math.max(outPos, a);
       const j1 = Math.min(outPos + made, b);
       while (j < j1) {
@@ -1858,19 +1999,49 @@ async function nrApply(m) {
     flush();
     if (pos !== b || cur !== c || c.lists !== lists) throw new Error("changed");
   } catch (e) {
-    if (NR.job === job) NR.job = null;
+    if (FX.job === job) FX.job = null;
     nrRollback(c, snap);
     throw e;
   }
-  if (NR.job === job) NR.job = null;
+  if (FX.job === job) FX.job = null;
   return enqueue(() => {
     if (cur !== c || c.lists !== lists) { nrRollback(c, snap); throw new Error("changed"); }
     const next = opPatch(c.lists, segs.map((l, k) => chans[k] ? [[a, b, l]] : null));
     const before = { a: clampI(m.a, 0, c.len), b: clampI(m.b, 0, c.len), cursor: clampI(m.cursor, 0, c.len) };
-    pushHist({ op: "nr", a, b, n: 0, ch: chans.every(Boolean) ? null : chanLabel(chans) }, next, before, before);
+    pushHist({ op: kind, a, b, n: 0, ch: chans.every(Boolean) ? null : chanLabel(chans) }, next, before, before);
     persist();
     return statePayload(m.have, { t: "state", sel: null });
   });
+}
+
+async function humFind(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const sr = c.meta.sampleRate, ch = c.meta.channels, F = c.len;
+  const a = clampI(m.a, 0, F), b = Math.min(clampI(m.b > m.a ? m.b : F, 0, F), a + sr * 60);
+  const len = b - a;
+  if (len < sr) throw new Error("hum-short");
+  const x = await dspExports();
+  const mono = wasmF32(x, x.np_buf(len), len);
+  mono.fill(0);
+  const tmp = new Float32Array(len);
+  for (let k = 0; k < ch; k++) {
+    readList(c.lists[k], c.cum[k], a, len, tmp, 0, readSrc);
+    for (let i = 0; i < len; i++) mono[i] += tmp[i] / ch;
+  }
+  const n = x.dh_find(len, sr, Number(m.center) > 0 ? Number(m.center) : 0);
+  if (n < 0) throw new Error("hum-short");
+  const o = wasmF32(x, x.dh_found(), n).slice();
+  return { t: "humfound", a, b, f0: o[0], score: o[1], harmonics: o[2], bin: o[3], prom: o.slice(4, 34), spec: o.slice(34) };
+}
+
+async function humResp(m) {
+  const sr = cur ? cur.meta.sampleRate : 48000;
+  const x = await dspExports();
+  if (!FX.graph || FX.graph !== sr) { if (x.dh_open(2, 1, sr) !== 0) throw new Error(dspError(x)); FX.graph = sr; }
+  humTune(x, 2, m.cfg, m.mode === "noise");
+  const f = Array.isArray(m.freqs) ? m.freqs.slice(0, 2048) : [];
+  return { t: "humresp", db: Float32Array.from(f, v => x.dh_resp(2, Number(v) || 1)) };
 }
 
 function opened(req, r) {
@@ -1936,7 +2107,7 @@ async function handle(m) {
     return;
   }
   if (m.t === "dscan") {
-    try { postMessage(Object.assign({ req: m.req }, await rpScan(m))); }
+    try { postMessage(Object.assign({ req: m.req }, await (m.kind === "clip" ? rpScanClip(m) : rpScan(m)))); }
     catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
     return;
   }
@@ -1945,13 +2116,14 @@ async function handle(m) {
   if (m.t === "dlisten") { RP.listen = ["repaired", "removed"].includes(m.mode) ? m.mode : "off"; return; }
   if (m.t === "dclear") { RP.scan = null; RP.listen = "off"; return; }
   if (m.t === "dstate") { postMessage({ t: "dresult", req: m.req, diag: rpSummary() }); return; }
-  if (m.t === "npget" || m.t === "npcap" || m.t === "nrcfg") {
-    try { postMessage(Object.assign({ req: m.req }, m.t === "npget" ? await nrGet(m) : m.t === "npcap" ? await nrCapture(m) : await nrConfig(m))); }
+  if (m.t === "npget" || m.t === "npcap" || m.t === "fxcfg" || m.t === "humfind" || m.t === "humresp") {
+    const f = { npget: nrGet, npcap: nrCapture, fxcfg: fxConfig, humfind: humFind, humresp: humResp }[m.t];
+    try { postMessage(Object.assign({ req: m.req }, await f(m))); }
     catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
     return;
   }
-  if (m.t === "nrapply") { postMessage(Object.assign({ req: m.req }, await nrApply(m))); return; }
-  if (m.t === "nrcancel") { if (NR.job) NR.job.cancel = true; return; }
+  if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
+  if (m.t === "fxcancel") { if (FX.job) FX.job.cancel = true; return; }
   if (m.t === "adjust") { postMessage(Object.assign({ req: m.req }, await enqueue(() => adjustSel(m)))); return; }
   if (m.t === "flush") { await enqueue(async () => { if (cur && cur.saving) await cur.saving; }); postMessage({ t: "flushed", req: m.req, err: cur ? cur.saveErr : null }); return; }
 }

@@ -1,12 +1,15 @@
 const DG_ROW = 26;
 const DG_LENS = [1, 2, 5, 10, 20];
-const rp = { open: false, tab: "declick", selKey: "" };
+const rp = { open: false, tab: "diag", selKey: "" };
+const DG_FX = [{ v: "click", label: "DeClicker" }, { v: "clip", label: "DeClipper" }];
+const DG_MINS = [1, 2, 3, 5, 8];
 const dg = { open: false, res: null, sel: new Set(), focus: -1, scan: null, listen: "off", cfg: null, seq: 0, refresh: 0, done: 0 };
 
 function dgLoad() {
   let v = null;
   try { v = JSON.parse(localStorage.getItem("studioDeclick") || "null"); } catch {}
-  dg.cfg = Object.assign({ sens: 50, maxMs: 5, link: true }, v && typeof v === "object" ? v : {});
+  dg.cfg = Object.assign({ sens: 50, maxMs: 5, link: true, kind: "click", tol: 1, minRun: 2 }, v && typeof v === "object" ? v : {});
+  if (!DG_FX.some(f => f.v === dg.cfg.kind)) dg.cfg.kind = "click";
 }
 
 function dgSave() {
@@ -25,19 +28,26 @@ function openRepair(tab) {
   closePopovers();
   const prev = rp.open ? rp.tab : null;
   rp.open = true;
-  rp.tab = tab === "nr" ? "nr" : "declick";
-  dg.open = rp.tab === "declick";
+  rp.tab = ["nr", "hum"].includes(tab) ? tab : "diag";
+  dg.open = rp.tab === "diag";
   $("diag").classList.remove("hidden");
-  $("dgBody").classList.toggle("hidden", rp.tab !== "declick");
+  $("dgBody").classList.toggle("hidden", rp.tab !== "diag");
   $("nrBody").classList.toggle("hidden", rp.tab !== "nr");
+  $("humBody").classList.toggle("hidden", rp.tab !== "hum");
   document.querySelectorAll("#rpTabs button").forEach(b => b.classList.toggle("on", b.dataset.v === rp.tab));
-  if (prev === "declick" && rp.tab !== "declick") dgListen("off");
+  if (prev === "diag" && rp.tab !== "diag") dgListen("off");
   if (prev === "nr" && rp.tab !== "nr") nrHide();
-  if (rp.tab === "declick") dgRender(); else if (prev !== "nr") nrShow();
+  if (prev === "hum" && rp.tab !== "hum") humHide();
+  if (rp.tab === "diag") dgRender();
+  else if (rp.tab === "nr" && prev !== "nr") nrShow();
+  else if (rp.tab === "hum" && prev !== "hum") humShow();
   redraw();
 }
 
-function openDiag() { openRepair("declick"); }
+function openDiag(kind) {
+  if (kind && kind !== dg.cfg.kind) { dg.cfg.kind = kind; dgSave(); dgReset(); }
+  openRepair("diag");
+}
 
 function closeDiag() {
   const was = rp.open ? rp.tab : null;
@@ -46,18 +56,21 @@ function closeDiag() {
   $("diag").classList.add("hidden");
   dgListen("off");
   if (was === "nr") nrHide();
+  if (was === "hum") humHide();
   redraw();
 }
 
-function toggleDiag() { if (rp.open && rp.tab === "declick") closeDiag(); else openRepair("declick"); }
+function toggleDiag(kind) { if (rp.open && rp.tab === "diag" && (!kind || kind === dg.cfg.kind)) closeDiag(); else openDiag(kind); }
 function toggleNr() { if (rp.open && rp.tab === "nr") closeDiag(); else openRepair("nr"); }
+function toggleRepair() { if (rp.open) closeDiag(); else openRepair(rp.tab); }
+function toggleHum() { if (rp.open && rp.tab === "hum") closeDiag(); else openRepair("hum"); }
 
 function rpTick() {
   if (!rp.open) return;
   const key = ed.sel.a + ":" + ed.sel.b;
   if (key === rp.selKey) return;
   rp.selKey = key;
-  if (rp.tab === "nr") nrRender(); else dgRender();
+  if (rp.tab === "nr") nrRender(); else if (rp.tab === "hum") humRender(); else dgRender();
 }
 
 function dgListen(mode) {
@@ -91,8 +104,24 @@ function dgChanText(det) {
   return det.map((v, i) => v ? i + 1 : null).filter(Boolean).join(" ");
 }
 
+function dgPeakDb(v) { return (v > 0 ? "+" : "") + v.toFixed(1) + " dBFS"; }
+
 function dgRender() {
-  const c = dg.cfg, r = dgRange();
+  const c = dg.cfg, r = dgRange(), clip = c.kind === "clip";
+  const fx = $("dgFx");
+  if (!fx.dataset.ready) {
+    fx.dataset.ready = "1";
+    fx.innerHTML = `<div class="cur"></div><div class="list"></div>`;
+    ddInit(fx, DG_FX, c.kind, v => { if (v !== dg.cfg.kind) { dg.cfg.kind = v; dgSave(); dgReset(); } dgRender(); });
+  }
+  const it = DG_FX.find(f => f.v === c.kind);
+  fx.querySelector(".cur").textContent = t(it.label);
+  fx.dataset.v = c.kind;
+  document.querySelectorAll("#dgBody .dgclick").forEach(el => el.classList.toggle("hidden", clip));
+  document.querySelectorAll("#dgBody .dgclip").forEach(el => el.classList.toggle("hidden", !clip));
+  $("dgTol").value = c.tol;
+  $("dgTolV").textContent = Number(c.tol).toFixed(1) + " %";
+  document.querySelectorAll("#dgMin button").forEach(b => b.classList.toggle("on", Number(b.dataset.v) === c.minRun));
   $("dgSens").value = c.sens;
   $("dgSensV").textContent = c.sens;
   document.querySelectorAll("#dgLen button").forEach(b => b.classList.toggle("on", Number(b.dataset.v) === c.maxMs));
@@ -106,11 +135,23 @@ function dgRender() {
   const res = dg.res, n = res ? res.events.length : 0;
   let sum = "";
   if (busy) sum = t("Scanning…");
-  else if (res) {
+  else if (res && res.kind === "clip") {
+    if (n === 0) sum = dg.done ? t("All found clipping is repaired.") : res.verdict === false ? t("No clipping found. The loudest peaks look natural.") : t("No clipping found.");
+    else {
+      sum = n + " " + t(n === 1 ? "clipped span found" : "clipped spans found");
+      const lv = res.levels ? Math.max(...res.levels.top, ...res.levels.bot) : null;
+      if (lv !== null) sum += " · " + t("clip level") + " " + dgPeakDb(lv);
+      if (res.peak > 0) sum += ". " + t("Repaired peaks reach {p}. Lower the level on export so they don't clip again.").replace("{p}", dgPeakDb(res.peak));
+      const long = res.events.filter(e => e.long).length;
+      if (long) sum += " · " + long + " " + t("too long to rebuild");
+    }
+    if (res.capped) sum += " · " + t("stopped at the first 50,000; raise the minimum clip size");
+    if (res.stale) sum += " · " + res.stale + " " + t("changed since the scan");
+  } else if (res) {
     sum = n === 0 ? (dg.done ? t("All found clicks are repaired.") : t("No clicks found.")) : n + " " + t(n === 1 ? "click found" : "clicks found");
     if (res.capped) sum += " · " + t("stopped at the first 50,000; lower the sensitivity");
     if (res.stale) sum += " · " + res.stale + " " + t("changed since the scan");
-  } else sum = t("Scan finds clicks and crackle. Listen to what would be removed before you repair.");
+  } else sum = clip ? t("Scan finds flat-topped peaks where the recording ran out of headroom and rebuilds their shape.") : t("Scan finds clicks and crackle. Listen to what would be removed before you repair.");
   $("dgSum").textContent = sum;
   const usable = res ? res.events.filter(e => e.ok).length : 0;
   $("dgAll").disabled = busy || !usable;
@@ -142,7 +183,7 @@ function dgList() {
     row.querySelector(".dgt").textContent = fmtTime(e.a);
     row.querySelector(".dgl").textContent = (ms < 1 ? ms.toFixed(2) : ms.toFixed(1)) + " ms";
     row.querySelector(".dgc").textContent = dgChanText(e.det);
-    row.querySelector(".dgs").textContent = e.ok ? Math.round(e.s) : t("changed");
+    row.querySelector(".dgs").textContent = !e.ok ? (e.long ? t("too long") : t("changed")) : res.kind === "clip" ? (e.s >= 0 ? "+" : "") + e.s.toFixed(1) : Math.round(e.s);
     inner.appendChild(row);
   }
 }
@@ -185,7 +226,7 @@ async function dgScan() {
   $("dgBar").querySelector("i").style.width = "0%";
   dgRender();
   try {
-    const res = await call({ t: "dscan", id: ed.doc.id, jobId: id, a: r.a, b: r.b, sens: dg.cfg.sens, maxMs: dg.cfg.maxMs, link: dg.cfg.link });
+    const res = await call({ t: "dscan", id: ed.doc.id, jobId: id, a: r.a, b: r.b, kind: dg.cfg.kind, sens: dg.cfg.sens, maxMs: dg.cfg.maxMs, link: dg.cfg.link, tol: dg.cfg.tol, minRun: dg.cfg.minRun });
     if (dg.scan && dg.scan.id === id) { dg.scan = null; dgApply(res.diag); }
   } catch (e) {
     const mine = dg.scan && dg.scan.id === id;
@@ -206,7 +247,8 @@ async function dgRepair(all) {
     dg.focus = -1;
     dgApply(r.diag);
     const n = r.hist[r.idx].n || 0;
-    flash(n === 1 ? t("Repaired 1 click") : t("Repaired {n} clicks").replace("{n}", n));
+    if (r.hist[r.idx].op === "declip") flash(n === 1 ? t("Repaired 1 clipped span") : t("Repaired {n} clipped spans").replace("{n}", n));
+    else flash(n === 1 ? t("Repaired 1 click") : t("Repaired {n} clicks").replace("{n}", n));
   }
 }
 
@@ -220,6 +262,7 @@ function dgAfterEdit() {
 
 function drawDiag(g, W, H, dpr) {
   if (rp.open && rp.tab === "nr") { drawNrPrint(g, W, H, dpr); return; }
+  if (rp.open && rp.tab === "hum") return;
   if (!dg.open || !dg.res || !dg.res.events.length) return;
   const ev = dg.res.events, v0 = ed.view.start, v1 = v0 + viewWidth() * ed.view.spp;
   let lo = 0, hi = ev.length - 1, i = ev.length;
@@ -243,6 +286,9 @@ function wireDiag() {
   $("dgSens").addEventListener("change", () => $("dgSens").blur());
   const seg = (id, fn) => $(id).addEventListener("click", e => { const b = e.target.closest("button"); if (!b || b.disabled) return; fn(b.dataset.v); dgSave(); dgRender(); });
   seg("dgLen", v => { dg.cfg.maxMs = Number(v); });
+  seg("dgMin", v => { dg.cfg.minRun = Number(v); });
+  $("dgTol").addEventListener("input", () => { dg.cfg.tol = Number($("dgTol").value); $("dgTolV").textContent = dg.cfg.tol.toFixed(1) + " %"; dgSave(); });
+  $("dgTol").addEventListener("change", () => $("dgTol").blur());
   seg("dgLink", v => { dg.cfg.link = v === "link"; });
   seg("dgListen", v => dgListen(v));
   $("dgScan").addEventListener("click", dgScan);
@@ -254,7 +300,7 @@ function wireDiag() {
   $("dgList").addEventListener("click", e => { const row = e.target.closest(".dgrow"); if (row) { dgFocus(Number(row.dataset.i), e.shiftKey || e.ctrlKey || e.metaKey); $("dgList").focus({ preventScroll: true }); } });
   $("diag").addEventListener("keydown", e => {
     if (e.key === "Escape" && !e.target.closest(".dd.open")) { e.stopPropagation(); closeDiag(); return; }
-    if (rp.tab !== "declick" || !dg.res || !dg.res.events.length || e.target.closest("input")) return;
+    if (rp.tab !== "diag" || !dg.res || !dg.res.events.length || e.target.closest("input")) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); dgFocus(Math.max(0, Math.min(dg.res.events.length - 1, dg.focus + (e.key === "ArrowDown" ? 1 : -1))), false); }
     else if (e.key === "Enter" && dg.focus >= 0 && e.target.closest("#dgList")) { e.preventDefault(); e.stopPropagation(); dgRepair(false); }
   });

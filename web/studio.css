@@ -355,6 +355,17 @@ canvas.ru{height:34px}
 #nrBar{flex:1;max-width:140px;height:4px;background:var(--bg4);overflow:hidden}
 #nrBar i{display:block;height:100%;width:0;background:var(--pink);transition:width .12s}
 #nrBar.hidden{display:none}
+#humBar{flex:1;max-width:140px;height:4px;background:var(--bg4);overflow:hidden}
+#humBar i{display:block;height:100%;width:0;background:var(--pink);transition:width .12s}
+#humBar.hidden{display:none}
+.humgraph{height:120px}
+.nin{width:64px;background:var(--bg);border:1px solid var(--border);color:var(--white);font:inherit;font-size:11px;padding:4px 6px;font-variant-numeric:tabular-nums}
+.nin:focus{outline:0;border-color:var(--gold)}
+#diag .unit{font-size:10px;color:var(--dim);margin-left:-4px}
+#dgTol{flex:1;min-width:90px;accent-color:var(--pink)}
+#diag .row.hidden{display:none}
+#diag .hhead .rptabs{margin-left:0}
+#dgFx{min-width:140px}
 @media (max-width:760px){
   #diag{position:fixed;left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:62vh;z-index:46}
   #diag .row>label{min-width:0;flex-basis:100%}

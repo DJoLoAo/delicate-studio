@@ -89,6 +89,7 @@ impl Decoder {
 }
 
 pub mod enc;
+pub mod hum;
 pub mod nr;
 pub mod restore;
 pub mod rs;
@@ -468,6 +469,116 @@ mod wasm {
         unsafe { (*std::ptr::addr_of!(NP_OUT)).as_ptr() }
     }
 
+    static mut DH: [Option<crate::hum::Hum>; 3] = [None, None, None];
+    static mut DH_OUT: Vec<f32> = Vec::new();
+
+    fn dhm(slot: u32) -> Option<&'static mut crate::hum::Hum> {
+        unsafe { (*std::ptr::addr_of_mut!(DH)).get_mut(slot as usize).and_then(|s| s.as_mut()) }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dh_open(slot: u32, ch: u32, sr: u32) -> i32 {
+        if slot > 2 || ch == 0 || ch > 8 || sr == 0 {
+            return fail("dehummer settings out of range".into());
+        }
+        unsafe { (*std::ptr::addr_of_mut!(DH))[slot as usize] = Some(crate::hum::Hum::new(ch as usize, sr as usize)); }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dh_set(slot: u32, f0: f64, n: u32, q: f64, gain: f64, slope: f64, only: u32) -> i32 {
+        let Some(h) = dhm(slot) else { return fail("dehummer is not open".into()) };
+        h.configure(f0, n as usize, q, gain, slope, only != 0);
+        h.filters() as i32
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dh_reset(slot: u32) {
+        if let Some(h) = dhm(slot) {
+            h.reset();
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dh_in(slot: u32, m: u32) -> *mut f32 {
+        dhm(slot).map(|h| h.stage(m as usize)).unwrap_or(std::ptr::null_mut())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dh_run(slot: u32, m: u32) -> i32 {
+        match dhm(slot) {
+            Some(h) => h.run(m as usize) as i32,
+            None => fail("dehummer is not open".into()),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dh_out(slot: u32) -> *const f32 {
+        dhm(slot).map(|h| h.out.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dh_resp(slot: u32, f: f64) -> f64 {
+        dhm(slot).map(|h| h.response(f)).unwrap_or(0.0)
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dh_find(len: u32, sr: u32, center: f64) -> i32 {
+        let x = unsafe { &(&*std::ptr::addr_of!(NP_BUF))[..len as usize] };
+        let pick = |c: f64| crate::hum::find(x, sr as usize, c - 0.8, c + 0.8);
+        let found = if center > 0.0 {
+            pick(center)
+        } else {
+            match (pick(50.0), pick(60.0)) {
+                (Some(a), Some(b)) => Some(if a.harmonics > 0 && (b.harmonics == 0 || a.score >= b.score) { a } else if b.harmonics > 0 { b } else if a.score >= b.score { a } else { b }),
+                (a, b) => a.or(b),
+            }
+        };
+        let Some(f) = found else { return fail("not enough audio to look for hum".into()) };
+        let out = unsafe { &mut *std::ptr::addr_of_mut!(DH_OUT) };
+        out.clear();
+        out.extend_from_slice(&[f.f0 as f32, f.score as f32, f.harmonics as f32, f.bin as f32]);
+        out.extend_from_slice(&f.prom);
+        out.extend_from_slice(&f.spec);
+        out.len() as i32
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dh_found() -> *const f32 {
+        unsafe { (*std::ptr::addr_of!(DH_OUT)).as_ptr() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dh_f0() -> f64 {
+        unsafe { (*std::ptr::addr_of!(DH_OUT)).first().copied().unwrap_or(0.0) as f64 }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cl_runs(n: u32, top: f32, bot: f32, tol: f32, min_run: u32) -> i32 {
+        let x = unsafe { &(&*std::ptr::addr_of!(RP_BUF))[..n as usize] };
+        let mut runs = Vec::new();
+        crate::restore::clip_runs(x, top, bot, tol, min_run as usize, &mut runs);
+        let out = unsafe { &mut *std::ptr::addr_of_mut!(RP_OUT) };
+        out.clear();
+        for r in &runs {
+            out.extend_from_slice(&[r.start as f32, r.end as f32, 0.0, 0.0]);
+        }
+        runs.len() as i32
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cl_order(sr: u32) -> u32 {
+        crate::restore::declip_order(sr as usize) as u32
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cl_fill(n: u32, p: u32) -> i32 {
+        let n = n as usize;
+        let mask: Vec<bool> = unsafe { (&*std::ptr::addr_of!(RP_MASK))[..n].iter().map(|&v| v != 0).collect() };
+        let x = unsafe { &mut (&mut *std::ptr::addr_of_mut!(RP_BUF))[..n] };
+        if crate::restore::declip(x, &mask, p as usize) { 0 } else { fail("clipping could not be repaired here".into()) }
+    }
+
     static mut RS: Option<crate::rs::Rs> = None;
 
     fn rsm() -> Option<&'static mut crate::rs::Rs> {
@@ -764,6 +875,37 @@ mod tests {
         let mut again = noise[sr / 3 - ctx..sr / 3 + g + ctx].to_vec();
         assert!(fill_textured(&mut again, &mask, p, 7));
         assert_eq!(again, a, "textured fill is deterministic for a seed");
+    }
+
+    #[test]
+    fn declip_rebuilds_clipped_peaks() {
+        use crate::restore::{clip_runs, context_len, declip, declip_order};
+        let sr = 44100;
+        let clean: Vec<f32> = test_tone(sr, 2.0, 4).iter().map(|v| v * 1.6).collect();
+        let peak = clean.iter().fold(0.0f32, |a, v| a.max(v.abs()));
+        let lim = peak * 10f32.powf(-3.0 / 20.0);
+        let hard: Vec<f32> = clean.iter().map(|v| v.clamp(-lim, lim)).collect();
+        let mut runs = Vec::new();
+        clip_runs(&hard, lim, lim, 0.001, 2, &mut runs);
+        assert!(!runs.is_empty());
+        let p = declip_order(sr);
+        let (lo, hi) = (context_len(p, 1, false), hard.len() - context_len(p, 1, false));
+        let inner: Vec<&crate::restore::ClipRun> = runs.iter().filter(|q| q.start >= lo + p && q.end + p <= hi).collect();
+        assert!(inner.len() > 10);
+        let mut buf = hard[lo..hi].to_vec();
+        let mask: Vec<bool> = (0..buf.len()).map(|i| inner.iter().any(|q| i + lo >= q.start && i + lo < q.end)).collect();
+        assert!(declip(&mut buf, &mask, p));
+        let (mut before, mut after) = (0.0f64, 0.0f64);
+        for q in &inner {
+            for i in q.start..q.end {
+                let v = buf[i - lo];
+                before += ((hard[i] - clean[i]) as f64).powi(2);
+                after += ((v - clean[i]) as f64).powi(2);
+                assert!(v.abs() >= hard[i].abs() - 1e-6, "constraint broken");
+            }
+        }
+        let gain = 10.0 * (before / after.max(1e-30)).log10();
+        assert!(gain > 10.0, "declip improved clipped samples by only {gain:.1} dB");
     }
 
     #[test]
