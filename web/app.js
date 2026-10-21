@@ -6,7 +6,7 @@ const studio = { me: null, version: null, verDismissed: false };
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
 
 async function fetchMe() {
-  try { return await fetch("/studio/api/me", { cache: "no-store" }); } catch { return null; }
+  try { return await fetch("/api/studio/me", { cache: "no-store" }); } catch { return null; }
 }
 
 function showLogin(message) {
@@ -98,7 +98,7 @@ document.getElementById("logoutbtn").addEventListener("click", async () => {
 
 async function checkVersion() {
   try {
-    const r = await fetch("/studio/api/version", { cache: "no-store" });
+    const r = await fetch("/api/studio/version", { cache: "no-store" });
     if (!r.ok) return;
     const v = (await r.json()).version;
     if (studio.version === null) { studio.version = v; document.getElementById("stVer").textContent = "v" + v; return; }
@@ -118,7 +118,7 @@ window.addEventListener("online", netState);
 window.addEventListener("offline", netState);
 
 async function boot() {
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/studio/sw.js", { scope: "/studio/" }).catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
   await i18nInit();
   netState();
   const r = await fetchMe();

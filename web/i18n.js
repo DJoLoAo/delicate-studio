@@ -16,7 +16,7 @@ async function i18nLoad(lang) {
   if (!I18N_LANGS[lang]) lang = "en";
   let dict = {};
   if (lang !== "en") {
-    try { const r = await fetch("/studio/i18n/" + lang + ".json"); if (r.ok) dict = await r.json(); } catch {}
+    try { const r = await fetch("/i18n/" + lang + ".json"); if (r.ok) dict = await r.json(); } catch {}
   }
   i18n.lang = lang;
   i18n.dict = dict;
@@ -83,7 +83,7 @@ function i18nObserve() {
 async function i18nPicker(el, opts) {
   if (!el) return null;
   try {
-    const mod = await import("/studio/worldpicker/lang-picker.js");
+    const mod = await import("/worldpicker/lang-picker.js");
     const countryOf = { en: "GB", de: "DE", fr: "FR", es: "ES", it: "IT", pt: "PT", hi: "IN" };
     const p = mod.createLangPicker(el, Object.assign({
       featured: I18N_COUNTRIES,

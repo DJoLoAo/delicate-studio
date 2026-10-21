@@ -89,14 +89,14 @@ async fn main() {
         .build()
         .unwrap();
     let state = AppState { http, dj, web: web.clone() };
-    let studio = Router::new()
-        .route("/api/me", get(me))
-        .route("/api/version", get(version))
-        .fallback_service(ServeDir::new(&web).fallback(ServeFile::new(web.join("index.html"))))
+    let api = Router::new()
+        .route("/me", get(me))
+        .route("/version", get(version))
+        .fallback(|| async { StatusCode::NOT_FOUND })
         .with_state(state);
     let app = Router::new()
-        .route_service("/studio/", ServeFile::new(web.join("index.html")))
-        .nest("/studio", studio)
+        .nest("/api/studio", api)
+        .fallback_service(ServeDir::new(&web).fallback(ServeFile::new(web.join("index.html"))))
         .layer(SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, HeaderValue::from_static("no-cache")))
         .layer(SetResponseHeaderLayer::overriding(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")))
         .layer(SetResponseHeaderLayer::overriding(HeaderName::from_static("cross-origin-opener-policy"), HeaderValue::from_static("same-origin")))

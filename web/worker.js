@@ -1,4 +1,4 @@
-importScripts("/studio/edit.js");
+importScripts("/edit.js");
 
 const BLOCK = 65536;
 const BUCKET = 256;
@@ -94,7 +94,7 @@ async function docsDir() {
 }
 
 async function wasmMod() {
-  if (!wasmModule) wasmModule = await WebAssembly.compileStreaming(fetch("/studio/studio-dsp.wasm"));
+  if (!wasmModule) wasmModule = await WebAssembly.compileStreaming(fetch("/studio-dsp.wasm"));
   return wasmModule;
 }
 

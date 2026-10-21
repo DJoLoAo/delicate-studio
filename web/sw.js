@@ -1,5 +1,5 @@
-const SHELL = "studio-shell-v6";
-const SHELL_FILES = ["/studio/", "/studio/index.html", "/studio/studio.css", "/studio/app.js", "/studio/editor.js", "/studio/edit.js", "/studio/commands.js", "/studio/export.js", "/studio/worker.js", "/studio/player-worklet.js", "/studio/studio-dsp.wasm", "/studio/dialog.js", "/studio/i18n.js", "/studio/favicon.svg", "/studio/manifest.webmanifest", "/studio/fonts/fonts.css", "/studio/fonts/JetBrainsMono.woff2", "/studio/fonts/InstrumentSerif-Regular.woff2", "/studio/fonts/InstrumentSerif-Italic.woff2", "/studio/worldpicker/lang-picker.js", "/studio/worldpicker/countries.js", "/studio/worldpicker/world.js", "/studio/worldpicker/flags-meta.js", "/studio/worldpicker/flags.webp", "/studio/i18n/de.json", "/studio/i18n/fr.json", "/studio/i18n/es.json", "/studio/i18n/it.json", "/studio/i18n/pt.json", "/studio/i18n/hi.json"];
+const SHELL = "studio-shell-v7";
+const SHELL_FILES = ["/", "/index.html", "/studio.css", "/app.js", "/editor.js", "/edit.js", "/commands.js", "/export.js", "/worker.js", "/player-worklet.js", "/studio-dsp.wasm", "/dialog.js", "/i18n.js", "/favicon.svg", "/manifest.webmanifest", "/fonts/fonts.css", "/fonts/JetBrainsMono.woff2", "/fonts/InstrumentSerif-Regular.woff2", "/fonts/InstrumentSerif-Italic.woff2", "/worldpicker/lang-picker.js", "/worldpicker/countries.js", "/worldpicker/world.js", "/worldpicker/flags-meta.js", "/worldpicker/flags.webp", "/i18n/de.json", "/i18n/fr.json", "/i18n/es.json", "/i18n/it.json", "/i18n/pt.json", "/i18n/hi.json"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(SHELL).then(c => Promise.allSettled(SHELL_FILES.map(f => c.add(f)))).then(() => self.skipWaiting()));
@@ -18,7 +18,7 @@ async function networkFirst(req) {
   } catch (err) {
     const hit = await cache.match(req, { ignoreVary: true, ignoreSearch: true });
     if (hit) return hit;
-    if (req.mode === "navigate") { const shell = await cache.match("/studio/"); if (shell) return shell; }
+    if (req.mode === "navigate") { const shell = await cache.match("/"); if (shell) return shell; }
     throw err;
   }
 }
@@ -26,6 +26,6 @@ async function networkFirst(req) {
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
-  if (!url.pathname.startsWith("/studio/") || url.pathname.startsWith("/studio/api/")) return;
+  if (url.pathname.startsWith("/api/")) return;
   e.respondWith(networkFirst(e.request));
 });

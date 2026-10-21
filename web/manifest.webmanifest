@@ -1,15 +1,15 @@
 {
  "name": "Delicate Studio",
  "short_name": "Studio",
- "start_url": "/studio/",
- "scope": "/studio/",
+ "start_url": "/",
+ "scope": "/",
  "display": "standalone",
  "background_color": "#0c0a08",
  "theme_color": "#0c0a08",
  "description": "Hi-res audio editing in the browser.",
  "icons": [
   {
-   "src": "/studio/favicon.svg",
+   "src": "/favicon.svg",
    "sizes": "any",
    "type": "image/svg+xml"
   }

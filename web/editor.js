@@ -7,7 +7,7 @@ const PLAIN = "rgb(223,57,187)";
 const AUDIO_ACCEPT = ".flac,.wav,.wave,.bwf,.aif,.aiff,.aifc,.mp3,.mp2,.m4a,.mp4,.aac,.alac,.caf,.ogg,.oga";
 
 const ed = {
-  worker: new Worker("/studio/worker.js"),
+  worker: new Worker("/worker.js"),
   req: 0,
   pending: new Map(),
   doc: null,
@@ -970,7 +970,7 @@ async function ensureAudio() {
   let ctx;
   try { ctx = new AudioContext({ sampleRate: doc.sampleRate, latencyHint: "interactive" }); }
   catch { ctx = new AudioContext({ latencyHint: "interactive" }); }
-  await ctx.audioWorklet.addModule("/studio/player-worklet.js");
+  await ctx.audioWorklet.addModule("/player-worklet.js");
   const data = new SharedArrayBuffer(RING * doc.channels * 4), ctrl = new SharedArrayBuffer(8 * 4);
   const node = new AudioWorkletNode(ctx, "studio-player", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [doc.channels], processorOptions: { data, ctrl, size: RING, channels: doc.channels } });
   node.port.onmessage = e => meterIn(e.data);
