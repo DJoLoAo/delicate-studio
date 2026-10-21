@@ -30,7 +30,12 @@ const ed = {
   meter: { pk: [], rms: [], hold: [], holdT: [], clip: [], t: 0 },
   dirty: false,
   dragging: null,
-  importing: null
+  importing: null,
+  libSeq: 0,
+  docs: [],
+  locker: null,
+  account: null,
+  tab: "studio"
 };
 
 const $ = id => document.getElementById(id);
@@ -549,6 +554,9 @@ function showDoc(meta, peaks, bands) {
   $("docName").title = meta.name;
   const chs = meta.channels === 1 ? t("mono") : meta.channels === 2 ? t("stereo") : meta.channels + " ch";
   $("docInfo").textContent = [(meta.sampleRate / 1000).toLocaleString() + " kHz", meta.bits ? meta.bits + "-bit" : (meta.ext || "").toUpperCase(), chs, fmtDur(meta.frames / meta.sampleRate)].join(" · ");
+  const sl = srcLabel(meta.source);
+  $("docSrc").textContent = sl ? sl + " · " + t("read-only original") : "";
+  $("docSrc").classList.toggle("hidden", !sl);
   chanSeg();
   ed.view.spp = meta.frames / viewWidth();
   ed.view.start = 0;
@@ -614,16 +622,146 @@ async function importFiles(files) {
 function importProgress(m) {
   const box = $("busy");
   box.classList.remove("hidden");
+  $("busyTitle").textContent = m.phase === "download" ? t("Downloading") : t("Reading");
   $("busyName").textContent = m.name;
   $("busyBar").style.width = Math.round((m.frac || 0) * 100) + "%";
-  $("busyPct").textContent = Math.round((m.frac || 0) * 100) + "%";
+  $("busyPct").textContent = m.phase === "download" && !m.total ? fmtBytes(m.bytes || 0) : Math.round((m.frac || 0) * 100) + "%" + (m.phase === "download" && m.total ? " · " + fmtBytes(m.total) : "");
 }
 
 function closeFiles() { $("files").classList.add("hidden"); }
 
+function srcLabel(src) {
+  if (!src) return "";
+  if (src.kind === "library") return t("Library");
+  if (src.kind === "locker") return t("Locker");
+  return "";
+}
+
+function openFiles(tab) {
+  $("files").classList.remove("hidden");
+  setTab(tab || ed.tab || "studio");
+}
+
+function setTab(tab) {
+  ed.tab = tab;
+  document.querySelectorAll("#files .ftab").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  document.querySelectorAll("#files .fpane").forEach(p => p.classList.toggle("hidden", p.dataset.pane !== tab));
+  if (tab === "studio") refreshFiles();
+  if (tab === "library") { libHint(); setTimeout(() => $("libQ").focus(), 30); }
+  if (tab === "locker") { loadLocker(); setTimeout(() => $("lkQ").focus(), 30); }
+}
+
+async function myAccount() {
+  if (ed.account) return ed.account;
+  try { const r = await fetch("/api/me", { cache: "no-store" }); if (r.ok) ed.account = await r.json(); } catch {}
+  return ed.account || {};
+}
+
+function rowEl(title, info, onClick, extra) {
+  const row = document.createElement("div");
+  row.className = "frow";
+  const name = document.createElement("button");
+  name.className = "fname";
+  name.title = title;
+  name.innerHTML = `<span class="fn"></span><span class="fi"></span>`;
+  name.querySelector(".fn").textContent = title;
+  name.querySelector(".fi").textContent = info;
+  name.addEventListener("click", onClick);
+  if (extra) { const tag = document.createElement("span"); tag.className = "ftag"; tag.textContent = extra; name.prepend(tag); }
+  row.appendChild(name);
+  return row;
+}
+
+function listNote(box, text) {
+  box.innerHTML = "";
+  const p = document.createElement("div");
+  p.className = "fempty";
+  p.textContent = text;
+  box.appendChild(p);
+}
+
+async function libHint() {
+  const box = $("libList");
+  const acct = await myAccount();
+  if (acct && acct.library === false) { $("libQ").disabled = true; listNote(box, t("No music library is connected to your account.")); return; }
+  $("libQ").disabled = false;
+  if ($("libQ").value.trim().length < 2) listNote(box, t("Type at least two letters to search."));
+}
+
+async function libSearch() {
+  const q = $("libQ").value.trim(), box = $("libList");
+  if (q.length < 2) { libHint(); return; }
+  const seq = ++ed.libSeq;
+  listNote(box, t("Searching…"));
+  let items;
+  try {
+    const r = await fetch("/api/search?q=" + encodeURIComponent(q), { cache: "no-store" });
+    if (r.status === 401) { listNote(box, t("Your session has ended. Log in again.")); return; }
+    if (!r.ok) throw new Error(String(r.status));
+    items = await r.json();
+  } catch { if (seq === ed.libSeq) listNote(box, t("Could not search the library.")); return; }
+  if (seq !== ed.libSeq) return;
+  if (!Array.isArray(items) || !items.length) { listNote(box, t("No matches.")); return; }
+  box.innerHTML = "";
+  for (const it of items) {
+    const title = it.title || it.id;
+    const info = [it.artist, it.album, it.duration ? fmtDur(it.duration) : "", it.sampleRate ? (it.sampleRate / 1000) + " kHz" : ""].filter(Boolean).join(" · ");
+    box.appendChild(rowEl(title, info, () => importRemote({ kind: "library", id: String(it.id), title: it.title || "", artist: it.artist || "", album: it.album || "" })));
+  }
+}
+
+async function loadLocker(force) {
+  const box = $("lkList");
+  if (!force && ed.locker && Date.now() - ed.locker.t < 60000) { renderLocker(); return; }
+  listNote(box, t("Loading…"));
+  try {
+    const r = await fetch("/api/locker/files", { cache: "no-store" });
+    if (r.status === 401) { listNote(box, t("Your session has ended. Log in again.")); return; }
+    if (!r.ok) throw new Error(String(r.status));
+    const j = await r.json();
+    ed.locker = { t: Date.now(), files: Array.isArray(j.files) ? j.files : [] };
+  } catch { listNote(box, t("Could not load the Locker.")); $("lkInfo").textContent = ""; return; }
+  renderLocker();
+}
+
+function renderLocker() {
+  const box = $("lkList"), files = ed.locker ? ed.locker.files : [];
+  if (!files.length) { listNote(box, t("Your Locker is empty. Upload files in Delicate DJ.")); $("lkInfo").textContent = ""; return; }
+  const q = $("lkQ").value.trim().toLowerCase();
+  const hits = q ? files.filter(f => [f.title, f.artist, f.album, f.path].join(" ").toLowerCase().includes(q)) : files;
+  box.innerHTML = "";
+  if (!hits.length) listNote(box, t("No matches."));
+  for (const f of hits.slice(0, 300)) {
+    const ext = (f.path || "").split(".").pop().toLowerCase();
+    const info = [f.artist, f.album, f.duration ? fmtDur(f.duration) : "", f.size ? fmtBytes(f.size) : "", f.folder].filter(Boolean).join(" · ");
+    box.appendChild(rowEl(f.title || f.path, info, () => importRemote({ kind: "locker", id: String(f.id), title: f.title || "", artist: f.artist || "", album: f.album || "", path: f.path || "" }, ext), ext ? ext.toUpperCase() : ""));
+  }
+  $("lkInfo").textContent = hits.length > 300 ? t("Showing 300 of") + " " + hits.length + " — " + t("refine the filter") : files.length + " " + t("files in your Locker");
+}
+
+async function importRemote(src, ext) {
+  closeFiles();
+  const have = (ed.docs || []).find(d => d.source && d.source.kind === src.kind && d.source.id === src.id);
+  if (have) { openDoc(have.id); return; }
+  const name = [src.artist, src.title].filter(Boolean).join(" - ") || src.path || src.id;
+  importProgress({ name, frac: 0, phase: "download" });
+  try {
+    const r = await call({ t: "import", url: "/api/stream/" + encodeURIComponent(src.id), name, ext: ext || "", source: src });
+    showDoc(r.meta, r.peaks, r.bands);
+  } catch (e) {
+    if (e && e.message === "login") tell(t("Your session has ended. Log in again."));
+    else if (e && e.message === "network") tell(t("The download was interrupted. Try again."), t("Could not open the file"));
+    else openError(e, name);
+  }
+  $("busy").classList.add("hidden");
+  refreshFiles();
+  call({ t: "persist" }).catch(() => {});
+}
+
 async function refreshFiles() {
   let r;
   try { r = await call({ t: "list" }); } catch { return; }
+  ed.docs = r.docs;
   for (const box of [$("recentList"), $("filesList")]) {
     box.innerHTML = "";
     if (!r.docs.length) {
@@ -641,7 +779,7 @@ async function refreshFiles() {
       name.title = d.name;
       name.innerHTML = `<span class="fn"></span><span class="fi"></span>`;
       name.querySelector(".fn").textContent = d.name;
-      name.querySelector(".fi").textContent = [fmtDur(d.frames / d.sampleRate), (d.sampleRate / 1000) + " kHz", d.bits ? d.bits + "-bit" : (d.ext || "").toUpperCase(), d.channels === 1 ? t("mono") : d.channels === 2 ? t("stereo") : d.channels + " ch", fmtBytes(d.frames * d.channels * 4)].join(" · ");
+      name.querySelector(".fi").textContent = [srcLabel(d.source), fmtDur(d.frames / d.sampleRate), (d.sampleRate / 1000) + " kHz", d.bits ? d.bits + "-bit" : (d.ext || "").toUpperCase(), d.channels === 1 ? t("mono") : d.channels === 2 ? t("stereo") : d.channels + " ch", fmtBytes(d.frames * d.channels * 4)].filter(Boolean).join(" · ");
       name.addEventListener("click", () => openDoc(d.id));
       const x = document.createElement("button");
       x.className = "x fdel";
@@ -1032,11 +1170,16 @@ function wireUi() {
   for (const id of ["openBtn", "openBtn2", "openBtn3"]) { const b = $(id); if (b) b.addEventListener("click", pickFiles); }
   $("filesBtn").addEventListener("click", ev => {
     ev.stopPropagation();
-    const box = $("files");
-    const open = box.classList.contains("hidden");
-    box.classList.toggle("hidden", !open);
-    if (open) refreshFiles();
+    if ($("files").classList.contains("hidden")) openFiles(); else closeFiles();
   });
+  $("libBtn").addEventListener("click", ev => { ev.stopPropagation(); openFiles("library"); });
+  $("lkBtn").addEventListener("click", ev => { ev.stopPropagation(); openFiles("locker"); });
+  document.querySelectorAll("#files .ftab").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  let libTimer = 0;
+  $("libQ").addEventListener("input", () => { clearTimeout(libTimer); libTimer = setTimeout(libSearch, 280); });
+  $("libQ").addEventListener("keydown", e => { if (e.key === "Enter") { clearTimeout(libTimer); libSearch(); } if (e.key === "Escape") closeFiles(); });
+  $("lkQ").addEventListener("input", renderLocker);
+  $("lkQ").addEventListener("keydown", e => { if (e.key === "Escape") closeFiles(); });
   $("files").addEventListener("click", ev => ev.stopPropagation());
   document.addEventListener("click", () => { closeFiles(); document.querySelectorAll(".dd.open").forEach(o => o.classList.remove("open")); });
   $("busyCancel").addEventListener("click", () => ed.worker.postMessage({ t: "cancel" }));

@@ -32,9 +32,10 @@
     <div class="filesw">
       <button class="outbtn" id="filesBtn" title="Your files in Studio">Files</button>
       <div id="files" class="hidden">
-        <div class="fhead"><b>Files</b><button class="outbtn" id="openBtn2">Open…</button></div>
-        <div id="filesList" class="flist"></div>
-        <div class="sinfo" id="storeInfo"></div>
+        <div class="ftabs"><button class="ftab on" data-tab="studio">In Studio</button><button class="ftab" data-tab="library">Library</button><button class="ftab" data-tab="locker">Locker</button><span class="grow"></span><button class="outbtn" id="openBtn2">Open…</button></div>
+        <div class="fpane" data-pane="studio"><div id="filesList" class="flist"></div><div class="sinfo" id="storeInfo"></div></div>
+        <div class="fpane hidden" data-pane="library"><input id="libQ" class="fsearch" type="search" placeholder="Search your library by title, artist or album" autocomplete="off" spellcheck="false"><div id="libList" class="flist"></div></div>
+        <div class="fpane hidden" data-pane="locker"><input id="lkQ" class="fsearch" type="search" placeholder="Filter by title, artist, album or folder" autocomplete="off" spellcheck="false"><div id="lkList" class="flist"></div><div class="sinfo" id="lkInfo"></div></div>
       </div>
     </div>
     <a class="outbtn" href="/" title="Open Delicate DJ">DJ</a>
@@ -47,7 +48,7 @@
       <h1>No file open</h1>
       <p>Drop audio files here or open them from your computer.</p>
       <p class="fmts">FLAC · WAV · AIFF · MP3 · M4A · OGG · CAF</p>
-      <div class="emptybtns"><button class="primary" id="openBtn">Open file…</button></div>
+      <div class="emptybtns"><button class="primary" id="openBtn">Open file…</button><button class="outbtn big" id="libBtn">Library</button><button class="outbtn big" id="lkBtn">Locker</button></div>
       <div class="recent">
         <h3>Recent</h3>
         <div id="recentList" class="flist"></div>
@@ -56,7 +57,7 @@
     </div>
     <div id="ed" class="hidden">
       <div class="edhead">
-        <div class="docmeta"><b id="docName"></b><span id="docInfo"></span></div>
+        <div class="docmeta"><b id="docName"></b><span id="docInfo"></span><span id="docSrc" class="badge hidden"></span></div>
         <span class="grow"></span>
         <div class="seg" id="chanSeg" title="Channels the selection applies to"></div>
         <div class="seg" id="scaleSeg"><button class="segbtn" data-v="lin" title="Linear amplitude">Lin</button><button class="segbtn" data-v="db" title="Logarithmic amplitude (dB)">dB</button></div>
@@ -90,7 +91,7 @@
       </div>
       <canvas id="mt" class="mt" title="Levels — click to reset the clip lights"></canvas>
     </div>
-    <div id="busy" class="hidden"><div class="bbox"><div class="btitle">Reading</div><div class="bname" id="busyName"></div><div class="bbar"><i id="busyBar"></i></div><div class="brow"><span id="busyPct"></span><button class="outbtn" id="busyCancel">cancel</button></div></div></div>
+    <div id="busy" class="hidden"><div class="bbox"><div class="btitle" id="busyTitle">Reading</div><div class="bname" id="busyName"></div><div class="bbar"><i id="busyBar"></i></div><div class="brow"><span id="busyPct"></span><button class="outbtn" id="busyCancel">cancel</button></div></div></div>
     <div id="drop" class="hidden"><div>Drop to open</div></div>
   </main>
   <footer class="status"><span id="stNet">ready</span><span class="grow"></span><span id="stVer"></span></footer>

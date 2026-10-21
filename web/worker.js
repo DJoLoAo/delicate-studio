@@ -11,6 +11,65 @@ let play = null;
 let fillTimer = 0;
 let cancelImport = false;
 let importing = Promise.resolve();
+let downloadCtl = null;
+const CT_EXT = { "audio/flac": "flac", "audio/x-flac": "flac", "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/m4a": "m4a", "audio/aac": "aac", "audio/wav": "wav", "audio/x-wav": "wav", "audio/wave": "wav", "audio/vnd.wave": "wav", "audio/aiff": "aiff", "audio/x-aiff": "aiff", "audio/ogg": "ogg", "audio/x-caf": "caf" };
+
+async function tmpDir() {
+  const root = await navigator.storage.getDirectory();
+  const studio = await root.getDirectoryHandle("studio", { create: true });
+  return studio.getDirectoryHandle("tmp", { create: true });
+}
+
+async function clearTmp() {
+  try {
+    const dir = await tmpDir();
+    const names = [];
+    for await (const [name] of dir.entries()) names.push(name);
+    for (const n of names) { try { await dir.removeEntry(n); } catch {} }
+  } catch {}
+}
+
+const tmpReady = clearTmp();
+
+async function download(req, url, name) {
+  await tmpReady;
+  const ctl = new AbortController();
+  downloadCtl = ctl;
+  let res;
+  try { res = await fetch(url, { signal: ctl.signal, credentials: "same-origin", cache: "no-store" }); }
+  catch (e) { throw new Error(cancelImport ? "cancelled" : "network"); }
+  if (res.status === 401) throw new Error("login");
+  if (!res.ok || !res.body) throw new Error("download failed (" + res.status + ")");
+  const total = Number(res.headers.get("content-length")) || 0;
+  const type = (res.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  const dir = await tmpDir();
+  const tmpName = crypto.randomUUID();
+  const fh = await dir.getFileHandle(tmpName, { create: true });
+  const h = await fh.createSyncAccessHandle();
+  let got = 0, last = 0;
+  try {
+    const reader = res.body.getReader();
+    for (;;) {
+      let chunk;
+      try { chunk = await reader.read(); } catch { throw new Error(cancelImport ? "cancelled" : "network"); }
+      if (chunk.done) break;
+      h.write(chunk.value, { at: got });
+      got += chunk.value.length;
+      const now = performance.now();
+      if (now - last > 150) { last = now; postMessage({ t: "progress", req, name, phase: "download", frac: total ? Math.min(1, got / total) : 0, bytes: got, total }); }
+      if (cancelImport) { ctl.abort(); throw new Error("cancelled"); }
+    }
+    h.flush();
+  } catch (e) {
+    try { h.close(); } catch {}
+    try { await dir.removeEntry(tmpName); } catch {}
+    throw e;
+  } finally { downloadCtl = null; }
+  h.close();
+  if (total && got < total) { try { await dir.removeEntry(tmpName); } catch {} throw new Error("network"); }
+  const file = await fh.getFile();
+  return { file, type, tmpName };
+}
 
 async function docsDir() {
   const root = await navigator.storage.getDirectory();
@@ -81,8 +140,9 @@ async function closeCur() {
   cur = null;
 }
 
-async function importFile(req, file) {
-  cancelImport = false;
+async function importFile(req, file, opts) {
+  opts = opts || {};
+  const displayName = opts.name || file.name;
   const dir = await docsDir();
   const id = crypto.randomUUID();
   const docDir = await dir.getDirectoryHandle(id, { create: true });
@@ -116,7 +176,7 @@ async function importFile(req, file) {
     const x = inst.exports;
     mem = x.memory;
     const err = () => new TextDecoder().decode(new Uint8Array(mem.buffer, x.dec_error_ptr(), x.dec_error_len()));
-    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    const ext = (opts.ext || (displayName.includes(".") ? displayName.split(".").pop() : "") || "").toLowerCase();
     const eb = new TextEncoder().encode(ext), ep = x.mem_alloc(eb.length);
     new Uint8Array(mem.buffer, ep, eb.length).set(eb);
     if (x.dec_open(ep, eb.length) !== 0) throw new Error(err());
@@ -193,7 +253,7 @@ async function importFile(req, file) {
       const now = performance.now();
       if (now - lastPost > 150) {
         lastPost = now;
-        postMessage({ t: "progress", req, name: file.name, frac: declared > 0 ? Math.min(1, total / declared) : Math.min(1, bytesSeen / file.size) });
+        postMessage({ t: "progress", req, name: displayName, phase: "decode", frac: declared > 0 ? Math.min(1, total / declared) : Math.min(1, bytesSeen / file.size) });
       }
       if (now - lastYield > 120) {
         await new Promise(r => setTimeout(r, 0));
@@ -216,7 +276,8 @@ async function importFile(req, file) {
     bandChunks.forEach((b, i) => { if (i < slots) bands.set(b, i * BPB * 3); });
     await writeFile(docDir, "peaks.f32", slotPeaks);
     await writeFile(docDir, "bands.f32", bands);
-    const meta = { v: 1, id, name: file.name, ext, size: file.size, sampleRate: sr, channels: ch, bits, frames: total, blockFrames: BLOCK, slots, created: Date.now(), opened: Date.now(), source: { kind: "local", lastModified: file.lastModified || 0 } };
+    const source = opts.source || { kind: "local", lastModified: file.lastModified || 0 };
+    const meta = { v: 1, id, name: displayName, ext, size: file.size, sampleRate: sr, channels: ch, bits, frames: total, blockFrames: BLOCK, slots, created: Date.now(), opened: Date.now(), readOnly: source.kind === "library" || source.kind === "locker", source };
     await writeFile(docDir, "meta.json", new TextEncoder().encode(JSON.stringify(meta)));
     return meta;
   } catch (e) {
@@ -334,7 +395,7 @@ function startPlay(start, end, loop, off) {
 onmessage = async e => {
   const m = e.data;
   try {
-    if (m.t === "cancel") { cancelImport = true; return; }
+    if (m.t === "cancel") { cancelImport = true; if (downloadCtl) downloadCtl.abort(); return; }
     if (m.t === "ring") { ring = { data: new Float32Array(m.data), ctrl: new Int32Array(m.ctrl), size: m.size }; return; }
     if (m.t === "play") { startPlay(m.start, m.end, m.loop, m.off); return; }
     if (m.t === "stop") { stopPlay(); return; }
@@ -342,11 +403,23 @@ onmessage = async e => {
     if (m.t === "persist") { let ok = false; try { ok = await navigator.storage.persist(); } catch {} postMessage({ t: "persist", req: m.req, ok }); return; }
     if (m.t === "import") {
       const job = importing.then(async () => {
+        let tmp = null;
         try {
-          const meta = await importFile(m.req, m.file);
+          cancelImport = false;
+          let file = m.file, opts = {};
+          if (m.url) {
+            postMessage({ t: "progress", req: m.req, name: m.name, phase: "download", frac: 0, bytes: 0, total: 0 });
+            const d = await download(m.req, m.url, m.name);
+            tmp = d.tmpName;
+            file = d.file;
+            const ext = m.ext || CT_EXT[d.type] || "";
+            opts = { name: m.name + (ext && !m.name.toLowerCase().endsWith("." + ext) ? "." + ext : ""), ext, source: m.source };
+          }
+          const meta = await importFile(m.req, file, opts);
           const r = await openDoc(meta.id);
           postMessage({ t: "opened", req: m.req, meta: r.meta, peaks: r.peaks, bands: r.bands }, [r.peaks.buffer, r.bands.buffer]);
-        } catch (err) { postMessage({ t: "error", req: m.req, msg: errText(err), name: m.file.name }); }
+        } catch (err) { postMessage({ t: "error", req: m.req, msg: errText(err), name: m.file ? m.file.name : m.name }); }
+        if (tmp) { try { await (await tmpDir()).removeEntry(tmp); } catch {} }
       });
       importing = job;
       return;
