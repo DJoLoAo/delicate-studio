@@ -97,6 +97,7 @@ pub mod loud;
 pub mod meta;
 pub mod midi;
 pub mod nr;
+pub mod onset;
 pub mod restore;
 pub mod rs;
 pub mod sheal;
@@ -858,6 +859,77 @@ mod wasm {
     #[unsafe(no_mangle)]
     pub extern "C" fn md_close() {
         unsafe { *std::ptr::addr_of_mut!(MD) = None; }
+    }
+
+    static mut ON: Option<crate::onset::Onset> = None;
+    static mut ON_INFO: [u32; 5] = [0; 5];
+
+    fn onm() -> Option<&'static mut crate::onset::Onset> {
+        unsafe { (*std::ptr::addr_of_mut!(ON)).as_mut() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn on_open(ch: u32, sr: u32) -> i32 {
+        if ch == 0 || ch > 8 || sr < 8000 || sr > 768000 {
+            return fail("transient settings out of range".into());
+        }
+        unsafe { *std::ptr::addr_of_mut!(ON) = Some(crate::onset::Onset::new(ch as usize, sr as usize)); }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn on_in(m: u32, ch: u32) -> *mut f32 {
+        match onm() {
+            Some(d) => {
+                d.stage.resize((m * ch) as usize, 0.0);
+                d.stage.as_mut_ptr()
+            }
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn on_feed(m: u32) -> i32 {
+        match onm() {
+            Some(d) => {
+                d.feed_staged(m as usize);
+                0
+            }
+            None => fail("transient detector is not open".into()),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn on_finish() -> i32 {
+        let Some(d) = onm() else { return fail("transient detector is not open".into()) };
+        d.finish();
+        unsafe { *std::ptr::addr_of_mut!(ON_INFO) = [d.n() as u32, d.hop() as u32, d.blk() as u32, d.flux.len() as u32, d.env.len() as u32]; }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn on_info() -> *const u32 {
+        unsafe { (*std::ptr::addr_of!(ON_INFO)).as_ptr() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn on_flux() -> *const f32 {
+        onm().map(|d| d.flux.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn on_env() -> *const f32 {
+        onm().map(|d| d.env.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn on_envr() -> *const f32 {
+        onm().map(|d| d.envr.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn on_close() {
+        unsafe { *std::ptr::addr_of_mut!(ON) = None; }
     }
 
     static mut SH: Option<crate::sheal::Heal> = None;

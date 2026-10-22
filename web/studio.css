@@ -114,7 +114,7 @@ button,a{touch-action:manipulation}
 
 #ed{flex:1;min-height:0;display:flex;flex-direction:column}
 .edhead{flex:none;display:flex;align-items:center;gap:calc(8px*var(--fs));padding:calc(6px*var(--fs)) calc(10px*var(--fs)) calc(6px*var(--fs)) calc(14px*var(--fs));border-bottom:1px solid var(--border);background:var(--bg2);flex-wrap:wrap}
-.docmeta{display:flex;align-items:baseline;gap:calc(10px*var(--fs));min-width:0;flex:1 1 calc(220px*var(--fs))}
+.docmeta{display:flex;align-items:baseline;gap:calc(10px*var(--fs));min-width:0;flex:1 1 calc(150px*var(--fs))}
 .docmeta b{font:400 calc(18px*var(--fs)) var(--serif);color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .docmeta span{font-size:calc(10px*var(--fs));color:var(--gray);white-space:nowrap}
 .seg{display:flex;border:1px solid var(--border)}

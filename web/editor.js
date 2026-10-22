@@ -66,6 +66,7 @@ ed.worker.onmessage = e => {
   if (m.t === "mprog") { mdProg(m); return; }
   if (m.t === "tprog") { trProg(m); return; }
   if (m.t === "pprog") { pxProg(m); return; }
+  if (m.t === "tnprog") { tnProg(m); return; }
   if (m.t === "aprog") { nrAutoProg(m); return; }
   if (m.t === "spectile") { spTile(m); return; }
   if (m.t === "specerr") { spErr(m); return; }
@@ -352,7 +353,7 @@ async function pumpRaw() {
 
 function drawWave() {
   const cv = $("wv"), dpr = canvasFit(cv), g = cv.getContext("2d");
-  const key = [THS.rev, cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.chans.join(), ed.raw ? ed.raw.id + ed.raw.ver + ":" + ed.raw.start + ":" + ed.raw.count : "", ed.doc.id, ed.ver, pxKey()].join("|");
+  const key = [THS.rev, cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.chans.join(), ed.raw ? ed.raw.id + ed.raw.ver + ":" + ed.raw.start + ":" + ed.raw.count : "", ed.doc.id, ed.ver, pxKey(), penKey(), tnDrawKey()].join("|");
   if (!ed.waveBuf) ed.waveBuf = document.createElement("canvas");
   if (key !== ed.waveKey) {
     ed.waveBuf.width = cv.width;
@@ -385,10 +386,10 @@ function drawWaveBase(g, W, H, dpr) {
     for (const lv of [0.5, -0.5]) { const y = mid - amp(lv) * A; g.fillRect(0, Math.round(y), W, 1); }
     g.fillStyle = tw(0.16);
     g.fillRect(0, Math.round(mid), W, 1);
-    const visA = start, visB = start + W * sppD;
+    const visA = start, visB = start + W * sppD, r0 = Math.floor(visA), r1 = Math.min(doc.frames, Math.ceil(visB));
     const useRaw = sppD < BUCKET;
-    if (useRaw && !rawCovers(Math.floor(visA), Math.min(doc.frames, Math.ceil(visB)))) wantRaw(visA, visB);
-    const raw = useRaw && rawCovers(Math.floor(visA), Math.min(doc.frames, Math.ceil(visB))) ? ed.raw : null;
+    if (useRaw && !rawCovers(r0, r1)) wantRaw(visA, visB);
+    const raw = useRaw ? (rawCovers(r0, r1) ? ed.raw : penRaw(r0, r1)) : null, po = penOver(c);
     if (raw && sppD < 1) {
       const d = raw.data, base = c * raw.count;
       const i0 = Math.max(0, Math.floor(visA) - 1), i1 = Math.min(doc.frames - 1, Math.ceil(visB) + 1);
@@ -398,14 +399,14 @@ function drawWaveBase(g, W, H, dpr) {
       g.lineWidth = Math.max(1, dpr * 1.2);
       g.beginPath();
       for (let i = i0; i <= i1; i++) {
-        const v = d[base + i - raw.start], x = (i - start) / sppD, y = mid - amp(fz ? v * fz(i) : v) * A;
+        const v = penVal(po, i, d[base + i - raw.start]), x = (i - start) / sppD, y = mid - amp(fz ? v * fz(i) : v) * A;
         if (i === i0) g.moveTo(x, y); else g.lineTo(x, y);
       }
       g.stroke();
       if (1 / sppD >= 6) {
         g.fillStyle = g.strokeStyle;
         for (let i = i0; i <= i1; i++) {
-          const v = d[base + i - raw.start], x = (i - start) / sppD, y = mid - amp(fz ? v * fz(i) : v) * A;
+          const v = penVal(po, i, d[base + i - raw.start]), x = (i - start) / sppD, y = mid - amp(fz ? v * fz(i) : v) * A;
           g.fillRect(x - 1.5 * dpr, y - 1.5 * dpr, 3 * dpr, 3 * dpr);
         }
       }
@@ -421,7 +422,7 @@ function drawWaveBase(g, W, H, dpr) {
         const d = raw.data, base = c * raw.count;
         const a = Math.max(raw.start, Math.floor(s0)), b = Math.min(raw.start + raw.count, Math.max(a + 1, Math.ceil(s1)));
         mn = Infinity; mx = -Infinity;
-        for (let i = a; i < b; i++) { const v = d[base + i - raw.start]; if (v < mn) mn = v; if (v > mx) mx = v; }
+        for (let i = a; i < b; i++) { const v = penVal(po, i, d[base + i - raw.start]); if (v < mn) mn = v; if (v > mx) mx = v; }
         colPeak(c, a, b, ac);
       } else {
         if (!colPeak(c, s0, s1, ac) || ac.mx === -Infinity) continue;
@@ -446,6 +447,7 @@ function drawWaveBase(g, W, H, dpr) {
       for (let y = 0; y < H; y += 7 * dpr) g.fillRect(x, y, Math.max(1, dpr), 4 * dpr);
     }
   }
+  tnDraw(g, W, H, dpr);
   const cx = Math.round(xOf(ed.cursor) * dpr);
   if (cx >= 0 && cx <= W) { g.fillStyle = TH.gold; g.fillRect(cx, 0, Math.max(1, dpr), H); }
 }
@@ -641,6 +643,8 @@ function updatePanel() {
   document.querySelectorAll("#scaleSeg button").forEach(btn => btn.classList.toggle("on", btn.dataset.v === ed.scale));
   document.querySelectorAll("#colourSeg button").forEach(btn => btn.classList.toggle("on", btn.dataset.v === ed.colour));
   document.querySelectorAll("#specSeg button").forEach(btn => btn.classList.toggle("on", SPV.on));
+  $("penBtn").classList.toggle("on", pen.on);
+  $("tnBtn").classList.toggle("on", tn.on);
   editButtons();
   rpTick();
 }
@@ -674,6 +678,7 @@ function docInfoText() {
 }
 
 function applyState(st) {
+  const prevIdx = ed.histIdx;
   for (const a of st.allocs) ed.srcs[a.id] = { levels: allocPyr(a) };
   ed.clip = { lists: st.lists, cum: st.lists.map(cumOf), edges: st.edges, len: st.len };
   ed.doc.frames = st.len;
@@ -696,6 +701,7 @@ function applyState(st) {
   ldAfterEdit();
   mdAfterEdit();
   trAfterEdit();
+  tnAfterEdit(prevIdx);
 }
 
 function showOpened(r) {
@@ -760,6 +766,7 @@ function closeDoc() {
   ed.marks = [];
   ed.markSel = null;
   ed.zoomBack = null;
+  tnClose();
   spDoc();
   closeHist();
   closeLocs();
@@ -1123,7 +1130,7 @@ function drawMeters() {
   if (active || ed.play.on) ed.meterRaf = requestAnimationFrame(drawMeters);
 }
 
-const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", repair: "Repair", nr: "Noise Reduction", hum: "DeHummer", declip: "DeClipper", spot: "Spot Healing", spheal: "Spectral heal", spdel: "Remove frequencies", loud: "Match loudness", norm: "Normalize", amp: "Amplify" };
+const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", pencil: "Pencil", repair: "Repair", nr: "Noise Reduction", hum: "DeHummer", declip: "DeClipper", spot: "Spot Healing", spheal: "Spectral heal", spdel: "Remove frequencies", loud: "Match loudness", norm: "Normalize", amp: "Amplify" };
 
 function selOn() { return ed.sel.b > ed.sel.a; }
 
@@ -1454,8 +1461,8 @@ function wireWave(cv) {
     if (d) { ed.view.start += d * ed.view.spp * 0.5; clampView(); dragTo(lastX); }
   };
   const dragTo = x => {
-    const f = Math.max(0, Math.min(ed.doc.frames, frameAt(Math.max(0, Math.min(viewWidth(), x)))));
     const dg = ed.dragging;
+    const f = tnSnap(Math.max(0, Math.min(ed.doc.frames, frameAt(Math.max(0, Math.min(viewWidth(), x))))), dg.free);
     if (dg.mode === "a") { ed.sel.a = f; if (ed.sel.a > ed.sel.b) { [ed.sel.a, ed.sel.b] = [ed.sel.b, ed.sel.a]; dg.mode = "b"; } }
     else if (dg.mode === "b") { ed.sel.b = f; if (ed.sel.b < ed.sel.a) { [ed.sel.a, ed.sel.b] = [ed.sel.b, ed.sel.a]; dg.mode = "a"; } }
     else { ed.sel = { a: Math.min(dg.anchor, f), b: Math.max(dg.anchor, f) }; }
@@ -1464,6 +1471,7 @@ function wireWave(cv) {
   const cancelPress = () => { if (press) { clearTimeout(press.timer); press = null; } };
   cv.addEventListener("pointerdown", e => {
     if (!ed.doc || e.button > 0 || (IS_MAC && e.ctrlKey) || (spec && SPV.tool !== "time")) return;
+    if (!spec && penDown(e, cv, local(e))) return;
     if (!spec && pxDown(e, cv, local(e))) return;
     e.preventDefault();
     cv.setPointerCapture(e.pointerId);
@@ -1483,27 +1491,29 @@ function wireWave(cv) {
         waveMenuAt(pr.x, pr.y, true, pr.pid, spec);
       }, 550) };
     }
-    const f = Math.max(0, Math.min(ed.doc.frames, frameAt(p.x)));
+    const f = tnSnap(Math.max(0, Math.min(ed.doc.frames, frameAt(p.x))), e.altKey);
     const selOn = ed.sel.b > ed.sel.a;
     const nearA = selOn && Math.abs(xOf(ed.sel.a) - p.x) < 6, nearB = selOn && Math.abs(xOf(ed.sel.b) - p.x) < 6;
     if (e.shiftKey) {
       const base = selOn ? (Math.abs(f - ed.sel.a) < Math.abs(f - ed.sel.b) ? ed.sel.b : ed.sel.a) : ed.cursor;
-      ed.dragging = { mode: "new", anchor: base, x0: p.x, moved: true };
+      ed.dragging = { mode: "new", anchor: base, x0: p.x, moved: true, free: e.altKey };
       dragTo(p.x);
     } else if (nearA || nearB) {
-      ed.dragging = { mode: nearA ? "a" : "b", x0: p.x, moved: true };
+      ed.dragging = { mode: nearA ? "a" : "b", x0: p.x, moved: true, free: e.altKey };
     } else {
-      ed.dragging = { mode: "new", anchor: f, x0: p.x, moved: false };
+      ed.dragging = { mode: "new", anchor: f, x0: p.x, moved: false, free: e.altKey };
     }
     autoTimer = setInterval(auto, 30);
   });
   cv.addEventListener("pointermove", e => {
     if (!ed.doc) return;
     const p = local(e);
+    if (pen.stroke) { penMove(e, cv); return; }
     if (px.drag) { pxMove(e, p); return; }
     if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) cancelPress();
     if (!ed.dragging) {
       if (spec && SPV.tool !== "time") return;
+      if (!spec && pen.on) { cv.style.cursor = penReady() ? "crosshair" : "zoom-in"; return; }
       if (!spec) {
         const h = pxHit(p);
         if (h !== px.hover) { px.hover = h; redraw(); }
@@ -1514,12 +1524,14 @@ function wireWave(cv) {
       return;
     }
     lastX = p.x;
+    ed.dragging.free = e.altKey;
     if (!ed.dragging.moved && Math.abs(p.x - ed.dragging.x0) < 3) return;
     ed.dragging.moved = true;
     dragTo(p.x);
   });
   const end = e => {
     cancelPress();
+    if (pen.stroke) { if (e.type === "pointercancel") penCancel(); else penUp(); return; }
     if (px.drag) { if (e.type === "pointercancel") pxCancel(); else pxUp(); return; }
     if (!ed.dragging) return;
     clearInterval(autoTimer);
@@ -1773,6 +1785,8 @@ function wireUi() {
   wireMidi();
   wireTracks();
   wirePx();
+  wirePen();
+  wireTn();
   wireTags();
   wireAlbum();
   wireRec();

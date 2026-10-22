@@ -40,7 +40,7 @@ function keyLabel(combo) {
   const parts = pre ? pre.slice(0, -1).split("+") : [];
   let key = combo.slice(pre.length) || "+";
   if (key.startsWith("Num") && key.length > 3) key = "Num " + key.slice(3);
-  else if (IS_MAC) key = { Enter: "↩", Backspace: "⌫", Delete: "⌦" }[key] || KEY_NAME[key] || key;
+  else if (IS_MAC) key = { Enter: "↩", Backspace: "⌫", Delete: "⌦", Tab: "⇥" }[key] || KEY_NAME[key] || key;
   else key = { Delete: "Del" }[key] || KEY_NAME[key] || key;
   if (IS_MAC) return parts.map(p => KEY_GLYPH_MAC[p] || p).join("") + key;
   if (["Del", "Space", "Home", "End"].includes(key)) key = t(key);
@@ -56,6 +56,8 @@ const CMDS = [
   { id: "prevMark", g: "Transport", label: "Previous marker", run: () => stepTo(-1, false), doc: true, kw: "location jump back" },
   { id: "nextMark", g: "Transport", label: "Next marker", run: () => stepTo(1, false), doc: true, kw: "location jump forward" },
   { id: "prevEdge", g: "Transport", label: "Cursor to the previous marker or selection edge", run: () => stepTo(-1, true), doc: true },
+  { id: "nextTransient", g: "Transport", label: "Next transient", run: () => tnStep(1, false), doc: true, when: () => tn.on, kw: "tab onset beat hit attack drum jump forward" },
+  { id: "prevTransient", g: "Transport", label: "Previous transient", run: () => tnStep(-1, false), doc: true, when: () => tn.on, kw: "tab onset beat hit attack drum jump back" },
   { id: "nextEdge", g: "Transport", label: "Cursor to the next marker or selection edge", run: () => stepTo(1, true), doc: true },
   { id: "zoomIn", g: "View", label: "Zoom in", run: () => zoomAt(0.5), doc: true },
   { id: "zoomOut", g: "View", label: "Zoom out", run: () => zoomAt(2), doc: true },
@@ -72,6 +74,7 @@ const CMDS = [
   { id: "zs3", g: "View", label: "Store zoom preset 3", labelT: () => t("Store zoom preset") + " 3", run: () => zpStore(2), doc: true },
   { id: "zs4", g: "View", label: "Store zoom preset 4", labelT: () => t("Store zoom preset") + " 4", run: () => zpStore(3), doc: true },
   { id: "zs5", g: "View", label: "Store zoom preset 5", labelT: () => t("Store zoom preset") + " 5", run: () => zpStore(4), doc: true },
+  { id: "transients", g: "View", label: "Transient markers on / off", run: () => tnToggle(), doc: true, kw: "transients onsets beats hits attacks drums detect snap tab" },
   { id: "scale", g: "View", label: "Linear / dB amplitude", run: () => scaleToggle(), doc: true },
   { id: "colour", g: "View", label: "Spectral / plain colour", run: () => colourToggle(), doc: true },
   { id: "spec", g: "View", label: "Spectrogram on / off", run: () => spToggle(), doc: true, kw: "spectral frequency display spectrum view frequencies" },
@@ -80,6 +83,8 @@ const CMDS = [
   { id: "deselect", g: "Selection", label: "Clear the selection", run: () => deselect(), doc: true },
   { id: "chanL", g: "Selection", label: "Left channel only / both", run: () => chanOnly(0), doc: true, when: () => ed.doc.channels > 1 },
   { id: "chanR", g: "Selection", label: "Right channel only / both", run: () => chanOnly(1), doc: true, when: () => ed.doc.channels > 1 },
+  { id: "selNextTransient", g: "Selection", label: "Extend the selection to the next transient", run: () => tnStep(1, true), doc: true, when: () => tn.on, kw: "onset beat hit attack tab" },
+  { id: "selPrevTransient", g: "Selection", label: "Extend the selection to the previous transient", run: () => tnStep(-1, true), doc: true, when: () => tn.on, kw: "onset beat hit attack tab" },
   { id: "zcIn", g: "Selection", label: "Selection to zero crossings, inward", run: () => adjustZero("in"), doc: true, when: () => selOn() },
   { id: "zcOut", g: "Selection", label: "Selection to zero crossings, outward", run: () => adjustZero("out"), doc: true, when: () => selOn() },
   { id: "undo", g: "Edit", label: "Undo", run: () => undo(), doc: true, when: () => ed.histIdx > 0 },
@@ -115,6 +120,7 @@ const CMDS = [
   { id: "hum", g: "Repair", label: "DeHummer…", run: () => toggleHum(), doc: true, kw: "dehum hum buzz mains 50 60 hz ground loop notch" },
   { id: "nr", g: "Repair", label: "Noise Reduction…", run: () => toggleNr(), doc: true, kw: "denoise noise reduction hiss surface noise vinyl print process" },
   { id: "nrCap", g: "Repair", label: "Capture noise print", run: () => nrCapture(), doc: true, when: () => selOn(), kw: "noise print profile learn denoise" },
+  { id: "pencil", g: "Repair", label: "Pencil: redraw samples", run: () => penToggle(), doc: true, kw: "pencil pen draw redraw samples click waveform hand repair" },
   { id: "heal", g: "Repair", label: "Heal the selection", run: () => spSelLive() ? spEdit("spheal", SPV.sel.shapes, "sel") : edit("heal"), doc: true, when: () => selOn(), kw: "automatic heal repair click pop fix interpolate spectral" },
   { id: "toolTime", g: "Repair", label: "Time selection tool", run: () => spSetTool("time"), doc: true, when: () => SPV.on, kw: "spectrogram select time" },
   { id: "toolRect", g: "Repair", label: "Marquee selection tool", run: () => spSetTool("rect", true), doc: true, kw: "spectrogram spectral rectangle frequency select" },
@@ -153,7 +159,7 @@ const BASE_KEYS = {
   selAll: ["Mod+A"], deselect: ["Escape"],
   undo: ["Mod+Z"], redo: ["Mod+Shift+Z", "Mod+Y"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
   delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"], heal: ["Mod+U"], nrCap: ["Shift+P"],
-  markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"], spec: ["Shift+D"], toolRect: ["E"], toolLasso: ["D"], toolBrush: ["B"],
+  markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"], spec: ["Shift+D"], toolRect: ["E"], toolLasso: ["D"], toolBrush: ["B"], pencil: ["P"], transients: ["Shift+T"], nextTransient: ["Tab"], prevTransient: ["Shift+Tab"],
   open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"], rec: ["Shift+Space"]
 };
 
@@ -179,7 +185,7 @@ const KEYMAPS = {
       zp1: [{ mac: "Ctrl+1", win: { k: "1", native: "Win+1" } }, "1"], zp2: [{ mac: "Ctrl+2", win: { k: "2", native: "Win+2" } }, "2"], zp3: [{ mac: "Ctrl+3", win: { k: "3", native: "Win+3" } }, "3"], zp4: [{ mac: "Ctrl+4", win: { k: "4", native: "Win+4" } }, "4"], zp5: [{ mac: "Ctrl+5", win: { k: "5", native: "Win+5" } }, "5"],
       undo: ["Mod+Z", "Z"], redo: ["Mod+Shift+Z", "Shift+Z"], cut: ["Mod+X", "X"], copy: ["Mod+C", "C"], paste: ["Mod+V", "V"],
       delete: ["Delete", "Backspace"], silence: ["Mod+B"], crop: [{ k: "Shift+T", native: "Mod+T" }], insert: ["Mod+Shift+E"], selAll: ["Mod+A"],
-      locAdd: ["NumEnter"], markAdd: [{ mac: "Mod+Enter" }], locs: ["Mod+Num5"], open: ["Mod+O"], export: ["Mod+Alt+B"], rec: ["F12", "Num3", { k: "Shift+Space", native: "Mod+Space" }]
+      locAdd: ["NumEnter"], markAdd: [{ mac: "Mod+Enter" }], locs: ["Mod+Num5"], open: ["Mod+O"], export: ["Mod+Alt+B"], pencil: ["F10"], nextTransient: ["Tab"], prevTransient: [{ mac: "Alt+Tab" }], selNextTransient: ["Shift+Tab"], selPrevTransient: [{ mac: "Alt+Shift+Tab" }], rec: ["F12", "Num3", { k: "Shift+Space", native: "Mod+Space" }]
     }
   },
   reaper: {
@@ -372,6 +378,7 @@ function onKey(e) {
   if (!combo) return;
   if (kb.seq && performance.now() - kb.seq.t > 4000) { kb.seq = null; flash(""); }
   if (kb.seq) { e.preventDefault(); seqKey(combo); return; }
+  if (combo === "Escape" && pen.stroke) { e.preventDefault(); penCancel(); return; }
   if (combo === "Escape" && closePopovers()) { e.preventDefault(); return; }
   const map = keymap(), sym = symbolCombo(e);
   const id = map.byKey.get(combo) || (sym && sym !== combo ? map.byKey.get(sym) : undefined);
@@ -381,6 +388,10 @@ function onKey(e) {
   }
   const c = CMD[id];
   if (c.doc && !ed.doc) return;
+  if (/(^|\+)Tab$/.test(combo)) {
+    const a = document.activeElement;
+    if ((a && a !== document.body && a.tagName !== "CANVAS") || !cmdEnabled(c)) return;
+  }
   e.preventDefault();
   runCmd(c);
 }
@@ -659,6 +670,7 @@ function waveMenuAt(clientX, clientY, touch, pid, spec) {
     ctxCmd("selAll"), ctxCmd("deselect"), ctxCmd("zoomSel"), ctxCmd("zcIn"), ctxCmd("zcOut")
   ];
   if (stereo) items.push(ctxCmd("chanL"), ctxCmd("chanR"));
+  if (!spec) items.push("-", ctxCmd("pencil", pen.on ? t("Pencil off") : t("Pencil: redraw samples")), ctxCmd("transients", tn.on ? t("Hide transient markers") : t("Show transient markers")));
   items.push("-", ctxCmd("markAdd", selOn() ? t("Add a range from the selection") : t("Add marker")), ctxCmd("locAdd"), ctxCmd("cueImport"));
   if (spec && spSelLive()) items.splice(1, 0, "-", ctxCmd("heal", t("Heal the spectral selection")), ctxCmd("delete", t("Remove the selected frequencies")));
   if (spec) items.push("-", ctxCmd("toolTime"), ctxCmd("toolRect"), ctxCmd("toolLasso"), ctxCmd("toolBrush"), "-", ctxCmd("specScale", SPV.log ? t("Linear frequency scale") : t("Logarithmic frequency scale")), ctxCmd("spec", t("Hide the spectrogram")));

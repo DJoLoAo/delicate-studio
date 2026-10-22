@@ -1,4 +1,4 @@
-importScripts("/edit.js", "/trcore.js", "/tags.js");
+importScripts("/edit.js", "/trcore.js", "/tags.js", "/onset.js");
 
 const BLOCK = 65536;
 const BUCKET = 256;
@@ -652,6 +652,23 @@ async function applyEdit(m) {
       after = { a, b, cursor: a };
       break;
     }
+    case "pencil": {
+      const k = clampI(m.pc, 0, ch - 1), pa = clampI(m.pa, 0, F - 1);
+      const src = m.data instanceof Float32Array ? m.data : new Float32Array(Array.isArray(m.data) ? m.data : []);
+      const n = Math.min(src.length, F - pa, sr * 60);
+      if (n < 1) throw new Error("nothing");
+      const d = new Float32Array(n);
+      for (let i = 0; i < n; i++) { const v = src[i]; d[i] = Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0; }
+      const w = allocBegin();
+      allocPush(w, d, n);
+      const id = allocEnd(w);
+      const spans = new Array(ch).fill(null);
+      spans[k] = [[pa, pa + n, [[id, 0, 0, n]]]];
+      lists = opPatch(c.lists, spans);
+      info = { op: "pencil", a: pa, b: pa + n, n, ch: ch > 1 ? chanLabel(chans.map((_, i) => i === k)) : null };
+      after = { a: before.a, b: before.b, cursor: before.cursor };
+      break;
+    }
     case "spheal":
     case "spdel": {
       const r = await shApply(c, m);
@@ -774,6 +791,8 @@ async function closeCur() {
   NR.auto = null;
   if (MDJ.job) MDJ.job.cancel = true;
   if (PX.job) PX.job.cancel = true;
+  if (TN.job) TN.job.cancel = true;
+  TN.feat = null;
   MDL.mode = "off";
   MDL.notes = [];
   if (c.saving) { try { await c.saving; } catch {} }
@@ -3041,6 +3060,56 @@ function mdSynth(p0, run, tmp, stride) {
 }
 
 const TRJ = { job: null };
+const TN = { job: null, feat: null };
+
+async function tnFeatures(c, m) {
+  if (TN.job) TN.job.cancel = true;
+  const job = { id: m.jobId, cancel: false, last: 0 };
+  TN.job = job;
+  const x = await dspExports(), ch = c.meta.channels, F = c.len, sr = c.meta.sampleRate, lists = c.lists, cum = c.cum;
+  try {
+    if (x.on_open(ch, sr) !== 0) throw new Error(dspError(x));
+    const B = 65536, rd = (src, cc, f, k, out, off) => readSrcOf(c, src, cc, f, k, out, off);
+    for (let s = 0; s < F; s += B) {
+      const k = Math.min(B, F - s);
+      const ptr = x.on_in(k, ch);
+      const inb = new Float32Array(x.memory.buffer, ptr, k * ch);
+      for (let ci = 0; ci < ch; ci++) readList(lists[ci], cum[ci], s, k, inb, ci * k, rd);
+      if (x.on_feed(k) !== 0) throw new Error(dspError(x));
+      const now = performance.now();
+      if (now - job.last > 120) { job.last = now; postMessage({ t: "tnprog", id: job.id, frac: (s + k) / F }); await new Promise(r => setTimeout(r, 0)); }
+      if (job.cancel || cur !== c) throw new Error("cancelled");
+    }
+    if (c.lists !== lists) throw new Error("stale");
+    if (x.on_finish() !== 0) throw new Error(dspError(x));
+    const ip = x.on_info();
+    const [n, hop, blk, nf, ne] = Array.from(new Uint32Array(x.memory.buffer, ip, 5));
+    const flux = new Float32Array(nf), env = new Float32Array(ne), envr = new Float32Array(ne);
+    if (nf) flux.set(new Float32Array(x.memory.buffer, x.on_flux(), nf));
+    if (ne) { env.set(new Float32Array(x.memory.buffer, x.on_env(), ne)); envr.set(new Float32Array(x.memory.buffer, x.on_envr(), ne)); }
+    return { c, lists, cum, flux, env, envr, n, hop, blk, sr, len: F };
+  } finally {
+    if (TN.job === job) { TN.job = null; x.on_close(); }
+  }
+}
+
+async function tnScan(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  let f = TN.feat && TN.feat.c === c && TN.feat.lists === c.lists ? TN.feat : null;
+  if (!f) { TN.feat = null; f = TN.feat = await tnFeatures(c, m); }
+  const ch = c.meta.channels, tmp = new Float32Array(4096), rd = (src, cc, q, k, out, off) => readSrcOf(c, src, cc, q, k, out, off);
+  const read = (s0, cnt) => {
+    const out = new Float32Array(cnt), buf = cnt <= tmp.length ? tmp : new Float32Array(cnt);
+    for (let ci = 0; ci < ch; ci++) {
+      readList(f.lists[ci], f.cum[ci], s0, cnt, buf, 0, rd);
+      for (let i = 0; i < cnt; i++) out[i] += buf[i] / ch;
+    }
+    return out;
+  };
+  const r = onFind(f, read, m.level);
+  return { t: "transients", id: c.meta.id, len: f.len, pos: r.pos, str: r.str };
+}
 
 async function trScan(m) {
   const c = cur;
@@ -3328,6 +3397,12 @@ async function handle(m) {
     return;
   }
   if (m.t === "trcancel") { if (TRJ.job) TRJ.job.cancel = true; return; }
+  if (m.t === "tnscan") {
+    try { postMessage(Object.assign({ req: m.req }, await tnScan(m))); }
+    catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
+    return;
+  }
+  if (m.t === "tncancel") { if (TN.job) TN.job.cancel = true; return; }
   if (m.t === "mdlisten") { MDL.mode = ["midi", "both"].includes(m.mode) ? m.mode : "off"; MDL.notes = MDL.mode === "off" ? [] : mdClean(m.notes); ringFlush(); return; }
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
   if (m.t === "proc") { postMessage(Object.assign({ req: m.req }, await pxApply(m))); return; }
