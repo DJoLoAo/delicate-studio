@@ -751,6 +751,9 @@ async function closeCur() {
   FX.mode = "off";
   FX.pv = null;
   NR.auto = null;
+  if (MDJ.job) MDJ.job.cancel = true;
+  MDL.mode = "off";
+  MDL.notes = [];
   if (c.saving) { try { await c.saving; } catch {} }
   if (clip && !clip.file && clip.doc === c.meta.id) { try { await materializeClip(); } catch { clip = null; } }
   if (c.busy > 0) lingering.set(c.meta.id, c); else closeHandles(c);
@@ -999,6 +1002,7 @@ function fillRing() {
       readClip(p, run, play.tmp, CHUNK);
       if (FX.mode !== "off") fxView(p, run, play.tmp, CHUNK);
       else if (RP.listen !== "off") rpOverlay(p, run, play.tmp, CHUNK);
+      if (MDL.mode !== "off") mdSynth(p, run, play.tmp, CHUNK);
       for (let c = 0; c < ch; c++) {
         const tmpOff = c * CHUNK;
         for (let i = 0; i < run; i++) ring.data[c * R + ((w + done + i) % R)] = play.tmp[tmpOff + i];
@@ -2499,6 +2503,104 @@ async function spTiles(m) {
   }
 }
 
+const MDJ = { job: null };
+const MDL = { mode: "off", notes: [], buf: null };
+
+function mdJob(m, c) {
+  if (MDJ.job) MDJ.job.cancel = true;
+  const job = { id: m.jobId, cancel: false, last: 0 };
+  MDJ.job = job;
+  job.tick = async frac => {
+    const now = performance.now();
+    if (now - job.last > 120) { job.last = now; postMessage({ t: "mprog", id: job.id, frac: Math.min(1, frac) }); await new Promise(r => setTimeout(r, 0)); }
+    if (job.cancel || cur !== c) throw new Error("cancelled");
+  };
+  job.end = () => { if (MDJ.job === job) MDJ.job = null; };
+  return job;
+}
+
+async function mdScan(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const x = await dspExports(), ch = c.meta.channels, F = c.len;
+  const a = clampI(m.a, 0, F), b = m.b > m.a ? clampI(m.b, 0, F) : F;
+  if (b <= a) throw new Error("nothing");
+  const use = [];
+  for (let k = 0; k < ch; k++) if (!Array.isArray(m.chans) || m.chans[k] !== false) use.push(k);
+  if (!use.length) use.push(0);
+  const num = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
+  const fmin = num(m.fmin, 20, 4000, 63.5), fmax = num(m.fmax, fmin * 1.6, 8000, Math.max(fmin * 1.6, 1076));
+  const job = mdJob(m, c), lists = c.lists, ver = c.ver, n = use.length;
+  try {
+    if (x.md_open(n, c.meta.sampleRate, fmin, fmax) !== 0) throw new Error(dspError(x));
+    const B = 65536, rd = (src, cc, f, k, out, off) => readSrcOf(c, src, cc, f, k, out, off);
+    for (let s = a; s < b; s += B) {
+      const k = Math.min(B, b - s);
+      const p = x.md_in(k, n);
+      const inb = new Float32Array(x.memory.buffer, p, k * n);
+      use.forEach((ci, j) => readList(lists[ci], c.cum[ci], s, k, inb, j * k, rd));
+      if (x.md_feed(k) !== 0) throw new Error(dspError(x));
+      await job.tick(0.9 * (s + k - a) / (b - a));
+    }
+    if (c.lists !== lists) throw new Error("stale");
+    const cnt = x.md_finish(num(m.sens, 0, 1, 0.5), num(m.minLen, 0.01, 2, 0.06), m.follow === false ? 0 : 1);
+    if (cnt < 0) throw new Error(dspError(x));
+    const ip = x.md_info();
+    const info = Array.from(new Float64Array(x.memory.buffer, ip, 4));
+    const np = x.md_notes();
+    const nv = cnt ? Array.from(new Float64Array(x.memory.buffer, np, cnt * 4)) : [];
+    const frames = Math.max(0, Math.round(info[3]));
+    const tp = x.md_track();
+    const track = new Float32Array(frames);
+    if (frames) track.set(new Float32Array(x.memory.buffer, tp, frames));
+    x.md_close();
+    const notes = [];
+    for (let i = 0; i < cnt; i++) notes.push([nv[i * 4], nv[i * 4 + 1], Math.round(nv[i * 4 + 2]), Math.round(nv[i * 4 + 3])]);
+    await job.tick(1);
+    return { t: "midinotes", a, b, ver, notes, track, tuning: info[0], t0: info[1], dt: info[2] };
+  } finally { job.end(); }
+}
+
+function mdClean(list) {
+  const out = [];
+  for (const n of Array.isArray(list) ? list : []) {
+    if (!Array.isArray(n) || n.length < 4) continue;
+    const a = Math.floor(Number(n[0])), b = Math.floor(Number(n[1])), p = Math.round(Number(n[2])), v = Math.round(Number(n[3]));
+    if (!(b > a) || !(p >= 0 && p <= 127)) continue;
+    out.push([a, b, p, Math.max(1, Math.min(127, v || 100))]);
+  }
+  out.sort((x, y) => x[0] - y[0]);
+  return out;
+}
+
+function mdSynth(p0, run, tmp, stride) {
+  const c = cur, ch = c.meta.channels, sr = c.meta.sampleRate, p1 = p0 + run, N = MDL.notes;
+  if (!MDL.buf || MDL.buf.length < run) MDL.buf = new Float32Array(Math.max(run, 8192));
+  const syn = MDL.buf;
+  syn.fill(0, 0, run);
+  const att = Math.max(1, Math.round(sr * 0.006)), rel = Math.max(1, Math.round(sr * 0.04));
+  let lo = 0, hi = N.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (N[mid][1] + rel <= p0) lo = mid + 1; else hi = mid; }
+  for (let j = lo; j < N.length; j++) {
+    const n = N[j];
+    if (n[0] >= p1) break;
+    const w = 2 * Math.PI * 440 * Math.pow(2, (n[2] - 69) / 12) / sr, amp = 0.2 * n[3] / 127;
+    const i0 = Math.max(p0, n[0]), i1 = Math.min(p1, n[1] + rel);
+    for (let i = i0; i < i1; i++) {
+      const t = i - n[0];
+      let e = t < att ? t / att : 1;
+      if (i >= n[1]) e *= 1 - (i - n[1]) / rel;
+      const ph = w * t;
+      syn[i - p0] += amp * e * (Math.sin(ph) + 0.35 * Math.sin(2 * ph) + 0.12 * Math.sin(3 * ph));
+    }
+  }
+  const only = MDL.mode === "midi";
+  for (let k = 0; k < ch; k++) {
+    const o = k * stride;
+    for (let i = 0; i < run; i++) tmp[o + i] = only ? syn[i] : tmp[o + i] * 0.6 + syn[i];
+  }
+}
+
 const LD = { job: null };
 
 function ldStatsOut(x) {
@@ -2729,6 +2831,13 @@ async function handle(m) {
     return;
   }
   if (m.t === "ldcancel") { if (LD.job) LD.job.cancel = true; return; }
+  if (m.t === "midiscan") {
+    try { postMessage(Object.assign({ req: m.req }, await mdScan(m))); }
+    catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
+    return;
+  }
+  if (m.t === "mdcancel") { if (MDJ.job) MDJ.job.cancel = true; return; }
+  if (m.t === "mdlisten") { MDL.mode = ["midi", "both"].includes(m.mode) ? m.mode : "off"; MDL.notes = MDL.mode === "off" ? [] : mdClean(m.notes); ringFlush(); return; }
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
   if (m.t === "fxcancel") { if (FX.job) FX.job.cancel = true; return; }
   if (m.t === "adjust") { postMessage(Object.assign({ req: m.req }, await enqueue(() => adjustSel(m)))); return; }

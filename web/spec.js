@@ -221,7 +221,7 @@ function drawSpec() {
   }
   const marks = shownMarks().map(m => m.a + ":" + (m.kind === "range" ? m.b : "")).join(",");
   if (SPV.sel && (SPV.sel.a !== ed.sel.a || SPV.sel.b !== ed.sel.b)) { SPV.sel = null; SPV.sver++; }
-  const bkey = [SPV.lkey, ed.sel.a, ed.sel.b, ed.cursor, ed.chans.join(), marks, SPV.err, SPV.sver, SPV.log].join("|");
+  const bkey = [SPV.lkey, ed.sel.a, ed.sel.b, ed.cursor, ed.chans.join(), marks, SPV.err, SPV.sver, SPV.log, md.rev, ed.ver].join("|");
   if (bkey !== SPV.bkey) {
     const B = SPV.buf || (SPV.buf = document.createElement("canvas"));
     B.width = W;
@@ -229,6 +229,7 @@ function drawSpec() {
     const bg = B.getContext("2d");
     bg.drawImage(SPV.layers[0], 0, 0);
     spOverlay(bg, G);
+    mdOverlay(bg, G);
     SPV.bkey = bkey;
   }
   g.drawImage(SPV.buf, 0, 0);

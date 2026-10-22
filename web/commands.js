@@ -93,6 +93,7 @@ const CMDS = [
   { id: "insert", g: "Edit", label: "Insert silence…", run: () => insertSilenceDlg(), doc: true },
   { id: "hist", g: "Edit", label: "History", run: () => toggleHist(), doc: true, kw: "undo list steps" },
   { id: "loud", g: "Edit", label: "Loudness panel", run: () => toggleLoud(), doc: true, kw: "lufs loudness level loud louder volume gain master" },
+  { id: "midi", g: "Edit", label: "Convert to MIDI…", run: () => toggleMidi(), doc: true, kw: "midi melody notes transcribe pitch audio to midi convert piano roll tune" },
   { id: "ldLoud", g: "Edit", label: "Match loudness…", run: () => ldOpen("loud"), doc: true, kw: "lufs loudness target limiter louder master streaming ebu r128" },
   { id: "ldNorm", g: "Edit", label: "Normalize…", run: () => ldOpen("norm"), doc: true, kw: "normalise peak level maximize" },
   { id: "ldAmp", g: "Edit", label: "Amplify…", run: () => ldOpen("amp"), doc: true, kw: "gain volume louder quieter level" },
@@ -611,7 +612,7 @@ function waveMenuAt(clientX, clientY, touch, pid, spec) {
     ctxCmd("undo"), ctxCmd("redo"),
     "-",
     ctxCmd("cut"), ctxCmd("copy"), ctxCmd("paste", selOn() ? t("Paste — replaces the selection") : t("Paste")),
-    ctxCmd("delete"), ctxCmd("silence"), ctxCmd("crop"), ctxCmd("insert"), ctxCmd("heal"), ctxCmd("nrCap"),
+    ctxCmd("delete"), ctxCmd("silence"), ctxCmd("crop"), ctxCmd("insert"), ctxCmd("heal"), ctxCmd("nrCap"), ctxCmd("midi"),
     "-",
     ctxCmd("selAll"), ctxCmd("deselect"), ctxCmd("zoomSel"), ctxCmd("zcIn"), ctxCmd("zcOut")
   ];

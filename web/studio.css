@@ -334,7 +334,7 @@ canvas.ru{height:calc(34px*var(--fs))}
 .xjob .bbar i{display:block;height:100%;background:var(--pink);transition:width .15s}
 .xjob.done .bbar i{background:var(--green)}
 #expBtn{height:calc(26px*var(--fs))}
-#diag{position:absolute;top:calc(8px*var(--fs));right:calc(8px*var(--fs));bottom:calc(8px*var(--fs));width:min(calc(400px*var(--fs)),calc(100% - 16px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:30;padding:calc(10px*var(--fs)) calc(12px*var(--fs));font-size:calc(11px*var(--fs))}
+#diag{position:absolute;top:calc(8px*var(--fs));right:calc(8px*var(--fs));bottom:calc(8px*var(--fs));width:min(calc(440px*var(--fs)),calc(100% - 16px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:30;padding:calc(10px*var(--fs)) calc(12px*var(--fs));font-size:calc(11px*var(--fs))}
 #diag.hidden{display:none}
 #diag .dgfx{margin-left:calc(8px*var(--fs));color:var(--gold);font-size:calc(10px*var(--fs));letter-spacing:.08em;text-transform:uppercase}
 .dgbody{display:flex;flex-direction:column;gap:calc(9px*var(--fs));min-height:0;flex:1;overflow-y:auto}

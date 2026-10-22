@@ -63,6 +63,7 @@ ed.worker.onmessage = e => {
   if (m.t === "dprog") { dgProg(m); return; }
   if (m.t === "nprog") { nrProg(m); humProg(m); ldProg(m); return; }
   if (m.t === "lprog") { ldProg(m); return; }
+  if (m.t === "mprog") { mdProg(m); return; }
   if (m.t === "aprog") { nrAutoProg(m); return; }
   if (m.t === "spectile") { spTile(m); return; }
   if (m.t === "specerr") { spErr(m); return; }
@@ -689,6 +690,7 @@ function applyState(st) {
   dgAfterEdit();
   spAfterEdit();
   ldAfterEdit();
+  mdAfterEdit();
 }
 
 function showOpened(r) {
@@ -737,6 +739,7 @@ function showDoc(meta, peaks, bands, state) {
   nrDoc();
   humDoc();
   ldDoc();
+  mdDoc();
 }
 
 function closeDoc() {
@@ -1739,6 +1742,7 @@ function wireUi() {
   wireNr();
   wireHum();
   wireLoud();
+  wireMidi();
   wireDrop();
 }
 

@@ -91,6 +91,7 @@ impl Decoder {
 pub mod enc;
 pub mod hum;
 pub mod loud;
+pub mod midi;
 pub mod nr;
 pub mod restore;
 pub mod rs;
@@ -767,6 +768,72 @@ mod wasm {
     #[unsafe(no_mangle)]
     pub extern "C" fn lim_gr(slot: u32) -> f32 {
         limm(slot).map(|l| l.gr).unwrap_or(0.0)
+    }
+
+    static mut MD: Option<crate::midi::Melody> = None;
+    static mut MD_INFO: [f64; 4] = [0.0; 4];
+
+    fn mdm() -> Option<&'static mut crate::midi::Melody> {
+        unsafe { (*std::ptr::addr_of_mut!(MD)).as_mut() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn md_open(ch: u32, sr: u32, fmin: f32, fmax: f32) -> i32 {
+        if ch == 0 || ch > 8 || sr < 8000 || !(fmin >= 20.0 && fmax > fmin * 1.5 && fmax <= 8000.0) {
+            return fail("melody settings out of range".into());
+        }
+        unsafe { *std::ptr::addr_of_mut!(MD) = Some(crate::midi::Melody::new(ch as usize, sr as usize, fmin as f64, fmax as f64)); }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn md_in(m: u32, ch: u32) -> *mut f32 {
+        match mdm() {
+            Some(d) => {
+                d.stage.resize((m * ch) as usize, 0.0);
+                d.stage.as_mut_ptr()
+            }
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn md_feed(m: u32) -> i32 {
+        match mdm() {
+            Some(d) => {
+                d.feed_staged(m as usize);
+                0
+            }
+            None => fail("melody tracker is not open".into()),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn md_finish(sens: f32, min_len: f32, follow: u32) -> i32 {
+        let Some(d) = mdm() else { return fail("melody tracker is not open".into()) };
+        let k = d.finish(sens as f64, min_len as f64, follow != 0);
+        unsafe { *std::ptr::addr_of_mut!(MD_INFO) = [d.tuning, d.frame_t0(), d.frame_dt(), d.frames() as f64]; }
+        k as i32
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn md_notes() -> *const f64 {
+        mdm().map(|d| d.notes.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn md_track() -> *const f32 {
+        mdm().map(|d| d.track.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn md_info() -> *const f64 {
+        unsafe { (*std::ptr::addr_of!(MD_INFO)).as_ptr() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn md_close() {
+        unsafe { *std::ptr::addr_of_mut!(MD) = None; }
     }
 
     static mut SH: Option<crate::sheal::Heal> = None;
