@@ -1,6 +1,7 @@
 const XP_RATES = [0, 44100, 48000, 88200, 96000, 176400, 192000];
-const XP_DEFAULT = { range: "all", formats: [{ type: "wav", bits: 24, rate: 0 }], gain: 0, dither: "tpdf", shaping: "off", tplFile: "$name", tplRange: "$index $range", dest: "download", folder: "Studio" };
-const xp = { cfg: null, jobs: [], seq: 0, pics: {}, batches: [] };
+const XP_DEFAULT = { range: "all", formats: [{ type: "wav", bits: 24, rate: 0 }], gain: 0, dither: "tpdf", shaping: "off", tplFile: "$name", tplRange: "$index $range", dest: "download", folder: "Studio", marks: "file", cue: "off" };
+const XP_TRACK = new Set(["TITLE", "TRACKNUMBER", "ISRC", "CUESHEET"]);
+const xp = { cfg: null, jobs: [], seq: 0, pics: {}, batches: [], docPic: undefined, docPicId: null };
 
 function xpLoad() {
   let v = null;
@@ -49,9 +50,16 @@ function xpTitle(p) {
   return g.title || p.range || "";
 }
 
+function xpDocTags() {
+  const d = tgClean(ed.doc.tags || []), src = ed.doc.source || {};
+  if (d.length) return d;
+  return tgClean([["TITLE", src.title], ["ARTIST", src.artist], ["ALBUM", src.album]]);
+}
+
 function xpTags(p) {
-  const g = p.tag, src = ed.doc.source || {}, out = [];
+  const g = p.tag, doc = xpDocTags(), out = [];
   const add = (k, v) => { const s = String(v == null ? "" : v).trim(); if (s && s !== "0") out.push([k, s]); };
+  if (!p.range && !g) return doc;
   if (g) {
     add("TITLE", xpTitle(p));
     add("ARTIST", g.artist);
@@ -68,13 +76,77 @@ function xpTags(p) {
     add("CUSTOM2", g.release);
     add("CUSTOM4", g.country);
     add("CUSTOM5", g.format);
-    return out;
+    add("ISRC", g.isrc);
+  } else {
+    add("TITLE", p.range);
+    if (p.index) add("TRACKNUMBER", p.index);
   }
-  add("TITLE", p.range || src.title);
-  add("ARTIST", src.artist);
-  add("ALBUM", src.album);
-  if (p.index) add("TRACKNUMBER", p.index);
+  const have = new Set(out.map(x => x[0]));
+  if (have.has("ALBUMARTIST")) have.add("ALBUM ARTIST");
+  for (const [k, v] of doc) if (!XP_TRACK.has(k) && !have.has(k)) out.push([k, v]);
   return out;
+}
+
+function xpMarks(p) {
+  const out = [];
+  for (const m of ed.marks || []) {
+    if (m.kind === "point") { if (m.a >= p.a && m.a < p.b) out.push({ a: m.a - p.a, name: m.name || t("Marker") + " " + m.n }); continue; }
+    if (m.kind !== "range") continue;
+    const a = Math.max(p.a, m.a), b = Math.min(p.b, m.b);
+    if (b > a && !(m.a <= p.a && m.b >= p.b)) out.push({ a: a - p.a, b: b - p.a, name: m.name || t("Range") + " " + m.n, isrc: m.tag && m.tag.isrc || "", tag: m.tag || null });
+  }
+  return out.sort((x, y) => x.a - y.a);
+}
+
+function xpCueTracks(marks, sr) {
+  const d = xpDocTags(), ranges = marks.filter(m => m.b > m.a);
+  if (ranges.length) return ranges.map(m => ({ title: xpTitle({ range: m.name, tag: m.tag }), performer: m.tag && m.tag.artist || "", isrc: m.isrc, at: m.a / sr }));
+  const list = marks.map(m => ({ title: m.name, at: m.a / sr }));
+  if (!list.length || list[0].at > 0) list.unshift({ title: tgGet(d, "TITLE"), at: 0 });
+  return list;
+}
+
+function xpCueText(files) {
+  const d = xpDocTags();
+  return tgCueText({ title: tgGet(d, "ALBUM") || tgGet(d, "TITLE"), performer: tgGet(d, "ALBUMARTIST") || tgGet(d, "ARTIST"), genre: tgAll(d, "GENRE").join(", "), date: tgGet(d, "DATE"), catalog: tgGet(d, "BARCODE"), files });
+}
+
+function xpCues(plan) {
+  const c = xp.cfg, sr = ed.doc.sampleRate, out = [];
+  for (const f of c.formats) {
+    const ps = plan.filter(p => p.fmt === f || (p.fmt.type === f.type && p.fmt.bits === f.bits && p.fmt.rate === f.rate));
+    if (!ps.length) continue;
+    if (c.range === "ranges") {
+      let base = xpName(c.tplFile, { fmt: f });
+      if (c.formats.length > 1) base += " (" + f.type + (f.bits === 32 ? "32f" : f.bits) + ")";
+      out.push({ name: base + ".cue", text: xpCueText(ps.map(p => ({ name: p.name, tracks: [{ title: xpTitle(p), performer: p.tag && p.tag.artist || "", isrc: p.tag && p.tag.isrc || "", at: 0 }] }))) });
+    } else for (const p of ps) out.push({ name: p.name.replace(/\.[^.]+$/, "") + ".cue", ext: p.fmt.type, text: xpCueText([{ name: p.name, tracks: xpCueTracks(p.marks, sr) }]) });
+  }
+  const n = {};
+  for (const q of out) n[q.name] = (n[q.name] || 0) + 1;
+  for (const q of out) if (n[q.name] > 1 && q.ext) q.name = q.name.replace(/\.cue$/, "") + " (" + q.ext.toUpperCase() + ").cue";
+  return out;
+}
+
+async function xpDocPic() {
+  if (!ed.doc || !ed.doc.cover) return null;
+  if (xp.docPic !== undefined && xp.docPicId === ed.doc.id) return xp.docPic;
+  let pic = null;
+  try { const r = await call({ t: "tagsget", id: ed.doc.id }); if (r.cover) pic = { mime: r.cover.mime, w: r.cover.w, h: r.cover.h, data: r.cover.data }; } catch {}
+  xp.docPic = pic;
+  xp.docPicId = ed.doc.id;
+  return pic;
+}
+
+function xpBlob(name, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: "application/x-cue" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 function xpName(tpl, ctx) {
@@ -107,7 +179,7 @@ function xpPlan() {
       let name = base + "." + f.type;
       for (let i = 2; used.has(name.toLowerCase()); i++) name = base + " (" + i + ")." + f.type;
       used.add(name.toLowerCase());
-      out.push({ a: p.a, b: p.b, name, fmt: Object.assign({}, f), tags: xpTags(p), pos: p.tag ? p.tag.pos || "" : "", cover: p.tag ? p.tag.cover || "" : "", release: p.tag ? p.tag.release || "" : "" });
+      out.push({ a: p.a, b: p.b, name, fmt: Object.assign({}, f), tags: xpTags(p), pos: p.tag ? p.tag.pos || "" : "", cover: p.tag ? p.tag.cover || "" : "", release: p.tag ? p.tag.release || "" : "", marks: c.marks === "off" ? [] : xpMarks(p), range: p.range, index: p.index, tag: p.tag || null });
     }
   }
   return out;
@@ -159,6 +231,14 @@ function xpRender() {
   const bytes = plan.reduce((s, p) => s + xpBytes(p), 0);
   $("xSummary").textContent = plan.length + " " + t(plan.length === 1 ? "file" : "files") + " · " + (c.formats.some(f => f.type === "flac") ? "≈ " : "") + fmtBytes(bytes);
   $("xGo").disabled = !plan.length;
+  const d = xpDocTags(), np = (ed.marks || []).filter(m => m.kind === "point").length;
+  const head = [tgGet(d, "ARTIST") || tgGet(d, "ALBUMARTIST"), tgGet(d, "ALBUM"), tgGet(d, "TITLE")].filter(Boolean);
+  $("xTags").textContent = d.length ? head.concat([d.length === 1 ? t("1 tag") : t("{n} tags").replace("{n}", d.length)], ed.doc.cover ? [t("cover")] : []).join(" · ") : t("No tags yet");
+  document.querySelectorAll("#xMarks button").forEach(b => b.classList.toggle("on", b.dataset.v === c.marks));
+  $("xMarksInfo").textContent = np || nr ? [np ? (np === 1 ? t("1 marker") : t("{n} markers").replace("{n}", np)) : "", nr ? (nr === 1 ? t("1 range") : t("{n} ranges").replace("{n}", nr)) : ""].filter(Boolean).join(", ") + (c.marks === "file" ? " — " + t("WAV: cue points and BWF time stamp; FLAC: ranges as a cuesheet") : "") : t("No markers or ranges in this file");
+  const lock = c.dest === "locker";
+  document.querySelectorAll("#xCue button").forEach(b => { b.classList.toggle("on", b.dataset.v === (lock ? "off" : c.cue)); b.disabled = lock; });
+  $("xCueInfo").textContent = lock ? t("Only when downloading") : c.cue === "on" ? t("Downloads next to the audio") : "";
   xpQueue();
 }
 
@@ -221,14 +301,17 @@ async function xpGo() {
   $("xGo").disabled = true;
   try {
     for (const p of plan) {
-      const pic = p.fmt.type === "flac" && p.cover ? await xpPic(p.cover) : null;
+      const pic = p.fmt.type === "flac" ? (p.cover ? await xpPic(p.cover) : await xpDocPic()) : null;
       if (ed.doc !== doc) break;
+      const tags = p.tags.slice();
+      if (p.fmt.type === "flac" && p.marks.some(m => m.b > m.a)) tags.push(["CUESHEET", xpCueText([{ name: p.name, tracks: xpCueTracks(p.marks.filter(m => m.b > m.a), doc.sampleRate) }])]);
       const id = "x" + Date.now().toString(36) + (++xp.seq);
       const job = { id, name: p.name, fmt: p.fmt, dest, state: "queued", frac: 0, doc: doc.name, fmtLabel: xpFmtLabel(p.fmt, doc.sampleRate), len: (p.b - p.a) / doc.sampleRate, pos: p.pos };
       xp.jobs.push(job);
       if (batch && p.release) batch.jobs.push(id);
-      call({ t: "export", id: doc.id, jobId: id, a: p.a, b: p.b, name: p.name, fmt: p.fmt, master, dest, tags: p.tags, pic }).catch(e => { job.state = "failed"; job.error = e.message; xpQueue(); xpBatches(); });
+      call({ t: "export", id: doc.id, jobId: id, a: p.a, b: p.b, name: p.name, fmt: p.fmt, master, dest, tags, pic, marks: p.marks.map(m => ({ a: m.a, b: m.b, name: m.name, isrc: m.isrc })) }).catch(e => { job.state = "failed"; job.error = e.message; xpQueue(); xpBatches(); });
     }
+    if (c.cue === "on" && dest.kind === "download" && ed.doc === doc) for (const q of xpCues(plan)) xpBlob(q.name, q.text);
   } finally {
     xp.going = false;
     if (batch && batch.jobs.length) xp.batches.push(batch);
@@ -352,6 +435,9 @@ function wireExport() {
   seg("xDither", "dither");
   seg("xShape", "shaping");
   seg("xDest", "dest");
+  seg("xMarks", "marks");
+  seg("xCue", "cue");
+  $("xTagsEdit").addEventListener("click", () => ftOpen(true));
   $("xAddFmt").addEventListener("click", () => {
     const last = xp.cfg.formats[xp.cfg.formats.length - 1];
     xp.cfg.formats.push(last && last.type === "wav" ? { type: "flac", bits: 16, rate: 44100 } : { type: "wav", bits: 24, rate: 0 });

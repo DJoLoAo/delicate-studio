@@ -1,4 +1,4 @@
-importScripts("/edit.js", "/trcore.js");
+importScripts("/edit.js", "/trcore.js", "/tags.js");
 
 const BLOCK = 65536;
 const BUCKET = 256;
@@ -862,6 +862,72 @@ function sinkEnd(S) {
   return { slots, slotPeaks, bands };
 }
 
+function tgSniff(d) {
+  if (d.length > 3 && d[0] === 0xFF && d[1] === 0xD8) return "image/jpeg";
+  if (d.length > 8 && d[0] === 0x89 && d[1] === 0x50 && d[2] === 0x4E && d[3] === 0x47) return "image/png";
+  return "";
+}
+
+function tgDecMeta(x, mem) {
+  try {
+    if (typeof x.dec_meta_len !== "function") return null;
+    const n = x.dec_meta_len();
+    const j = n ? JSON.parse(new TextDecoder().decode(new Uint8Array(mem.buffer, x.dec_meta_ptr(), n))) : {};
+    const cl = x.dec_cover_len();
+    if (cl && cl <= 4 << 20) {
+      const data = new Uint8Array(mem.buffer, x.dec_cover_ptr(), cl).slice(), mime = tgSniff(data);
+      if (mime) j.pic = { mime, w: (j.cover && j.cover.w) | 0, h: (j.cover && j.cover.h) | 0, data };
+    }
+    return j;
+  } catch { return null; }
+}
+
+function tgFileInfo(fm, scan, source, sr, F) {
+  let tags = tgClean((fm && Array.isArray(fm.tags) ? fm.tags : []).concat(scan && scan.tags ? scan.tags : []), true);
+  const cueText = tgGet(tags, "CUESHEET");
+  tags = tgClean(tags);
+  if (!tags.length && source) tags = tgClean([["TITLE", source.title], ["ARTIST", source.artist], ["ALBUM", source.album]]);
+  let list = [];
+  if (scan && scan.kind === "wav" && scan.marks.length) list = scan.marks.map(m => ({ a: m.a, b: m.b, name: m.name }));
+  else if (cueText) list = tgCueRanges(tgCue(cueText), sr, F).map(r => Object.assign(r, { tag: trTagClean(r.tag) }));
+  if (!list.length && scan && scan.kind === "flac") {
+    const cs = scan.cues.filter(c => !c.lead).sort((p, q) => p.a - q.a);
+    if (cs.length > 1) list = cs.map((c, i) => ({ a: c.a, b: i + 1 < cs.length ? cs[i + 1].a : F, name: String(c.n).padStart(2, "0") }));
+  }
+  list = list.filter(m => Number.isFinite(m.a) && m.a >= 0 && m.a <= F).map(m => Object.assign({}, m, { b: m.b > m.a ? Math.min(F, m.b) : 0 })).filter(m => !(m.b && m.b <= m.a));
+  return { tags, locs: tgMarks(list), cover: fm && fm.pic ? fm.pic : null };
+}
+
+async function tagsGet(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  let cover = null;
+  if (c.meta.cover) {
+    try {
+      const f = await (await c.dir.getFileHandle("cover.bin")).getFile();
+      cover = Object.assign({}, c.meta.cover, { data: await f.arrayBuffer() });
+    } catch {}
+  }
+  return { t: "tags", tags: c.meta.tags || [], cover };
+}
+
+async function tagsSet(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  c.meta.tags = tgClean(m.tags);
+  if (m.cover === null) {
+    try { await c.dir.removeEntry("cover.bin"); } catch {}
+    delete c.meta.cover;
+  } else if (m.cover && m.cover.data) {
+    const data = new Uint8Array(m.cover.data), mime = tgSniff(data);
+    if (!mime || data.length > 4 << 20) throw new Error("cover");
+    await writeFile(c.dir, "cover.bin", data);
+    c.meta.cover = { mime, w: Math.max(0, m.cover.w | 0), h: Math.max(0, m.cover.h | 0), size: data.length };
+  }
+  await writeFile(c.dir, "meta.json", enc(c.meta));
+  return { t: "tagsaved", tags: c.meta.tags, cover: c.meta.cover || null };
+}
+
 async function importFile(req, file, opts) {
   opts = opts || {};
   const displayName = opts.name || file.name;
@@ -904,6 +970,7 @@ async function importFile(req, file, opts) {
     if (x.dec_open(ep, eb.length) !== 0) throw new Error(err());
     const sr = x.dec_sample_rate(), ch = x.dec_channels(), bits = x.dec_bits(), declared = x.dec_frames();
     if (!sr || !ch) throw new Error("unsupported file");
+    const fm = tgDecMeta(x, mem);
     const S = sinkNew(pool, ch, sr);
     let lastPost = 0, lastYield = performance.now();
     for (;;) {
@@ -933,6 +1000,11 @@ async function importFile(req, file, opts) {
     await writeFile(docDir, "bands.f32", bands);
     const source = opts.source || { kind: "local", lastModified: file.lastModified || 0 };
     const meta = { v: 1, id, name: displayName, ext, size: file.size, sampleRate: sr, channels: ch, bits, frames: total, blockFrames: BLOCK, slots, created: Date.now(), opened: Date.now(), readOnly: source.kind === "library" || source.kind === "locker", source };
+    const rd = (pos, n) => pos >= file.size || n <= 0 ? new Uint8Array(0) : new Uint8Array(reader.readAsArrayBuffer(file.slice(pos, Math.min(file.size, pos + n))));
+    const fi = tgFileInfo(fm, tgRiff(rd, file.size) || tgFlac(rd, file.size), source, sr, total);
+    meta.tags = fi.tags;
+    if (fi.locs.length) meta.locs = fi.locs;
+    if (fi.cover) { await writeFile(docDir, "cover.bin", fi.cover.data); meta.cover = { mime: fi.cover.mime, w: fi.cover.w, h: fi.cover.h, size: fi.cover.data.length }; }
     await writeFile(docDir, "meta.json", new TextEncoder().encode(JSON.stringify(meta)));
     return meta;
   } catch (e) {
@@ -1109,11 +1181,16 @@ function xorshift(seed) {
 }
 
 function tagList(v) {
-  const out = [];
-  for (const p of Array.isArray(v) ? v.slice(0, 64) : []) {
-    if (!Array.isArray(p) || p.length !== 2) continue;
-    const k = String(p[0]).toUpperCase().replace(/[^A-Z0-9 _]/g, "").trim().slice(0, 40), val = String(p[1]).replace(/\u0000/g, "").trim().slice(0, 1000);
-    if (k && val) out.push([k, val]);
+  return tgClean(v, true);
+}
+
+function markList(v, rateIn, rateOut, n) {
+  const out = [], k = rateOut / rateIn;
+  for (const m of Array.isArray(v) ? v.slice(0, 999) : []) {
+    if (!m || !Number.isFinite(m.a)) continue;
+    const a = Math.round(Math.max(0, m.a) * k), b = Number.isFinite(m.b) && m.b > m.a ? Math.round(m.b * k) : 0;
+    if (a >= n) continue;
+    out.push({ a, b: b ? Math.min(n, b) : 0, name: String(m.name || "").slice(0, 120), isrc: String(m.isrc || "").slice(0, 12) });
   }
   return out;
 }
@@ -1125,8 +1202,9 @@ function picOf(p) {
   return { mime: /^image\/(jpeg|png)$/.test(p.mime) ? p.mime : "image/jpeg", w: Math.max(0, p.w | 0), h: Math.max(0, p.h | 0), data };
 }
 
-function flacMeta(tags, pic) {
+function flacMeta(tags, pic, cue) {
   const enc = new TextEncoder(), blocks = [];
+  if (cue) blocks.push([5, cue]);
   if (tags.length) {
     const vendor = enc.encode("Delicate Studio"), items = tags.map(([k, v]) => enc.encode(k + "=" + v));
     const b = new Uint8Array(8 + vendor.length + items.reduce((s, x) => s + 4 + x.length, 0)), v = new DataView(b.buffer);
@@ -1156,30 +1234,21 @@ function flacMeta(tags, pic) {
   return out;
 }
 
-function wavInfo(tags) {
-  const map = { TITLE: "INAM", ARTIST: "IART", ALBUM: "IPRD", DATE: "ICRD", GENRE: "IGNR", TRACKNUMBER: "ITRK" }, got = {}, enc = new TextEncoder();
-  for (const [k, v] of tags) { const id = map[k]; if (id) got[id] = got[id] ? got[id] + "; " + v : v; }
-  if (!Object.keys(got).length) return new Uint8Array(0);
-  got.ISFT = "Delicate Studio";
-  const parts = Object.entries(got).map(([id, v]) => [id, enc.encode(v)]);
-  const body = parts.reduce((s, [, d]) => s + 8 + d.length + 1 + ((d.length + 1) & 1), 4);
-  const out = new Uint8Array(8 + body), dv = new DataView(out.buffer);
-  const tag = (o, s) => { for (let i = 0; i < 4; i++) out[o + i] = s.charCodeAt(i); };
-  tag(0, "LIST"); dv.setUint32(4, body, true); tag(8, "INFO");
-  let o = 12;
-  for (const [id, d] of parts) {
-    tag(o, id); dv.setUint32(o + 4, d.length + 1, true);
-    out.set(d, o + 8);
-    o += 8 + d.length + 1 + ((d.length + 1) & 1);
-  }
-  return out;
+function wavTail(job) {
+  return tgCat([tgWavInfo(job.tags), job.marks.length ? tgWavCue(job.marks) : new Uint8Array(0)]);
 }
 
-function wavHeader(frames, ch, rate, bits, float, extra) {
+function wavBext(job, rate, ch, bits) {
+  if (!job.bext) return new Uint8Array(0);
+  const title = (job.tags.find(p => p[0] === "TITLE") || [])[1] || job.name.replace(/\.[^.]+$/, "");
+  return tgBext({ description: title, ref: Math.round(job.a * rate / job.c.meta.sampleRate), history: "A=PCM,F=" + rate + ",W=" + bits + ",M=" + (ch === 1 ? "mono" : ch === 2 ? "stereo" : ch + "ch") + ",T=Delicate Studio\r\n" });
+}
+
+function wavHeader(frames, ch, rate, bits, float, extra, pre) {
   const bps = bits >> 3, align = ch * bps, data = frames * align, pad = data % 2;
   const ext = !float && ch > 2;
-  const fmtLen = float ? 18 : ext ? 40 : 16, factLen = float ? 12 : 0;
-  const size = 12 + 36 + 8 + fmtLen + factLen + 8;
+  const fmtLen = float ? 18 : ext ? 40 : 16, factLen = float ? 12 : 0, preLen = pre ? pre.length : 0;
+  const size = 12 + 36 + 8 + fmtLen + factLen + preLen + 8;
   const riff = size - 8 + data + pad + (extra || 0), rf64 = riff > 0xFFFFFFFF;
   const b = new ArrayBuffer(size), v = new DataView(b);
   let o = 0;
@@ -1194,6 +1263,7 @@ function wavHeader(frames, ch, rate, bits, float, extra) {
   if (float) u16(0);
   if (ext) { u16(22); u16(bits); u32(ch >= 32 ? 0xFFFFFFFF : (2 ** ch) - 1); for (const x of [1, 0, 0, 0, 0, 0, 16, 0, 128, 0, 0, 170, 0, 56, 155, 113]) v.setUint8(o++, x); }
   if (float) { tag("fact"); u32(4); u32(frames > 0xFFFFFFFF ? 0xFFFFFFFF : frames); }
+  if (preLen) { new Uint8Array(b, o, preLen).set(pre); o += preLen; }
   tag("data"); u32(rf64 ? 0xFFFFFFFF : data);
   return { bytes: new Uint8Array(b), pad };
 }
@@ -1244,15 +1314,16 @@ async function renderJob(job) {
     hd.truncate(0);
     if (flac) {
       if (x.fl_open(rateOut, ch, bits, block) !== 0) throw new Error(dspError(x));
-      meta = flacMeta(job.tags, job.pic);
+      const ranges = job.marks.filter(m => m.b > m.a);
+      meta = flacMeta(job.tags, job.pic, ranges.length ? tgFlacCue(ranges, outFrames) : null);
       const n = x.fl_header(meta.length ? 0 : 1);
       if (n < 0) throw new Error(dspError(x));
       putAt(hd, new Uint8Array(x.memory.buffer, x.fl_out(), n).slice(), 0);
       fileOff = n;
       if (meta.length) { putAt(hd, meta, fileOff); fileOff += meta.length; }
     } else {
-      info = wavInfo(job.tags);
-      const w = wavHeader(outFrames, ch, rateOut, bits, float, info.length);
+      info = wavTail(job);
+      const w = wavHeader(outFrames, ch, rateOut, bits, float, info.length, wavBext(job, rateOut, ch, bits));
       putAt(hd, w.bytes, 0);
       fileOff = w.bytes.length;
       job.pad = w.pad;
@@ -1439,7 +1510,8 @@ function queueExport(m) {
   const type = f.type === "flac" ? "flac" : "wav";
   const bits = type === "flac" ? (f.bits === 16 ? 16 : 24) : [16, 24, 32].includes(f.bits) ? f.bits : 24;
   const rate = [0, 44100, 48000, 88200, 96000, 176400, 192000].includes(f.rate) ? f.rate : 0;
-  const job = { id: m.jobId, c, lists: c.lists, a, b, name: String(m.name || "export"), fmt: { type, bits, rate }, master: m.master || {}, dest: m.dest || { kind: "download" }, tags: tagList(m.tags), pic: type === "flac" ? picOf(m.pic) : null, file: m.jobId + "." + type, state: "queued", frac: 0, seed: XP.jobs.length * 7919 };
+  const rateOut = rate || c.meta.sampleRate, nOut = rateOut === c.meta.sampleRate ? b - a : Math.ceil((b - a) * rateOut / c.meta.sampleRate);
+  const job = { id: m.jobId, c, lists: c.lists, a, b, name: String(m.name || "export"), fmt: { type, bits, rate }, master: m.master || {}, dest: m.dest || { kind: "download" }, tags: tagList(m.tags), pic: type === "flac" ? picOf(m.pic) : null, marks: markList(m.marks, c.meta.sampleRate, rateOut, nOut), bext: type === "wav" && m.bext !== false, file: m.jobId + "." + type, state: "queued", frac: 0, seed: XP.jobs.length * 7919 };
   c.busy = (c.busy || 0) + 1;
   XP.jobs.push(job);
   xpost(job);
@@ -2705,7 +2777,14 @@ async function pxNewDoc(m) {
     const stem = c.meta.name.replace(/\.[^.]+$/, "") || "Untitled";
     const name = String(m.name || "").trim().slice(0, 160) || stem + " (" + (mode === "mix" ? "mono" : mode) + ")";
     const locs = c.marks.map(x => Object.assign({}, x, { chans: null }));
-    const meta = { v: 1, id, name, ext: "", size: F * out * 4, sampleRate: sr, channels: out, bits: c.meta.bits, frames: F, blockFrames: BLOCK, slots, created: Date.now(), opened: Date.now(), readOnly: false, source: { kind: "derived", from: c.meta.id }, locs };
+    const meta = { v: 1, id, name, ext: "", size: F * out * 4, sampleRate: sr, channels: out, bits: c.meta.bits, frames: F, blockFrames: BLOCK, slots, created: Date.now(), opened: Date.now(), readOnly: false, source: { kind: "derived", from: c.meta.id }, locs, tags: c.meta.tags || [] };
+    if (c.meta.cover) {
+      try {
+        const f = await (await c.dir.getFileHandle("cover.bin")).getFile();
+        await writeFile(docDir, "cover.bin", new Uint8Array(await f.arrayBuffer()));
+        meta.cover = Object.assign({}, c.meta.cover);
+      } catch {}
+    }
     await writeFile(docDir, "meta.json", enc(meta));
     job.done();
     return { t: "made", meta };
@@ -2932,7 +3011,7 @@ async function trScan(m) {
 function trTagClean(t) {
   if (!t || typeof t !== "object") return null;
   const out = {};
-  for (const k of ["name", "pos", "title", "artist", "album", "albumArtist", "year", "label", "catno", "country", "genre", "style", "format", "release", "cover"]) {
+  for (const k of ["name", "pos", "title", "artist", "album", "albumArtist", "year", "label", "catno", "country", "genre", "style", "format", "release", "cover", "isrc"]) {
     const v = t[k];
     if (v !== undefined && v !== null && v !== "") out[k] = String(v).slice(0, k === "cover" ? 600 : 200);
   }
@@ -3184,6 +3263,8 @@ async function handle(m) {
   if (m.t === "mdlisten") { MDL.mode = ["midi", "both"].includes(m.mode) ? m.mode : "off"; MDL.notes = MDL.mode === "off" ? [] : mdClean(m.notes); ringFlush(); return; }
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
   if (m.t === "proc") { postMessage(Object.assign({ req: m.req }, await pxApply(m))); return; }
+  if (m.t === "tagsget") { postMessage(Object.assign({ req: m.req }, await tagsGet(m))); return; }
+  if (m.t === "tagsset") { postMessage(Object.assign({ req: m.req }, await enqueue(() => tagsSet(m)))); return; }
   if (m.t === "pxnew") { postMessage(Object.assign({ req: m.req }, await pxNewDoc(m))); return; }
   if (m.t === "pxcancel") { if (PX.job) PX.job.cancel = true; return; }
   if (m.t === "fxcancel") { if (FX.job) FX.job.cancel = true; return; }

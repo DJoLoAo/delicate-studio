@@ -15,6 +15,8 @@ pub struct Decoder {
     pub channels: u32,
     pub bits: u32,
     pub frames: u64,
+    pub meta: String,
+    pub cover: Vec<u8>,
     inter: Vec<f32>,
     planar: Vec<f32>,
 }
@@ -27,7 +29,7 @@ impl Decoder {
         if !ext.is_empty() {
             hint.with_extension(&ext);
         }
-        let format = symphonia::default::get_probe()
+        let mut format = symphonia::default::get_probe()
             .probe(&hint, mss, FormatOptions::default(), MetadataOptions::default())
             .map_err(|e| format!("unsupported or damaged file: {e}"))?;
         let track = format
@@ -46,7 +48,8 @@ impl Decoder {
         let decoder = symphonia::default::get_codecs()
             .make_audio_decoder(&params, &AudioDecoderOptions::default())
             .map_err(|e| format!("unsupported codec: {e}"))?;
-        Ok(Decoder { format, decoder, track: track_id, sample_rate, channels, bits, frames, inter: Vec::new(), planar: Vec::new() })
+        let (meta, cover) = meta::read(format.as_mut());
+        Ok(Decoder { format, decoder, track: track_id, sample_rate, channels, bits, frames, meta, cover, inter: Vec::new(), planar: Vec::new() })
     }
 
     pub fn next(&mut self) -> Result<usize, String> {
@@ -91,6 +94,7 @@ impl Decoder {
 pub mod enc;
 pub mod hum;
 pub mod loud;
+pub mod meta;
 pub mod midi;
 pub mod nr;
 pub mod restore;
@@ -233,6 +237,26 @@ mod wasm {
     #[unsafe(no_mangle)]
     pub extern "C" fn dec_error_len() -> usize {
         unsafe { (&*std::ptr::addr_of!(ERROR)).len() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dec_meta_ptr() -> *const u8 {
+        dec().map(|d| d.meta.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dec_meta_len() -> usize {
+        dec().map(|d| d.meta.len()).unwrap_or(0)
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dec_cover_ptr() -> *const u8 {
+        dec().map(|d| d.cover.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn dec_cover_len() -> usize {
+        dec().map(|d| d.cover.len()).unwrap_or(0)
     }
 
     #[unsafe(no_mangle)]

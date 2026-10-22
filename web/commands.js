@@ -124,12 +124,14 @@ const CMDS = [
   { id: "rangeAdd", g: "Locations", label: "Add a range from the selection", run: () => addMarker(true), doc: true, when: () => selOn(), kw: "region memory location" },
   { id: "locAdd", g: "Locations", label: "New memory location…", run: () => addLocationDlg(), doc: true, kw: "marker zoom view named" },
   { id: "locs", g: "Locations", label: "Locations", run: () => toggleLocs(), doc: true, kw: "markers memory locations list" },
+  { id: "cueImport", g: "Locations", label: "Import cue sheet…", run: () => ftCuePick(), doc: true, kw: "cue cuesheet tracklist tracks import ranges eac foobar" },
   { id: "open", g: "File", label: "Open a file…", run: () => pickFiles() },
   { id: "recPanel", g: "File", label: "Record…", run: () => recToggle(), kw: "record recording input microphone vinyl rip turntable guitar capture" },
   { id: "rec", g: "Transport", label: "Record / stop recording", run: () => recGo(), kw: "record recording start stop capture" },
   { id: "export", g: "File", label: "Export…", run: () => openExport(), doc: true, kw: "render bounce save wav flac master dither" },
   { id: "newMono", g: "File", label: "New mono file from this one…", run: () => pxMonoDlg(), doc: true, when: () => ed.doc.channels > 1, kw: "convert mono downmix channels new file save as" },
   { id: "newStereo", g: "File", label: "New stereo file from this one", run: () => pxNewFile("stereo"), doc: true, when: () => ed.doc.channels === 1, kw: "convert stereo channels new file dual mono save as" },
+  { id: "tags", g: "File", label: "File tags…", run: () => ftOpen(false), doc: true, kw: "metadata meta id3 vorbis info bwf title artist album cover art tag edit discogs" },
   { id: "files", g: "File", label: "Files", run: () => openFiles(), kw: "library locker studio" },
   { id: "close", g: "File", label: "Close file", run: () => closeDoc(), doc: true },
   { id: "settings", g: "File", label: "Settings", run: () => openSettings() },
@@ -654,7 +656,7 @@ function waveMenuAt(clientX, clientY, touch, pid, spec) {
     ctxCmd("selAll"), ctxCmd("deselect"), ctxCmd("zoomSel"), ctxCmd("zcIn"), ctxCmd("zcOut")
   ];
   if (stereo) items.push(ctxCmd("chanL"), ctxCmd("chanR"));
-  items.push("-", ctxCmd("markAdd", selOn() ? t("Add a range from the selection") : t("Add marker")), ctxCmd("locAdd"));
+  items.push("-", ctxCmd("markAdd", selOn() ? t("Add a range from the selection") : t("Add marker")), ctxCmd("locAdd"), ctxCmd("cueImport"));
   if (spec && spSelLive()) items.splice(1, 0, "-", ctxCmd("heal", t("Heal the spectral selection")), ctxCmd("delete", t("Remove the selected frequencies")));
   if (spec) items.push("-", ctxCmd("toolTime"), ctxCmd("toolRect"), ctxCmd("toolLasso"), ctxCmd("toolBrush"), "-", ctxCmd("specScale", SPV.log ? t("Linear frequency scale") : t("Logarithmic frequency scale")), ctxCmd("spec", t("Hide the spectrogram")));
   if (mk) {

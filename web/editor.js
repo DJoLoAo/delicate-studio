@@ -718,7 +718,7 @@ function showDoc(meta, peaks, bands, state) {
   $("empty").classList.add("hidden");
   $("ed").classList.remove("hidden");
   $("docName").textContent = meta.name;
-  $("docName").title = meta.name;
+  $("docName").title = meta.name + "\n" + t("Click for the file tags");
   const sl = srcLabel(meta.source);
   $("docSrc").textContent = sl ? sl + " · " + t("read-only original") : "";
   $("docSrc").classList.toggle("hidden", !sl);
@@ -783,8 +783,8 @@ function openError(e, name) {
 }
 
 async function importFiles(files) {
-  const list = [...files].filter(f => f && f.size > 0);
-  if (!list.length) return;
+  const all = [...files].filter(f => f && f.size > 0), cues = all.filter(f => /\.cue$/i.test(f.name)), list = all.filter(f => !/\.cue$/i.test(f.name));
+  if (!list.length) { if (cues.length && ed.doc) ftCueFile(cues[0]); return; }
   for (const f of list) {
     ed.importing = { name: f.name, frac: 0 };
     importProgress({ name: f.name, frac: 0 });
@@ -796,6 +796,7 @@ async function importFiles(files) {
   $("busy").classList.add("hidden");
   refreshFiles();
   call({ t: "persist" }).catch(() => {});
+  if (cues.length && ed.doc) ftCueFile(cues[0]);
 }
 
 function importProgress(m) {
@@ -1685,7 +1686,7 @@ function colourToggle() { ed.colour = ed.colour === "spectral" ? "plain" : "spec
 function wireDrop() {
   let depth = 0;
   const has = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
-  window.addEventListener("dragenter", e => { if (!has(e) || $("app").classList.contains("hidden")) return; e.preventDefault(); depth++; $("drop").classList.remove("hidden"); });
+  window.addEventListener("dragenter", e => { if (!has(e) || $("app").classList.contains("hidden")) return; e.preventDefault(); if (ftIsOpen()) return; depth++; $("drop").classList.remove("hidden"); });
   window.addEventListener("dragover", e => { if (!has(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
   window.addEventListener("dragleave", e => { if (!has(e)) return; depth = Math.max(0, depth - 1); if (!depth) $("drop").classList.add("hidden"); });
   window.addEventListener("drop", e => {
@@ -1694,6 +1695,7 @@ function wireDrop() {
     depth = 0;
     $("drop").classList.add("hidden");
     if ($("app").classList.contains("hidden")) return;
+    if (ftIsOpen()) { ftDrop(e.dataTransfer.files); return; }
     importFiles(e.dataTransfer.files);
   });
 }
@@ -1770,6 +1772,7 @@ function wireUi() {
   wireMidi();
   wireTracks();
   wirePx();
+  wireTags();
   wireRec();
   wireTour();
   wireDrop();
