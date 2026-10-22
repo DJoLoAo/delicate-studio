@@ -1,0 +1,93 @@
+{
+ "extName": {
+  "message": "Delicate Studio"
+ },
+ "extDesc": {
+  "message": "Nimm jeden Browser-Tab mit einem Klick in Delicate Studio auf; starte, stoppe und markiere Aufnahmen aus jeder App."
+ },
+ "cmdTab": {
+  "message": "Diesen Tab in Studio aufnehmen (nochmal drücken zum Stoppen)"
+ },
+ "cmdToggle": {
+  "message": "Aufnahme in Studio starten oder stoppen"
+ },
+ "cmdMarker": {
+  "message": "Marker in der Aufnahme setzen"
+ },
+ "titleRec": {
+  "message": "Delicate Studio · Aufnahme $TIME$ · $NAME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   },
+   "name": {
+    "content": "$2"
+   }
+  }
+ },
+ "titleWait": {
+  "message": "Delicate Studio · wartet auf Ton"
+ },
+ "stClosed": {
+  "message": "Studio ist nicht geöffnet."
+ },
+ "stLogin": {
+  "message": "Studio ist offen. Melde dich dort an, um aufzunehmen."
+ },
+ "stReady": {
+  "message": "Studio ist bereit."
+ },
+ "stRec": {
+  "message": "Aufnahme $TIME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   }
+  }
+ },
+ "stWait": {
+  "message": "Wartet auf Ton…"
+ },
+ "btnTab": {
+  "message": "Diesen Tab aufnehmen"
+ },
+ "btnStop": {
+  "message": "Stopp"
+ },
+ "btnMark": {
+  "message": "Marker"
+ },
+ "btnOpen": {
+  "message": "Studio öffnen"
+ },
+ "btnShow": {
+  "message": "Studio zeigen"
+ },
+ "noCapture": {
+  "message": "Chrome erlaubt Erweiterungen nicht, diese Seite aufzunehmen. Öffne eine Seite, die Ton abspielt."
+ },
+ "tabHint": {
+  "message": "Studio nimmt den Ton dieses Tabs auf und spielt ihn während der Aufnahme ab."
+ },
+ "errSelf": {
+  "message": "Das ist Studio. Klicke die Erweiterung in dem Tab an, den du aufnehmen willst."
+ },
+ "errBusy": {
+  "message": "Studio nimmt bereits auf."
+ },
+ "keyTab": {
+  "message": "Diesen Tab aufnehmen"
+ },
+ "keyToggle": {
+  "message": "Start / Stopp, aus jeder App"
+ },
+ "keyMarker": {
+  "message": "Marker, aus jeder App"
+ },
+ "keysNone": {
+  "message": "nicht gesetzt"
+ },
+ "keysChange": {
+  "message": "Tastenkürzel ändern"
+ }
+}

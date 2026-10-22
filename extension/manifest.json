@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extName__",
+  "short_name": "Studio",
+  "description": "__MSG_extDesc__",
+  "version": "1.0.0",
+  "default_locale": "en",
+  "minimum_chrome_version": "116",
+  "homepage_url": "https://studio.delicateaudio.com/",
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "__MSG_extName__",
+    "default_icon": { "16": "icons/16.png", "32": "icons/32.png" }
+  },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["tabCapture", "activeTab", "storage"],
+  "content_scripts": [
+    { "matches": ["https://studio.delicateaudio.com/*"], "js": ["bridge.js"], "run_at": "document_start" }
+  ],
+  "commands": {
+    "rec-tab": { "suggested_key": { "default": "Alt+Shift+R" }, "description": "__MSG_cmdTab__" },
+    "rec-toggle": { "suggested_key": { "default": "Ctrl+Shift+9" }, "description": "__MSG_cmdToggle__", "global": true },
+    "rec-marker": { "suggested_key": { "default": "Ctrl+Shift+8" }, "description": "__MSG_cmdMarker__", "global": true }
+  }
+}

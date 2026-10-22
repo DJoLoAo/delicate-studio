@@ -419,7 +419,7 @@ async function handle(m) {
   if (m.t === "disarm") { if (R.phase !== "rec" && R.phase !== "wait") disarm(); return; }
   if (m.t === "cfg") { R.cfg = cleanCfg(m.cfg); return; }
   if (m.t === "start") return start(m);
-  if (m.t === "stop") { drain(); return stop("user"); }
+  if (m.t === "stop") { drain(); return stop(m.reason === "ended" ? "ended" : "user"); }
   if (m.t === "cancel") return cancel();
   if (m.t === "mark") { drain(); mark(); return; }
   if (m.t === "recover") return recover();

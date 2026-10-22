@@ -1,0 +1,93 @@
+{
+ "extName": {
+  "message": "Delicate Studio"
+ },
+ "extDesc": {
+  "message": "Enregistrez n’importe quel onglet dans Delicate Studio en un clic ; démarrez, arrêtez et marquez depuis toute app."
+ },
+ "cmdTab": {
+  "message": "Enregistrer cet onglet dans Studio (encore une fois pour arrêter)"
+ },
+ "cmdToggle": {
+  "message": "Démarrer ou arrêter l’enregistrement dans Studio"
+ },
+ "cmdMarker": {
+  "message": "Poser un marqueur dans l’enregistrement"
+ },
+ "titleRec": {
+  "message": "Delicate Studio · enregistrement $TIME$ · $NAME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   },
+   "name": {
+    "content": "$2"
+   }
+  }
+ },
+ "titleWait": {
+  "message": "Delicate Studio · en attente de son"
+ },
+ "stClosed": {
+  "message": "Studio n’est pas ouvert."
+ },
+ "stLogin": {
+  "message": "Studio est ouvert. Connectez-vous pour enregistrer."
+ },
+ "stReady": {
+  "message": "Studio est prêt."
+ },
+ "stRec": {
+  "message": "Enregistrement $TIME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   }
+  }
+ },
+ "stWait": {
+  "message": "En attente de son…"
+ },
+ "btnTab": {
+  "message": "Enregistrer cet onglet"
+ },
+ "btnStop": {
+  "message": "Arrêt"
+ },
+ "btnMark": {
+  "message": "Marqueur"
+ },
+ "btnOpen": {
+  "message": "Ouvrir Studio"
+ },
+ "btnShow": {
+  "message": "Afficher Studio"
+ },
+ "noCapture": {
+  "message": "Chrome ne permet pas aux extensions d’enregistrer cette page. Ouvrez une page qui joue du son."
+ },
+ "tabHint": {
+  "message": "Studio enregistre le son de cet onglet et le fait entendre pendant l’enregistrement."
+ },
+ "errSelf": {
+  "message": "Vous êtes dans Studio. Cliquez sur l’extension dans l’onglet à enregistrer."
+ },
+ "errBusy": {
+  "message": "Studio enregistre déjà."
+ },
+ "keyTab": {
+  "message": "Enregistrer cet onglet"
+ },
+ "keyToggle": {
+  "message": "Démarrer / arrêter, depuis toute app"
+ },
+ "keyMarker": {
+  "message": "Marqueur, depuis toute app"
+ },
+ "keysNone": {
+  "message": "non défini"
+ },
+ "keysChange": {
+  "message": "Modifier les raccourcis"
+ }
+}

@@ -1,0 +1,93 @@
+{
+ "extName": {
+  "message": "Delicate Studio"
+ },
+ "extDesc": {
+  "message": "Grave qualquer separador do navegador no Delicate Studio com um clique; inicie, pare e marque a partir de qualquer app."
+ },
+ "cmdTab": {
+  "message": "Gravar este separador no Studio (outra vez para parar)"
+ },
+ "cmdToggle": {
+  "message": "Iniciar ou parar a gravação no Studio"
+ },
+ "cmdMarker": {
+  "message": "Colocar um marcador na gravação"
+ },
+ "titleRec": {
+  "message": "Delicate Studio · a gravar $TIME$ · $NAME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   },
+   "name": {
+    "content": "$2"
+   }
+  }
+ },
+ "titleWait": {
+  "message": "Delicate Studio · à espera de som"
+ },
+ "stClosed": {
+  "message": "O Studio não está aberto."
+ },
+ "stLogin": {
+  "message": "O Studio está aberto. Inicie sessão lá para gravar."
+ },
+ "stReady": {
+  "message": "O Studio está pronto."
+ },
+ "stRec": {
+  "message": "A gravar $TIME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   }
+  }
+ },
+ "stWait": {
+  "message": "À espera de som…"
+ },
+ "btnTab": {
+  "message": "Gravar este separador"
+ },
+ "btnStop": {
+  "message": "Parar"
+ },
+ "btnMark": {
+  "message": "Marcador"
+ },
+ "btnOpen": {
+  "message": "Abrir o Studio"
+ },
+ "btnShow": {
+  "message": "Mostrar o Studio"
+ },
+ "noCapture": {
+  "message": "O Chrome não deixa as extensões gravar esta página. Abra uma página que reproduza som."
+ },
+ "tabHint": {
+  "message": "O Studio grava o som deste separador e reproduz-o enquanto grava."
+ },
+ "errSelf": {
+  "message": "Isto é o Studio. Clique na extensão no separador que quer gravar."
+ },
+ "errBusy": {
+  "message": "O Studio já está a gravar."
+ },
+ "keyTab": {
+  "message": "Gravar este separador"
+ },
+ "keyToggle": {
+  "message": "Iniciar / parar, a partir de qualquer app"
+ },
+ "keyMarker": {
+  "message": "Marcador, a partir de qualquer app"
+ },
+ "keysNone": {
+  "message": "não definido"
+ },
+ "keysChange": {
+  "message": "Alterar atalhos"
+ }
+}

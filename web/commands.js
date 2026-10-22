@@ -120,7 +120,8 @@ const CMDS = [
   { id: "close", g: "File", label: "Close file", run: () => closeDoc(), doc: true },
   { id: "settings", g: "File", label: "Settings", run: () => openSettings() },
   { id: "palette", g: "Help", label: "Command palette", run: () => palOpen() },
-  { id: "keys", g: "Help", label: "Keyboard shortcuts", run: () => shortcuts() }
+  { id: "keys", g: "Help", label: "Keyboard shortcuts", run: () => shortcuts() },
+  { id: "tour", g: "Help", label: "Show the tour", run: () => tourAll(), kw: "tour onboarding welcome introduction guide help" }
 ];
 for (let i = 1; i <= 10; i++) CMDS.push({ id: "loc" + i, g: "Locations", label: "Go to location " + i, labelT: () => t("Go to location") + " " + i, run: () => recallNumber(i), doc: true, hidden: true });
 const CMD = Object.fromEntries(CMDS.map(c => [c.id, c]));

@@ -1,0 +1,35 @@
+@font-face{font-family:"JetBrains Mono";font-weight:100 800;src:url("fonts/JetBrainsMono.woff2") format("woff2")}
+@font-face{font-family:"Instrument Serif";font-weight:400;src:url("fonts/InstrumentSerif-Regular.woff2") format("woff2")}
+:root{--bg:#0c0a08;--bg2:#12100e;--bg3:#1a1710;--bg4:#231f18;--border:#2a2520;--pink:#DF39BB;--gold:#DF9A24;--white:#e0e0e0;--gray:#888;--dim:#555;--rec:#c8303a}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg2);color:var(--white)}
+body{width:300px;padding:14px 16px 12px;font:12px/1.45 "JetBrains Mono",ui-monospace,monospace;display:flex;flex-direction:column;gap:10px}
+header{display:flex;align-items:center;gap:9px}
+header b{font:400 21px "Instrument Serif",Georgia,serif;letter-spacing:.01em}
+.st{display:flex;gap:9px;align-items:flex-start;padding:9px 10px;background:var(--bg3);border:1px solid var(--border)}
+.st #stText{color:var(--white)}
+.st .name{color:var(--gray);font-size:11px;word-break:break-word}
+.st .name:empty{display:none}
+.dot{width:9px;height:9px;border-radius:50%;margin-top:4px;flex:none;border:1px solid var(--gray);background:transparent}
+.dot.on{background:var(--pink);border-color:var(--pink)}
+.dot.rec{background:var(--rec);border-color:var(--rec);animation:pulse 1s ease-in-out infinite}
+.dot.wait{background:var(--rec);border-color:var(--rec);animation:pulse 2.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.btns{display:flex;flex-direction:column;gap:6px}
+.pair{display:flex;gap:6px}
+.pair button{flex:1}
+button{font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:9px 12px;background:var(--bg4);color:var(--white);border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+button:hover:not(:disabled){border-color:var(--gray)}
+button:disabled{opacity:.4;cursor:default}
+button.go{background:var(--rec);border-color:var(--rec);color:#fff}
+button.go .rd{width:9px;height:9px;border-radius:50%;background:#fff}
+button.stop{background:var(--white);border-color:var(--white);color:var(--bg)}
+.hidden{display:none!important}
+.note{color:var(--gold);font-size:11px}
+.note.info{color:var(--gray)}
+.note:empty{display:none}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding-top:9px;border-top:1px solid var(--border);font-size:10.5px;color:var(--gray)}
+.keys kbd{font:inherit;color:var(--white);white-space:nowrap}
+.keys .off{color:var(--dim)}
+a{color:var(--pink);font-size:10.5px;text-decoration:none;align-self:flex-start}
+a:hover{text-decoration:underline}

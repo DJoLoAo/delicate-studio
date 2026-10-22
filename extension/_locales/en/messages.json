@@ -1,0 +1,93 @@
+{
+ "extName": {
+  "message": "Delicate Studio"
+ },
+ "extDesc": {
+  "message": "Record any browser tab in Delicate Studio in one click; start, stop and mark recordings from any app."
+ },
+ "cmdTab": {
+  "message": "Record this tab in Studio (press again to stop)"
+ },
+ "cmdToggle": {
+  "message": "Start or stop recording in Studio"
+ },
+ "cmdMarker": {
+  "message": "Set a marker in the recording"
+ },
+ "titleRec": {
+  "message": "Delicate Studio · recording $TIME$ · $NAME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   },
+   "name": {
+    "content": "$2"
+   }
+  }
+ },
+ "titleWait": {
+  "message": "Delicate Studio · waiting for sound"
+ },
+ "stClosed": {
+  "message": "Studio is not open."
+ },
+ "stLogin": {
+  "message": "Studio is open. Log in there to record."
+ },
+ "stReady": {
+  "message": "Studio is ready."
+ },
+ "stRec": {
+  "message": "Recording $TIME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   }
+  }
+ },
+ "stWait": {
+  "message": "Waiting for sound…"
+ },
+ "btnTab": {
+  "message": "Record this tab"
+ },
+ "btnStop": {
+  "message": "Stop"
+ },
+ "btnMark": {
+  "message": "Marker"
+ },
+ "btnOpen": {
+  "message": "Open Studio"
+ },
+ "btnShow": {
+  "message": "Show Studio"
+ },
+ "noCapture": {
+  "message": "Chrome does not let extensions record this page. Open a page that plays sound."
+ },
+ "tabHint": {
+  "message": "Studio records the sound of this tab and plays it back while it records."
+ },
+ "errSelf": {
+  "message": "This is Studio. Click the extension on the tab you want to record."
+ },
+ "errBusy": {
+  "message": "Studio is already recording."
+ },
+ "keyTab": {
+  "message": "Record this tab"
+ },
+ "keyToggle": {
+  "message": "Start / stop, from any app"
+ },
+ "keyMarker": {
+  "message": "Marker, from any app"
+ },
+ "keysNone": {
+  "message": "not set"
+ },
+ "keysChange": {
+  "message": "Change shortcuts"
+ }
+}

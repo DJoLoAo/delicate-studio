@@ -441,3 +441,12 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 #recT:empty{display:none}
 @keyframes recpulse{0%,100%{opacity:1}50%{opacity:.35}}
 @media (max-width:760px){#rec{padding:calc(8px*var(--fs))}#rec .row > label{min-width:0;flex-basis:100%}}
+#tour{position:fixed;inset:0;z-index:62;pointer-events:none}
+#tour.hidden{display:none}
+#tour .tspot{position:fixed;box-shadow:0 0 0 9999px rgba(12,10,8,.78);border:1px solid var(--gold);border-radius:3px;transition:left .25s,top .25s,width .25s,height .25s;pointer-events:none}
+#tour .tcard{position:fixed;width:min(calc(380px*var(--fs)),calc(100vw - 24px));background:var(--bg2);border:1px solid var(--gold);padding:calc(14px*var(--fs)) calc(16px*var(--fs));display:flex;flex-direction:column;gap:calc(8px*var(--fs));box-shadow:0 14px 48px rgba(0,0,0,.65);pointer-events:auto}
+#tour .tstep{font-size:calc(9px*var(--fs));color:var(--dim);letter-spacing:.12em;text-transform:uppercase;font-variant-numeric:tabular-nums}
+#tour .ttitle{font:calc(21px*var(--fs)) var(--serif);color:var(--white)}
+#tour .ttext{font-size:calc(12px*var(--fs));color:var(--gray);line-height:1.55}
+#tour .tbtns{display:flex;gap:calc(6px*var(--fs));align-items:center;margin-top:calc(4px*var(--fs))}
+#tour .tnext{color:var(--gold);border-color:var(--gold)}

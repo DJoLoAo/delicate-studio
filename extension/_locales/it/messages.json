@@ -1,0 +1,93 @@
+{
+ "extName": {
+  "message": "Delicate Studio"
+ },
+ "extDesc": {
+  "message": "Registra qualsiasi scheda del browser in Delicate Studio con un clic; avvia, ferma e marca da qualsiasi app."
+ },
+ "cmdTab": {
+  "message": "Registra questa scheda in Studio (di nuovo per fermare)"
+ },
+ "cmdToggle": {
+  "message": "Avvia o ferma la registrazione in Studio"
+ },
+ "cmdMarker": {
+  "message": "Inserisci un marcatore nella registrazione"
+ },
+ "titleRec": {
+  "message": "Delicate Studio · registrazione $TIME$ · $NAME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   },
+   "name": {
+    "content": "$2"
+   }
+  }
+ },
+ "titleWait": {
+  "message": "Delicate Studio · in attesa del suono"
+ },
+ "stClosed": {
+  "message": "Studio non è aperto."
+ },
+ "stLogin": {
+  "message": "Studio è aperto. Accedi lì per registrare."
+ },
+ "stReady": {
+  "message": "Studio è pronto."
+ },
+ "stRec": {
+  "message": "Registrazione $TIME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   }
+  }
+ },
+ "stWait": {
+  "message": "In attesa del suono…"
+ },
+ "btnTab": {
+  "message": "Registra questa scheda"
+ },
+ "btnStop": {
+  "message": "Ferma"
+ },
+ "btnMark": {
+  "message": "Marcatore"
+ },
+ "btnOpen": {
+  "message": "Apri Studio"
+ },
+ "btnShow": {
+  "message": "Mostra Studio"
+ },
+ "noCapture": {
+  "message": "Chrome non permette alle estensioni di registrare questa pagina. Apri una pagina che riproduce suono."
+ },
+ "tabHint": {
+  "message": "Studio registra il suono di questa scheda e lo riproduce mentre registra."
+ },
+ "errSelf": {
+  "message": "Questo è Studio. Fai clic sull’estensione nella scheda che vuoi registrare."
+ },
+ "errBusy": {
+  "message": "Studio sta già registrando."
+ },
+ "keyTab": {
+  "message": "Registra questa scheda"
+ },
+ "keyToggle": {
+  "message": "Avvia / ferma, da qualsiasi app"
+ },
+ "keyMarker": {
+  "message": "Marcatore, da qualsiasi app"
+ },
+ "keysNone": {
+  "message": "non impostata"
+ },
+ "keysChange": {
+  "message": "Cambia scorciatoie"
+ }
+}

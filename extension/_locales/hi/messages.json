@@ -1,0 +1,93 @@
+{
+ "extName": {
+  "message": "Delicate Studio"
+ },
+ "extDesc": {
+  "message": "किसी भी ब्राउज़र टैब को एक क्लिक में Delicate Studio में रिकॉर्ड करें; किसी भी ऐप से शुरू करें, रोकें और मार्क करें।"
+ },
+ "cmdTab": {
+  "message": "यह टैब Studio में रिकॉर्ड करें (रोकने के लिए फिर दबाएँ)"
+ },
+ "cmdToggle": {
+  "message": "Studio में रिकॉर्डिंग शुरू करें या रोकें"
+ },
+ "cmdMarker": {
+  "message": "रिकॉर्डिंग में मार्कर लगाएँ"
+ },
+ "titleRec": {
+  "message": "Delicate Studio · रिकॉर्डिंग $TIME$ · $NAME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   },
+   "name": {
+    "content": "$2"
+   }
+  }
+ },
+ "titleWait": {
+  "message": "Delicate Studio · आवाज़ का इंतज़ार"
+ },
+ "stClosed": {
+  "message": "Studio खुला नहीं है।"
+ },
+ "stLogin": {
+  "message": "Studio खुला है। रिकॉर्ड करने के लिए वहाँ लॉग इन करें।"
+ },
+ "stReady": {
+  "message": "Studio तैयार है।"
+ },
+ "stRec": {
+  "message": "रिकॉर्डिंग $TIME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   }
+  }
+ },
+ "stWait": {
+  "message": "आवाज़ का इंतज़ार…"
+ },
+ "btnTab": {
+  "message": "यह टैब रिकॉर्ड करें"
+ },
+ "btnStop": {
+  "message": "रोकें"
+ },
+ "btnMark": {
+  "message": "मार्कर"
+ },
+ "btnOpen": {
+  "message": "Studio खोलें"
+ },
+ "btnShow": {
+  "message": "Studio दिखाएँ"
+ },
+ "noCapture": {
+  "message": "Chrome एक्सटेंशन को यह पेज रिकॉर्ड नहीं करने देता। कोई ऐसा पेज खोलें जिसमें आवाज़ चलती हो।"
+ },
+ "tabHint": {
+  "message": "Studio इस टैब की आवाज़ रिकॉर्ड करता है और रिकॉर्ड करते समय उसे सुनाता भी है।"
+ },
+ "errSelf": {
+  "message": "यह Studio है। जिस टैब को रिकॉर्ड करना है, वहाँ एक्सटेंशन पर क्लिक करें।"
+ },
+ "errBusy": {
+  "message": "Studio पहले से रिकॉर्ड कर रहा है।"
+ },
+ "keyTab": {
+  "message": "यह टैब रिकॉर्ड करें"
+ },
+ "keyToggle": {
+  "message": "शुरू / रोकें, किसी भी ऐप से"
+ },
+ "keyMarker": {
+  "message": "मार्कर, किसी भी ऐप से"
+ },
+ "keysNone": {
+  "message": "सेट नहीं"
+ },
+ "keysChange": {
+  "message": "शॉर्टकट बदलें"
+ }
+}

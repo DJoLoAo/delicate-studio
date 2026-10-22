@@ -1,0 +1,93 @@
+{
+ "extName": {
+  "message": "Delicate Studio"
+ },
+ "extDesc": {
+  "message": "Graba cualquier pestaña del navegador en Delicate Studio con un clic; inicia, detén y marca desde cualquier app."
+ },
+ "cmdTab": {
+  "message": "Grabar esta pestaña en Studio (otra vez para detener)"
+ },
+ "cmdToggle": {
+  "message": "Iniciar o detener la grabación en Studio"
+ },
+ "cmdMarker": {
+  "message": "Poner un marcador en la grabación"
+ },
+ "titleRec": {
+  "message": "Delicate Studio · grabando $TIME$ · $NAME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   },
+   "name": {
+    "content": "$2"
+   }
+  }
+ },
+ "titleWait": {
+  "message": "Delicate Studio · esperando sonido"
+ },
+ "stClosed": {
+  "message": "Studio no está abierto."
+ },
+ "stLogin": {
+  "message": "Studio está abierto. Inicia sesión allí para grabar."
+ },
+ "stReady": {
+  "message": "Studio está listo."
+ },
+ "stRec": {
+  "message": "Grabando $TIME$",
+  "placeholders": {
+   "time": {
+    "content": "$1"
+   }
+  }
+ },
+ "stWait": {
+  "message": "Esperando sonido…"
+ },
+ "btnTab": {
+  "message": "Grabar esta pestaña"
+ },
+ "btnStop": {
+  "message": "Detener"
+ },
+ "btnMark": {
+  "message": "Marcador"
+ },
+ "btnOpen": {
+  "message": "Abrir Studio"
+ },
+ "btnShow": {
+  "message": "Mostrar Studio"
+ },
+ "noCapture": {
+  "message": "Chrome no permite que las extensiones graben esta página. Abre una página que reproduzca sonido."
+ },
+ "tabHint": {
+  "message": "Studio graba el sonido de esta pestaña y lo reproduce mientras graba."
+ },
+ "errSelf": {
+  "message": "Esto es Studio. Pulsa la extensión en la pestaña que quieres grabar."
+ },
+ "errBusy": {
+  "message": "Studio ya está grabando."
+ },
+ "keyTab": {
+  "message": "Grabar esta pestaña"
+ },
+ "keyToggle": {
+  "message": "Iniciar / detener, desde cualquier app"
+ },
+ "keyMarker": {
+  "message": "Marcador, desde cualquier app"
+ },
+ "keysNone": {
+  "message": "sin asignar"
+ },
+ "keysChange": {
+  "message": "Cambiar atajos"
+ }
+}

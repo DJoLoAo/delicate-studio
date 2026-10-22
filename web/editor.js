@@ -740,6 +740,7 @@ function showDoc(meta, peaks, bands, state) {
   humDoc();
   ldDoc();
   mdDoc();
+  tourDoc();
 }
 
 function closeDoc() {
@@ -1744,6 +1745,7 @@ function wireUi() {
   wireLoud();
   wireMidi();
   wireRec();
+  wireTour();
   wireDrop();
 }
 
@@ -1761,4 +1763,8 @@ async function editorStart() {
       else { try { localStorage.removeItem("studioLastDoc"); } catch {} }
     }
   }
+  const q = new URLSearchParams(location.search), welcome = q.get("welcome") === "ext";
+  if (q.has("rec") || q.has("welcome")) history.replaceState(null, "", location.pathname + location.hash);
+  if (q.get("rec") === "1") recOpen();
+  extInit().then(() => tourInit(welcome));
 }

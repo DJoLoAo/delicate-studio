@@ -215,6 +215,10 @@
       <div class="row"><span class="snote" id="keysNote"></span></div>
     </section>
     <section>
+      <h3>Help</h3>
+      <div class="row"><label>Tour</label><button class="outbtn" id="tourBtn">Show the tour</button></div>
+    </section>
+    <section>
       <h3>Account</h3>
       <div class="row acct"><span id="acctName"></span><button class="outbtn" id="logoutbtn">log out</button></div>
     </section>
@@ -227,10 +231,11 @@
     <section>
       <h3>Input</h3>
       <div class="row"><label>Device</label><div class="dd down" id="recDev" title="Audio interface, phono preamp, USB turntable or microphone"><div class="cur"></div><div class="list"></div></div><button class="outbtn hidden" id="recAllow">Use an input…</button></div>
+      <div class="row hidden" id="recExtRow"><label></label><span class="snote" id="recExt"></span></div>
       <div class="row"><label>Channels</label><div class="dd down" id="recCh" title="Which inputs of the device to record"><div class="cur"></div><div class="list"></div></div></div>
       <div class="row"><label>Sample rate</label><div class="dd down" id="recRate" title="As the device records without converting"><div class="cur"></div><div class="list"></div></div></div>
       <div class="row"><label>Level</label><canvas id="recMt" class="recmt" title="Input level — click to reset the clip lights"></canvas><span class="snote" id="recPk"></span></div>
-      <div class="row"><label>Monitor</label><div class="seg" id="recMon" title="Hear the input while recording; use headphones to avoid feedback"><button class="segbtn" data-v="0">Off</button><button class="segbtn" data-v="1">On</button></div><span class="snote">Use headphones to avoid feedback.</span></div>
+      <div class="row"><label>Monitor</label><div class="seg" id="recMon" title="Hear the input while recording; use headphones to avoid feedback"><button class="segbtn" data-v="0">Off</button><button class="segbtn" data-v="1">On</button></div><span class="snote" id="recMonNote">Use headphones to avoid feedback.</span></div>
     </section>
     <section>
       <h3>Recording</h3>
@@ -304,6 +309,8 @@
 <script src="/ld.js"></script>
 <script src="/md.js"></script>
 <script src="/rec.js"></script>
+<script src="/ext.js"></script>
+<script src="/tour.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>
