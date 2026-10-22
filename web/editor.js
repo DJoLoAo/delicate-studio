@@ -829,6 +829,7 @@ function setTab(tab) {
   if (tab === "studio") refreshFiles();
   if (tab === "library") { libHint(); setTimeout(() => $("libQ").focus(), 30); }
   if (tab === "locker") { loadLocker(); setTimeout(() => $("lkQ").focus(), 30); }
+  if (tab === "albums") alTab();
 }
 
 async function myAccount() {
@@ -1773,6 +1774,7 @@ function wireUi() {
   wireTracks();
   wirePx();
   wireTags();
+  wireAlbum();
   wireRec();
   wireTour();
   wireDrop();

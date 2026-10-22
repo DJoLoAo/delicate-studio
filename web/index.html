@@ -34,10 +34,11 @@
     <div class="filesw">
       <button class="outbtn" id="filesBtn" title="Your files in Studio">Files</button>
       <div id="files" class="hidden">
-        <div class="ftabs"><button class="ftab on" data-tab="studio">In Studio</button><button class="ftab" data-tab="library">Library</button><button class="ftab" data-tab="locker">Locker</button><span class="grow"></span><button class="outbtn" id="openBtn2">Open…</button></div>
+        <div class="ftabs"><button class="ftab on" data-tab="studio">In Studio</button><button class="ftab" data-tab="library">Library</button><button class="ftab" data-tab="locker">Locker</button><button class="ftab" data-tab="albums">Albums</button><span class="grow"></span><button class="outbtn" id="openBtn2">Open…</button></div>
         <div class="fpane" data-pane="studio"><div id="filesList" class="flist"></div><div class="sinfo" id="storeInfo"></div></div>
         <div class="fpane hidden" data-pane="library"><input id="libQ" class="fsearch" type="search" placeholder="Search your library by title, artist or album" autocomplete="off" spellcheck="false"><div id="libList" class="flist"></div></div>
         <div class="fpane hidden" data-pane="locker"><input id="lkQ" class="fsearch" type="search" placeholder="Filter by title, artist, album or folder" autocomplete="off" spellcheck="false"><div id="lkList" class="flist"></div><div class="sinfo" id="lkInfo"></div></div>
+        <div class="fpane hidden" data-pane="albums"><div class="albhead"><span class="sinfo">An album joins the sides of a record: one Discogs release, tracks named on every side, one export.</span><button class="outbtn" id="albNew">New album</button></div><div id="albList" class="flist"></div></div>
       </div>
     </div>
     <a class="outbtn" href="https://dj.delicateaudio.com/" title="Open Delicate DJ">DJ</a>
@@ -167,7 +168,7 @@
             <div class="row"><label>Threshold</label><div class="seg" id="trThrMode" title="Level below which the record counts as quiet; Auto sets it above the surface noise"><button class="segbtn" data-v="auto">Auto</button><button class="segbtn" data-v="set">Set</button></div><input type="range" id="trThr" min="-80" max="-20" step="1"><span class="snote" id="trThrV"></span></div>
             <div class="snote" id="trSum"></div>
             <div class="trlist hidden" id="trList"></div>
-            <div class="row dgfoot"><button class="primary" id="trMake">Create ranges</button><button class="outbtn" id="trExp">Export tracks…</button><div class="bbar hidden" id="trBar"><i></i></div><button class="outbtn hidden" id="trCancel">cancel</button><span class="grow"></span><button class="outbtn" id="trDefaults">defaults</button></div>
+            <div class="row dgfoot"><button class="primary" id="trMake">Create ranges</button><button class="outbtn" id="trExp">Export tracks…</button><button class="outbtn hidden" id="trAlb">Album…</button><div class="bbar hidden" id="trBar"><i></i></div><button class="outbtn hidden" id="trCancel">cancel</button><span class="grow"></span><button class="outbtn" id="trDefaults">defaults</button></div>
           </div>
         </div>
       </div>
@@ -270,6 +271,27 @@
   </div>
 </div>
 
+<div id="alb" class="hidden">
+  <div class="panel albpanel" role="dialog" aria-labelledby="albTitle">
+    <div class="phead"><b id="albTitle">Album</b><span class="grow"></span><button class="outbtn" id="albDel">delete album</button><button class="x" id="albClose" title="Close" aria-label="Close">×</button></div>
+    <section>
+      <div class="row"><label for="albName">Title</label><input id="albName" class="xtext" autocomplete="off" spellcheck="false"></div>
+      <div class="albrel"><img id="albCover" class="albcover hidden" alt=""><div class="albrelinfo" id="albRel"></div><button class="outbtn hidden" id="albRelClear">clear</button></div>
+      <div class="row"><input id="albQ" class="xtext" placeholder="Artist - title, catalog number or Discogs link" autocomplete="off" spellcheck="false"><button class="outbtn" id="albSearch">Search Discogs</button></div>
+      <div class="trres hidden" id="albRes"></div>
+    </section>
+    <section>
+      <h3>Sides</h3>
+      <div id="albSides" class="albsides"></div>
+      <div class="dd down albadd" id="albAdd"><div class="cur"></div><div class="list"></div></div>
+    </section>
+    <section>
+      <h3>Tracks</h3>
+      <div id="albTracks" class="albtracks"></div>
+    </section>
+    <div class="xfoot"><span class="snote" id="albSum"></span><span class="grow"></span><button class="primary" id="albExport">Export album…</button></div>
+  </div>
+</div>
 <div id="tagp" class="hidden">
   <div class="panel tgpanel" role="dialog" aria-labelledby="tagTitle">
     <div class="phead"><b id="tagTitle">File tags</b><button class="x" id="tagClose" title="Close" aria-label="Close">×</button></div>
@@ -360,6 +382,7 @@
 <script src="/px.js"></script>
 <script src="/tags.js"></script>
 <script src="/ft.js"></script>
+<script src="/album.js"></script>
 <script src="/rec.js"></script>
 <script src="/ext.js"></script>
 <script src="/tour.js"></script>

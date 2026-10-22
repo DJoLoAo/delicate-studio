@@ -135,7 +135,7 @@ async function ftSave() {
     const r = await call(msg);
     ed.doc.tags = r.tags;
     ed.doc.cover = r.cover;
-    xp.docPic = undefined;
+    delete xp.docPics[ed.doc.id];
     flash(t("Tags saved"));
     ftHide();
   } catch (e) {

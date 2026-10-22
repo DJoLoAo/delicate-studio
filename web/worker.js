@@ -272,12 +272,14 @@ function origLists(meta) {
   return Array.from({ length: meta.channels }, (_, c) => [[0, c, 0, meta.frames]]);
 }
 
-function setLists(lists) {
-  cur.marks = cur.hist[cur.idx].marks;
-  cur.lists = lists;
-  cur.cum = lists.map(cumOf);
-  cur.len = clipLen(lists[0]);
+function useLists(c, lists) {
+  c.marks = c.hist[c.idx].marks;
+  c.lists = lists;
+  c.cum = lists.map(cumOf);
+  c.len = clipLen(lists[0]);
 }
+
+function setLists(lists) { useLists(cur, lists); }
 
 function edgeOf(seg) {
   if (seg[0] === SIL) return null;
@@ -899,16 +901,17 @@ function tgFileInfo(fm, scan, source, sr, F) {
 }
 
 async function tagsGet(m) {
-  const c = cur;
-  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const c = cur && cur.meta.id === m.id ? cur : lingering.get(m.id) || null;
+  const dir = c ? c.dir : await (await docsDir()).getDirectoryHandle(String(m.id));
+  const meta = c ? c.meta : await readJson(dir, "meta.json");
   let cover = null;
-  if (c.meta.cover) {
+  if (meta.cover) {
     try {
-      const f = await (await c.dir.getFileHandle("cover.bin")).getFile();
-      cover = Object.assign({}, c.meta.cover, { data: await f.arrayBuffer() });
+      const f = await (await dir.getFileHandle("cover.bin")).getFile();
+      cover = Object.assign({}, meta.cover, { data: await f.arrayBuffer() });
     } catch {}
   }
-  return { t: "tags", tags: c.meta.tags || [], cover };
+  return { t: "tags", tags: meta.tags || [], cover };
 }
 
 async function tagsSet(m) {
@@ -1027,9 +1030,25 @@ async function openDoc(id, have) {
   if (lingering.has(id)) {
     cur = lingering.get(id);
     lingering.delete(id);
+    if (!cur.io) cur.io = makeIo();
     cur.meta.opened = Date.now();
     return { meta: cur.meta, peaks: timelinePeaks(slotPeaks, cur.meta.channels, cur.meta.slots), bands, state: statePayload(have || 1), recovered: false };
   }
+  cur = await loadDoc(docDir, meta);
+  cur.io = makeIo();
+  meta.opened = Date.now();
+  meta.len = cur.len;
+  try { await writeFile(docDir, "meta.json", enc(meta)); } catch {}
+  return { meta, peaks: timelinePeaks(slotPeaks, meta.channels, meta.slots), bands, state: statePayload(have || 1), recovered: !!cur.recovered };
+}
+
+function firstHist(meta) {
+  const rm = Array.isArray(meta.marks) ? meta.marks.filter(a => Number.isFinite(a) && a >= 0 && a <= meta.frames).slice(0, 999) : [];
+  const locs = Array.isArray(meta.locs) && validMarks(meta.locs, meta.frames) ? meta.locs : null;
+  return [{ op: "open", a: 0, b: 0, n: 0, ch: null, t: meta.created || Date.now(), lists: origLists(meta), marks: locs || rm.map((a, i) => ({ id: i + 1, n: i + 1, kind: "point", a: Math.round(a), name: "", view: null, chans: null })), d: null, full: false, before: null, after: null }];
+}
+
+async function loadDoc(docDir, meta) {
   await clipReady;
   const pool = await syncHandle(await docDir.getFileHandle("pool.f32"), true);
   let heap = null, hpk = null;
@@ -1042,29 +1061,73 @@ async function openDoc(id, have) {
   }
   const heapFrames = Math.floor(heap.getSize() / 4), pkFloats = Math.floor(hpk.getSize() / 4);
   const st = await loadEdits(docDir, meta, heapFrames, pkFloats);
-  cur = { meta, pool, heap, hpk, dir: docDir, heapEnd: heapFrames, pkEnd: pkFloats, allocs: [null], sums: [null], hist: null, idx: 0, seq: 0, lists: null, cum: null, len: 0, edges: new Map(), ver: 0, saving: null, dirty: false, saveErr: null, busy: 0 };
+  const c = { meta, pool, heap, hpk, dir: docDir, heapEnd: heapFrames, pkEnd: pkFloats, allocs: [null], sums: [null], hist: null, idx: 0, seq: 0, lists: null, cum: null, len: 0, edges: new Map(), ver: 0, saving: null, dirty: false, saveErr: null, busy: 0, recovered: !!st.recovered };
   if (st.hist) {
-    cur.allocs = st.allocs;
-    cur.hist = st.hist;
-    cur.idx = st.idx;
-    cur.seq = st.seq;
+    c.allocs = st.allocs;
+    c.hist = st.hist;
+    c.idx = st.idx;
+    c.seq = st.seq;
     const all = new Float32Array(pkFloats);
     if (pkFloats) hpk.read(new Uint8Array(all.buffer), { at: 0 });
     for (let i = 1; i < st.allocs.length; i++) {
       const a = st.allocs[i], n0 = Math.ceil(a[1] / BUCKET);
-      cur.sums[i] = { pk: all.slice(a[2], a[2] + n0 * 2), bd: all.slice(a[2] + n0 * 2, a[2] + n0 * 5) };
+      c.sums[i] = { pk: all.slice(a[2], a[2] + n0 * 2), bd: all.slice(a[2] + n0 * 2, a[2] + n0 * 5) };
     }
-  } else {
-    const rm = Array.isArray(meta.marks) ? meta.marks.filter(a => Number.isFinite(a) && a >= 0 && a <= meta.frames).slice(0, 999) : [];
-    const locs = Array.isArray(meta.locs) && validMarks(meta.locs, meta.frames) ? meta.locs : null;
-    cur.hist = [{ op: "open", a: 0, b: 0, n: 0, ch: null, t: meta.created || Date.now(), lists: origLists(meta), marks: locs || rm.map((a, i) => ({ id: i + 1, n: i + 1, kind: "point", a: Math.round(a), name: "", view: null, chans: null })), d: null, full: false, before: null, after: null }];
+  } else c.hist = firstHist(meta);
+  useLists(c, c.hist[c.idx].lists);
+  return c;
+}
+
+function docInfoOf(c) {
+  const m = c.meta;
+  return { id: m.id, name: m.name, sampleRate: m.sampleRate, channels: m.channels, bits: m.bits, frames: c.len, tags: m.tags || [], cover: m.cover || null, source: m.source || null, marks: c.marks, edits: c.idx };
+}
+
+async function peekDoc(id) {
+  if (cur && cur.meta.id === id) return docInfoOf(cur);
+  if (lingering.has(id)) return docInfoOf(lingering.get(id));
+  const docDir = await (await docsDir()).getDirectoryHandle(id);
+  const meta = await readJson(docDir, "meta.json");
+  if (meta.recording) throw new Error("recording");
+  const size = async n => { try { return (await (await docDir.getFileHandle(n)).getFile()).size; } catch { return 0; } };
+  const st = await loadEdits(docDir, meta, Math.floor(await size("heap.f32") / 4), Math.floor(await size("heap.pk") / 4));
+  const hist = st.hist || firstHist(meta), idx = st.hist ? st.idx : 0;
+  return docInfoOf({ meta, len: clipLen(hist[idx].lists[0]), marks: hist[idx].marks, idx });
+}
+
+async function docInfo(m) {
+  const docs = [];
+  for (const id of Array.isArray(m.ids) ? m.ids.slice(0, 64) : []) {
+    try { docs.push(await peekDoc(String(id))); } catch (e) { docs.push({ id: String(id), error: errText(e) }); }
   }
-  setLists(cur.hist[cur.idx].lists);
-  cur.io = makeIo();
-  meta.opened = Date.now();
-  meta.len = cur.len;
-  try { await writeFile(docDir, "meta.json", enc(meta)); } catch {}
-  return { meta, peaks: timelinePeaks(slotPeaks, meta.channels, meta.slots), bands, state: statePayload(have || 1), recovered: !!st.recovered };
+  return { t: "docinfo", docs };
+}
+
+function albumClean(v) {
+  const s = (x, n) => String(x == null ? "" : x).slice(0, n);
+  const out = [];
+  for (const a of Array.isArray(v) ? v.slice(0, 500) : []) {
+    if (!a || typeof a !== "object") continue;
+    const sides = [];
+    for (const d of Array.isArray(a.sides) ? a.sides : []) { const id = s(d, 80); if (id && !sides.includes(id) && sides.length < 26) sides.push(id); }
+    let rel = a.release && typeof a.release === "object" ? a.release : null;
+    if (rel && JSON.stringify(rel).length > 200000) rel = null;
+    out.push({ id: s(a.id, 60) || crypto.randomUUID(), title: s(a.title, 200), release: rel, sides, created: Number(a.created) || Date.now(), updated: Date.now() });
+  }
+  return out;
+}
+
+async function albumsGet() {
+  try {
+    const j = await readJson(await studioDir(), "albums.json");
+    return { t: "albums", albums: Array.isArray(j.albums) ? j.albums : [] };
+  } catch { return { t: "albums", albums: [] }; }
+}
+
+async function albumsPut(m) {
+  const albums = albumClean(m.albums);
+  await writeFile(await studioDir(), "albums.json", enc({ v: 1, albums }));
+  return { t: "albums", albums };
 }
 
 async function listDocs() {
@@ -1501,11 +1564,16 @@ async function pumpExport() {
   }
 }
 
-function queueExport(m) {
-  const c = cur;
-  if (!c || c.meta.id !== m.id) throw new Error("stale");
+async function queueExport(m) {
+  let c = cur && cur.meta.id === m.id ? cur : lingering.get(m.id) || null, fresh = false;
+  if (!c) {
+    const docDir = await (await docsDir()).getDirectoryHandle(String(m.id));
+    c = await loadDoc(docDir, await readJson(docDir, "meta.json"));
+    fresh = true;
+  }
   const a = clampI(m.a, 0, c.len), b = clampI(m.b, 0, c.len);
-  if (b <= a) throw new Error("nosel");
+  if (b <= a) { if (fresh) closeHandles(c); throw new Error("nosel"); }
+  if (fresh) lingering.set(c.meta.id, c);
   const f = m.fmt || {};
   const type = f.type === "flac" ? "flac" : "wav";
   const bits = type === "flac" ? (f.bits === 16 ? 16 : 24) : [16, 24, 32].includes(f.bits) ? f.bits : 24;
@@ -3263,6 +3331,9 @@ async function handle(m) {
   if (m.t === "mdlisten") { MDL.mode = ["midi", "both"].includes(m.mode) ? m.mode : "off"; MDL.notes = MDL.mode === "off" ? [] : mdClean(m.notes); ringFlush(); return; }
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
   if (m.t === "proc") { postMessage(Object.assign({ req: m.req }, await pxApply(m))); return; }
+  if (m.t === "docinfo") { postMessage(Object.assign({ req: m.req }, await enqueue(() => docInfo(m)))); return; }
+  if (m.t === "albums") { postMessage(Object.assign({ req: m.req }, await albumsGet())); return; }
+  if (m.t === "albumsput") { postMessage(Object.assign({ req: m.req }, await enqueue(() => albumsPut(m)))); return; }
   if (m.t === "tagsget") { postMessage(Object.assign({ req: m.req }, await tagsGet(m))); return; }
   if (m.t === "tagsset") { postMessage(Object.assign({ req: m.req }, await enqueue(() => tagsSet(m)))); return; }
   if (m.t === "pxnew") { postMessage(Object.assign({ req: m.req }, await pxNewDoc(m))); return; }

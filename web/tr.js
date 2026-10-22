@@ -1,7 +1,7 @@
 const TR_DEF = { minGap: 1, thrAuto: true, thr: -45, count: "auto", n: 4 };
 const TR_GAPS = [0.5, 1, 2, 3];
 const TR_EYE = `<button type="button" class="eye" aria-label="Show password"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><line class="slash" x1="4" y1="4" x2="20" y2="20"/></svg></button>`;
-const tr = { cfg: null, env: null, an: null, plan: null, job: null, prog: 0, err: null, note: null, seq: 0, rel: null, opts: [], side: 0, results: null, busy: false, dc: null, made: null };
+const tr = { cfg: null, env: null, an: null, plan: null, job: null, prog: 0, err: null, note: null, seq: 0, rel: null, opts: [], side: 0, want: null, results: null, busy: false, dc: null, made: null };
 
 function trLoad() {
   let v = null;
@@ -65,7 +65,7 @@ async function trScan() {
     const res = await call({ t: "trscan", id: ed.doc.id, a: r.a, b: r.b, jobId: id });
     tr.env = { doc: ed.doc.id, key, a: res.a, b: res.b, hop: res.hop, sr: res.sr, env: res.env, sel: r.sel };
     trAnalyzeNow();
-    if (tr.rel) tr.side = trGuess(tr.opts, trSpan());
+    if (tr.rel) tr.side = trWant();
     trCompute();
   } catch (e) {
     const m = String(e.message || e);
@@ -75,6 +75,11 @@ async function trScan() {
     trRender();
     redraw();
   }
+}
+
+function trWant() {
+  const k = tr.want ? tr.opts.findIndex(o => o.v === tr.want) : -1;
+  return k >= 0 ? k : trGuess(tr.opts, trSpan());
 }
 
 function trAnalyzeNow() {
@@ -223,6 +228,7 @@ function trSideLabel(k, tracks) {
 
 function trUse(rel) {
   tr.rel = rel && typeof rel === "object" ? rel : null;
+  tr.want = null;
   tr.results = null;
   const list = tr.rel && Array.isArray(tr.rel.tracks) ? tr.rel.tracks : [];
   const sides = trSides(list).filter(s => s.k);
@@ -348,6 +354,7 @@ function trRender() {
   trRenderList();
   $("trMake").disabled = !tr.plan || !!tr.job;
   $("trExp").disabled = (!tr.plan && !xpRanges().length) || !!tr.job;
+  $("trAlb").classList.toggle("hidden", !alOf(ed.doc && ed.doc.id));
 }
 
 function trShow() {
