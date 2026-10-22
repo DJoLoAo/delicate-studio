@@ -1743,6 +1743,7 @@ function wireUi() {
   wireHum();
   wireLoud();
   wireMidi();
+  wireRec();
   wireDrop();
 }
 

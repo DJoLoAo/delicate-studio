@@ -912,6 +912,7 @@ async function openDoc(id, have) {
   const dir = await docsDir();
   const docDir = await dir.getDirectoryHandle(id);
   const meta = await readJson(docDir, "meta.json");
+  if (meta.recording) throw new Error("recording");
   const slotPeaks = await readFloat(docDir, "peaks.f32");
   const bands = await readFloat(docDir, "bands.f32");
   if (cur && cur.meta.id === id) return { meta: cur.meta, peaks: timelinePeaks(slotPeaks, cur.meta.channels, cur.meta.slots), bands, state: statePayload(have || 1), recovered: false };
@@ -947,7 +948,8 @@ async function openDoc(id, have) {
       cur.sums[i] = { pk: all.slice(a[2], a[2] + n0 * 2), bd: all.slice(a[2] + n0 * 2, a[2] + n0 * 5) };
     }
   } else {
-    cur.hist = [{ op: "open", a: 0, b: 0, n: 0, ch: null, t: meta.created || Date.now(), lists: origLists(meta), marks: [], d: null, full: false, before: null, after: null }];
+    const rm = Array.isArray(meta.marks) ? meta.marks.filter(a => Number.isFinite(a) && a >= 0 && a <= meta.frames).slice(0, 999) : [];
+    cur.hist = [{ op: "open", a: 0, b: 0, n: 0, ch: null, t: meta.created || Date.now(), lists: origLists(meta), marks: rm.map((a, i) => ({ id: i + 1, n: i + 1, kind: "point", a: Math.round(a), name: "", view: null, chans: null })), d: null, full: false, before: null, after: null }];
   }
   setLists(cur.hist[cur.idx].lists);
   cur.io = makeIo();
@@ -963,7 +965,7 @@ async function listDocs() {
   for await (const [name, h] of dir.entries()) {
     if (h.kind !== "directory") continue;
     if (cur && cur.meta.id === name) { docs.push(Object.assign({}, cur.meta, { len: cur.len })); continue; }
-    try { docs.push(await readJson(h, "meta.json")); } catch {}
+    try { const m = await readJson(h, "meta.json"); if (!m.recording) docs.push(m); } catch {}
   }
   docs.sort((a, b) => (b.opened || 0) - (a.opened || 0));
   let usage = 0, quota = 0, persisted = false;

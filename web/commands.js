@@ -108,11 +108,13 @@ const CMDS = [
   { id: "toolRect", g: "Repair", label: "Marquee selection tool", run: () => spSetTool("rect", true), doc: true, kw: "spectrogram spectral rectangle frequency select" },
   { id: "toolLasso", g: "Repair", label: "Lasso selection tool", run: () => spSetTool("lasso", true), doc: true, kw: "spectrogram spectral freehand frequency select" },
   { id: "toolBrush", g: "Repair", label: "Spot Healing Brush", run: () => spSetTool("brush", true), doc: true, kw: "spectrogram spectral paint heal repair click thump whistle cough" },
-  { id: "markAdd", g: "Locations", label: "Add marker (or a range from the selection)", run: () => addMarker(false), doc: true, kw: "cue memory location" },
+  { id: "markAdd", g: "Locations", label: "Add marker (or a range from the selection)", run: () => recBusy() ? recMark() : addMarker(false), when: () => !!ed.doc || recBusy(), kw: "cue memory location" },
   { id: "rangeAdd", g: "Locations", label: "Add a range from the selection", run: () => addMarker(true), doc: true, when: () => selOn(), kw: "region memory location" },
   { id: "locAdd", g: "Locations", label: "New memory location…", run: () => addLocationDlg(), doc: true, kw: "marker zoom view named" },
   { id: "locs", g: "Locations", label: "Locations", run: () => toggleLocs(), doc: true, kw: "markers memory locations list" },
   { id: "open", g: "File", label: "Open a file…", run: () => pickFiles() },
+  { id: "recPanel", g: "File", label: "Record…", run: () => recToggle(), kw: "record recording input microphone vinyl rip turntable guitar capture" },
+  { id: "rec", g: "Transport", label: "Record / stop recording", run: () => recGo(), kw: "record recording start stop capture" },
   { id: "export", g: "File", label: "Export…", run: () => openExport(), doc: true, kw: "render bounce save wav flac master dither" },
   { id: "files", g: "File", label: "Files", run: () => openFiles(), kw: "library locker studio" },
   { id: "close", g: "File", label: "Close file", run: () => closeDoc(), doc: true },
@@ -132,7 +134,7 @@ const BASE_KEYS = {
   undo: ["Mod+Z"], redo: ["Mod+Shift+Z", "Mod+Y"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
   delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"], heal: ["Mod+U"], nrCap: ["Shift+P"],
   markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"], spec: ["Shift+D"], toolRect: ["E"], toolLasso: ["D"], toolBrush: ["B"],
-  open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"]
+  open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"], rec: ["Shift+Space"]
 };
 
 const KEYMAPS = {
@@ -157,7 +159,7 @@ const KEYMAPS = {
       zp1: [{ mac: "Ctrl+1", win: { k: "1", native: "Win+1" } }, "1"], zp2: [{ mac: "Ctrl+2", win: { k: "2", native: "Win+2" } }, "2"], zp3: [{ mac: "Ctrl+3", win: { k: "3", native: "Win+3" } }, "3"], zp4: [{ mac: "Ctrl+4", win: { k: "4", native: "Win+4" } }, "4"], zp5: [{ mac: "Ctrl+5", win: { k: "5", native: "Win+5" } }, "5"],
       undo: ["Mod+Z", "Z"], redo: ["Mod+Shift+Z", "Shift+Z"], cut: ["Mod+X", "X"], copy: ["Mod+C", "C"], paste: ["Mod+V", "V"],
       delete: ["Delete", "Backspace"], silence: ["Mod+B"], crop: [{ k: "Shift+T", native: "Mod+T" }], insert: ["Mod+Shift+E"], selAll: ["Mod+A"],
-      locAdd: ["NumEnter"], markAdd: [{ mac: "Mod+Enter" }], locs: ["Mod+Num5"], open: ["Mod+O"], export: ["Mod+Alt+B"]
+      locAdd: ["NumEnter"], markAdd: [{ mac: "Mod+Enter" }], locs: ["Mod+Num5"], open: ["Mod+O"], export: ["Mod+Alt+B"], rec: ["F12", "Num3", { k: "Shift+Space", native: "Mod+Space" }]
     }
   },
   reaper: {
@@ -167,6 +169,7 @@ const KEYMAPS = {
       zoomIn: ["=", "+", "Num+"], zoomOut: ["-", "Num-"], zoomSel: [{ mac: "Mod+PageUp", win: { k: "Z", native: "Ctrl+PageUp" } }], zoomFull: [{ mac: "Mod+PageDown", win: { k: "\\", native: "Ctrl+PageDown" } }],
       undo: ["Mod+Z"], redo: ["Mod+Shift+Z"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"], delete: ["Delete"], selAll: ["Mod+A"], deselect: ["Escape"],
       markAdd: ["M"], locAdd: ["Shift+M"], rangeAdd: ["Shift+R"], prevMark: ["["], nextMark: ["]"], locs: ["Mod+J"], palette: ["?"], export: ["Mod+Alt+R"],
+      rec: [{ k: "Shift+Space", native: "Mod+R" }],
       loc1: ["1", "Num1"], loc2: ["2", "Num2"], loc3: ["3", "Num3"], loc4: ["4", "Num4"], loc5: ["5", "Num5"], loc6: ["6", "Num6"], loc7: ["7", "Num7"], loc8: ["8", "Num8"], loc9: ["9", "Num9"], loc10: ["0", "Num0"]
     }
   }
@@ -330,6 +333,7 @@ function closePopovers() {
   if (!$("files").classList.contains("hidden")) { closeFiles(); return true; }
   if (!$("hist").classList.contains("hidden")) { closeHist(); return true; }
   if (!$("locs").classList.contains("hidden")) { closeLocs(); return true; }
+  if (rc.open && !recBusy()) { recClose(); return true; }
   return false;
 }
 

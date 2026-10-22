@@ -1,7 +1,7 @@
 const I18N_LANGS = { en: "English", de: "Deutsch", fr: "Français", es: "Español", it: "Italiano", pt: "Português", hi: "हिन्दी" };
 const I18N_COUNTRIES = ["GB", "DE", "FR", "ES", "IT", "PT", "IN", "US", "AT", "CH", "BR", "MX"];
 const i18n = { lang: "en", dict: {}, rev: {}, obs: null, pickers: [] };
-const I18N_SKIP = "#mdSum, #mdRangeT, #mdSensV, #mdTrack, #textSizeNote, #whoami, #acctName, #docName, #docInfo, #tnow, #tlen, #busyName, #busyPct, #stMsg, #histN, #histList, #locsList, #palList, #xPreview, .xn, #dgList, #dgSensV, #nrPrint, #nrSum, #nrRange, #nrAmtV, #nrFloorV, #nrThrV, #nrDecayV, #nrPrecV, #nrFft, #dgFx, #dgTolV, #humInfo, #humSum, #humRange, #humNV, #humQV, #humGainV, #humSlopeV, #spResDd, #spRangeDd, #spBrushV, #ldStats, #ldSum, #ldRange, #ldRefInfo, #ldCeilV, #ldRelV, #ldLookV, #ldPeakV, #ldTarget, .ldrefs, .hl, .fn, .fi, canvas, svg, script, style, .lp";
+const I18N_SKIP = "#recT, #recTime, #recPk, #recInfo, #recSize, #recSum, #recDev, #recCh, #recRate, #recThrV, #mdSum, #mdRangeT, #mdSensV, #mdTrack, #textSizeNote, #whoami, #acctName, #docName, #docInfo, #tnow, #tlen, #busyName, #busyPct, #stMsg, #histN, #histList, #locsList, #palList, #xPreview, .xn, #dgList, #dgSensV, #nrPrint, #nrSum, #nrRange, #nrAmtV, #nrFloorV, #nrThrV, #nrDecayV, #nrPrecV, #nrFft, #dgFx, #dgTolV, #humInfo, #humSum, #humRange, #humNV, #humQV, #humGainV, #humSlopeV, #spResDd, #spRangeDd, #spBrushV, #ldStats, #ldSum, #ldRange, #ldRefInfo, #ldCeilV, #ldRelV, #ldLookV, #ldPeakV, #ldTarget, .ldrefs, .hl, .fn, .fi, canvas, svg, script, style, .lp";
 
 function i18nDetect() {
   const stored = localStorage.getItem("djLang");

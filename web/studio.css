@@ -411,3 +411,33 @@ canvas.ru{height:calc(34px*var(--fs))}
 html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfield input,html .lrow .hn,html .lrow .lt,html #zpSeg .segbtn,html .xnum,html .dgrow,html #diag .nrbody .row>.snote,html .nin,html #diag .ldstats .lst b,html .sptools #spBrushV,html .docmeta span,html kbd,html .prow .pk,html #stVer{font-family:var(--mono)}
 .docmeta b{flex:0 1 auto}
 #docInfo{flex:0 1000 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+#rec{position:fixed;inset:0;background:rgba(12,10,8,.72);display:flex;align-items:flex-start;justify-content:center;z-index:42;padding:calc(40px*var(--fs)) calc(16px*var(--fs)) calc(16px*var(--fs));overflow:auto}
+#rec.hidden{display:none}
+#rec .panel{background:var(--bg2);border:1px solid var(--border);width:min(calc(600px*var(--fs)),100%);box-shadow:0 14px 48px rgba(0,0,0,.65)}
+#rec .phead{display:flex;align-items:center;justify-content:space-between;padding:calc(12px*var(--fs)) calc(14px*var(--fs));border-bottom:1px solid var(--border)}
+#rec .phead b{font:400 calc(20px*var(--fs)) var(--serif)}
+#rec input[type=range]{accent-color:var(--pink);flex:1;max-width:calc(220px*var(--fs))}
+#rec section{padding:calc(12px*var(--fs)) calc(14px*var(--fs));border-bottom:1px solid var(--border)}
+#rec h3{margin:0 0 calc(10px*var(--fs));font-size:calc(9px*var(--fs));letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:500}
+#rec .row{display:flex;align-items:center;gap:calc(10px*var(--fs));flex-wrap:wrap}
+#rec .row + .row{margin-top:calc(9px*var(--fs))}
+#rec .row > label{color:var(--gray);min-width:calc(104px*var(--fs))}
+#rec .snote{font-size:calc(10px*var(--fs));color:var(--dim)}
+#rec .dd.off .cur{opacity:.5;cursor:default}
+#rec .recmt{flex:1;min-width:calc(180px*var(--fs));height:calc(40px*var(--fs));cursor:pointer;display:block}
+#rec .recwave{display:block;width:100%;height:calc(70px*var(--fs));border:1px solid var(--border)}
+#rec .rectime{margin-top:calc(10px*var(--fs))}
+#recTime{font:calc(24px*var(--fs)) var(--mono);color:var(--white);font-variant-numeric:tabular-nums}
+#recSum{margin-top:calc(8px*var(--fs));color:var(--gray)}
+#rec .recgo{background:#c8303a;min-width:calc(120px*var(--fs))}
+#rec .recgo.stop{background:var(--white);color:var(--bg)}
+#recName{flex:1;min-width:calc(200px*var(--fs))}
+#recBtn{width:auto;min-width:calc(30px*var(--fs));justify-content:center;display:inline-flex;align-items:center;gap:calc(6px*var(--fs));color:var(--gray)}
+#recBtn .rdot{width:calc(11px*var(--fs));height:calc(11px*var(--fs));border-radius:50%;background:#c8303a;display:block;opacity:.75}
+#recBtn:hover .rdot{opacity:1}
+#recBtn.on .rdot{opacity:1;animation:recpulse 1s ease-in-out infinite}
+#recBtn.wait .rdot{animation-duration:2.2s}
+#recT{font-family:var(--mono);font-size:calc(11px*var(--fs));color:#e5484d;font-variant-numeric:tabular-nums}
+#recT:empty{display:none}
+@keyframes recpulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media (max-width:760px){#rec{padding:calc(8px*var(--fs))}#rec .row > label{min-width:0;flex-basis:100%}}
