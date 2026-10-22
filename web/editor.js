@@ -1120,7 +1120,7 @@ function editButtons() {
   set("redoBtn", ed.histIdx < ed.hist.length - 1);
   for (const id of ["cutBtn", "copyBtn", "delBtn", "silBtn", "cropBtn"]) set(id, has);
   set("pasteBtn", !!ed.clipInfo);
-  $("histN").textContent = ed.histIdx ? "· " + ed.histIdx : "";
+  $("histN").textContent = ed.histIdx ? String(ed.histIdx) : "";
 }
 
 function mapPos(p, h) {
@@ -1382,11 +1382,18 @@ function renderLocs() {
   $("locsInfo").textContent = marks.length ? t("Click to go there. Drag markers on the ruler to move them; double-click to rename.") : t("No locations yet.") + " " + (mk ? mk + " — " : "") + t("adds a marker at the cursor, or keeps the selection as a range. New… can also store the zoom.");
 }
 
-function openLocs() { if (!ed.doc) return; closeFiles(); closeHist(); $("locs").classList.remove("hidden"); renderLocs(); }
+function popFit(el) {
+  el.style.left = "";
+  if (getComputedStyle(el).position !== "absolute") return;
+  const r = el.getBoundingClientRect(), over = r.right - (innerWidth - 8);
+  if (over > 0) el.style.left = -Math.min(over, Math.max(0, r.left - 8)) + "px";
+}
+
+function openLocs() { if (!ed.doc) return; closeFiles(); closeHist(); $("locs").classList.remove("hidden"); renderLocs(); popFit($("locs")); }
 function closeLocs() { $("locs").classList.add("hidden"); }
 function toggleLocs() { if ($("locs").classList.contains("hidden")) openLocs(); else closeLocs(); }
 
-function openHist() { if (!ed.doc) return; closeFiles(); closeLocs(); $("hist").classList.remove("hidden"); renderHist(); }
+function openHist() { if (!ed.doc) return; closeFiles(); closeLocs(); $("hist").classList.remove("hidden"); renderHist(); popFit($("hist")); }
 function closeHist() { $("hist").classList.add("hidden"); }
 function toggleHist() { if ($("hist").classList.contains("hidden")) openHist(); else closeHist(); }
 

@@ -215,9 +215,16 @@ canvas.mt{flex:none;display:block;width:100%;height:36px;cursor:pointer;border-t
 .tsep{width:1px;height:20px;background:var(--border);margin:0 4px}
 .tbtn.sm{width:28px;height:26px;padding:5px}
 .tbtn:disabled{opacity:.32;cursor:default;border-color:var(--border)}
+.tbtn{position:relative}
+.tbtn .cnt{position:absolute;top:-6px;right:-2px;min-width:14px;height:13px;padding:0 3px;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border);color:var(--gold);font-size:8px;line-height:11px;text-align:center;font-variant-numeric:tabular-nums;pointer-events:none}
+.tbtn .cnt:empty{display:none}
+.segbtn.ico{display:inline-flex;align-items:center;justify-content:center;padding:3px 8px}
+.segbtn.ico svg{width:16px;height:16px;display:block}
+.segbtn .wc1{stroke:var(--pink)}.segbtn .wc2{stroke:var(--gold)}.segbtn .wc3{stroke:var(--blue)}
+.segbtn:not(.on) .wc1,.segbtn:not(.on) .wc2,.segbtn:not(.on) .wc3{opacity:.55}
+.segbtn:not(.on):hover .wc1,.segbtn:not(.on):hover .wc2,.segbtn:not(.on):hover .wc3{opacity:1}
 .histw{position:relative}
 #histBtn{height:26px}
-#histN:not(:empty){margin-left:6px}
 #hist{position:absolute;left:0;top:calc(100% + 8px);width:min(400px,calc(100vw - 24px));max-height:min(440px,calc(100vh - 160px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:45;padding:10px 12px}
 #hist.hidden{display:none}
 .hhead{display:flex;align-items:center;margin-bottom:8px}
@@ -326,7 +333,6 @@ canvas.ru{height:34px}
 .xjob .bbar{height:3px;background:var(--bg4);overflow:hidden}
 .xjob .bbar i{display:block;height:100%;background:var(--pink);transition:width .15s}
 .xjob.done .bbar i{background:var(--green)}
-#expN:not(:empty){margin-left:6px;color:var(--gold)}
 #expBtn{height:26px}
 #diag{position:absolute;top:8px;right:8px;bottom:8px;width:min(400px,calc(100% - 16px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:30;padding:10px 12px;font-size:11px}
 #diag.hidden{display:none}
@@ -350,7 +356,7 @@ canvas.ru{height:34px}
 .dgrow .dgn{color:var(--dim)}
 .dgrow .dgs{text-align:right;color:var(--dim)}
 .dgfoot{margin-top:auto}
-#dgBtn{height:26px;margin-right:6px}
+#dgBtn{height:26px}
 #diag .rptabs{margin-left:10px}
 #diag .rptabs{min-width:0;overflow-x:auto;scrollbar-width:none}
 #diag .rptabs .segbtn{padding:3px 7px;white-space:nowrap;flex:none}

@@ -207,7 +207,7 @@ async function xpDownload(j) {
 
 function xpBadge() {
   const n = xp.jobs.filter(j => ["queued", "rendering", "hashing", "uploading", "verifying"].includes(j.state)).length;
-  $("expN").textContent = n ? "· " + n : "";
+  $("expN").textContent = n ? String(n) : "";
 }
 
 const XP_STATE = { queued: "Waiting", rendering: "Rendering", hashing: "Checking", uploading: "Uploading", verifying: "Saving in the Locker", done: "Done", failed: "Failed", cancelled: "Cancelled" };
