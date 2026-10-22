@@ -328,7 +328,7 @@ canvas.ru{height:34px}
 .xjob.done .bbar i{background:var(--green)}
 #expN:not(:empty){margin-left:6px;color:var(--gold)}
 #expBtn{height:26px}
-#diag{position:absolute;top:8px;right:8px;bottom:8px;width:min(360px,calc(100% - 16px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:30;padding:10px 12px;font-size:11px}
+#diag{position:absolute;top:8px;right:8px;bottom:8px;width:min(400px,calc(100% - 16px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:30;padding:10px 12px;font-size:11px}
 #diag.hidden{display:none}
 #diag .dgfx{margin-left:8px;color:var(--gold);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
 .dgbody{display:flex;flex-direction:column;gap:9px;min-height:0;flex:1}
@@ -352,7 +352,8 @@ canvas.ru{height:34px}
 .dgfoot{margin-top:auto}
 #dgBtn{height:26px;margin-right:6px}
 #diag .rptabs{margin-left:10px}
-#diag .rptabs .segbtn{padding:3px 8px}
+#diag .rptabs{min-width:0;overflow-x:auto;scrollbar-width:none}
+#diag .rptabs .segbtn{padding:3px 7px;white-space:nowrap;flex:none}
 .dgbody.hidden{display:none}
 .nrbody{overflow-y:auto;overflow-x:hidden;padding-right:2px}
 .nrgraph{position:relative;height:150px;flex:none;border:1px solid var(--border);background:var(--bg)}
@@ -378,6 +379,14 @@ canvas.ru{height:34px}
 #diag .unit{font-size:10px;color:var(--dim);margin-left:-4px}
 #dgTol{flex:1;min-width:90px;accent-color:var(--pink)}
 #diag .row.hidden{display:none}
+#diag .ldstats{display:grid;grid-template-columns:1fr 1fr;gap:5px 14px;margin:4px 0 6px;padding:8px 9px;background:var(--bg);border:1px solid var(--border)}
+#diag .ldstats .lst{display:flex;justify-content:space-between;gap:6px;font-size:10px;color:var(--gray)}
+#diag .ldstats .lst b{color:var(--white);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
+#diag .snote.hidden,#diag details.hidden{display:none}
+.ldrefs{display:flex;flex-direction:column;gap:4px;max-height:46vh;overflow:auto;margin-bottom:8px}
+.ldref{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;background:var(--bg3);border:1px solid var(--border);color:var(--white);padding:7px 9px;font:inherit;font-size:11px;cursor:pointer}
+.ldref:hover{border-color:var(--gray)}
+.ldref.on{border-color:var(--gold);color:var(--gold)}
 #nrCapRow.hidden{display:none}
 #diag .hhead .rptabs{margin-left:0}
 #dgFx{min-width:140px}

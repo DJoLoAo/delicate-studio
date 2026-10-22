@@ -63,7 +63,8 @@ ed.worker.onmessage = e => {
   if (m.t === "playerror") { stopPlay(); tell(t("Playback stopped") + ": " + m.msg); return; }
   if (m.t === "xjob") { xpJob(m); return; }
   if (m.t === "dprog") { dgProg(m); return; }
-  if (m.t === "nprog") { nrProg(m); humProg(m); return; }
+  if (m.t === "nprog") { nrProg(m); humProg(m); ldProg(m); return; }
+  if (m.t === "lprog") { ldProg(m); return; }
   if (m.t === "aprog") { nrAutoProg(m); return; }
   if (m.t === "spectile") { spTile(m); return; }
   if (m.t === "specerr") { spErr(m); return; }
@@ -685,6 +686,7 @@ function applyState(st) {
   if (!$("locs").classList.contains("hidden")) renderLocs();
   dgAfterEdit();
   spAfterEdit();
+  ldAfterEdit();
 }
 
 function showOpened(r) {
@@ -732,6 +734,7 @@ function showDoc(meta, peaks, bands, state) {
   closeFiles();
   nrDoc();
   humDoc();
+  ldDoc();
 }
 
 function closeDoc() {
@@ -1106,7 +1109,7 @@ function drawMeters() {
   if (active || ed.play.on) ed.meterRaf = requestAnimationFrame(drawMeters);
 }
 
-const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", repair: "Repair", nr: "Noise Reduction", hum: "DeHummer", declip: "DeClipper", spot: "Spot Healing", spheal: "Spectral heal", spdel: "Remove frequencies" };
+const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", repair: "Repair", nr: "Noise Reduction", hum: "DeHummer", declip: "DeClipper", spot: "Spot Healing", spheal: "Spectral heal", spdel: "Remove frequencies", loud: "Match loudness", norm: "Normalize", amp: "Amplify" };
 
 function selOn() { return ed.sel.b > ed.sel.a; }
 
@@ -1222,6 +1225,7 @@ function histLabel(h) {
   if (h.op === "open") return name;
   const ch = h.ch ? " · " + h.ch : "";
   if (h.op === "insert") return name + " " + fmtTime(h.n) + " @ " + fmtTime(h.a) + ch;
+  if (h.op === "loud" || h.op === "norm" || h.op === "amp") return name + " " + (h.n > 0 ? "+" : h.n < 0 ? "−" : "") + Math.abs(h.n).toFixed(1) + " dB · " + fmtTime(h.a) + "–" + fmtTime(h.b) + ch;
   if (h.op === "repair") return (h.n === 1 ? t("Repair 1 click") : t("Repair {n} clicks").replace("{n}", h.n)) + " · " + fmtTime(h.a) + "–" + fmtTime(h.b);
   if (h.op === "declip") return (h.n === 1 ? t("Repair 1 clipped span") : t("Repair {n} clipped spans").replace("{n}", h.n)) + " · " + fmtTime(h.a) + "–" + fmtTime(h.b);
   if (h.op === "paste") return name + " " + fmtTime(h.n) + " @ " + fmtTime(h.a) + (h.b > h.a && !h.ch ? " " + t("over") + " " + fmtTime(h.b - h.a) : "") + ch;
@@ -1724,6 +1728,7 @@ function wireUi() {
   wireDiag();
   wireNr();
   wireHum();
+  wireLoud();
   wireDrop();
 }
 

@@ -2031,13 +2031,36 @@ function humTune(x, slot, raw, only) {
 }
 
 function fxApi(x, kind, slot) {
+  if (kind === "ld") return { reset: () => x.lim_reset(slot), inp: m => x.lim_in(slot, m), run: m => x.lim_run(slot, m), out: () => x.lim_out(slot) };
   return kind === "hum"
     ? { reset: () => x.dh_reset(slot), inp: m => x.dh_in(slot, m), run: m => x.dh_run(slot, m), out: () => x.dh_out(slot) }
     : { reset: () => x.nr_reset(slot), inp: m => x.nr_in(slot, m), run: m => x.nr_run(slot, m), out: () => x.nr_out(slot) };
 }
 
+function fxKind(k) { return k === "hum" || k === "ld" ? k : "nr"; }
+
+function ldCfg(m, ch) {
+  const o = m && typeof m === "object" ? m : {};
+  const num = (v, lo, hi, d) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
+  const gains = Array.isArray(o.gains) && o.gains.length === ch ? o.gains.map(v => num(v, -60, 60, 0)) : null;
+  return { gain: num(o.gain, -60, 60, 0), gains, ceil: num(o.ceil, -12, 0, -1), look: num(o.look, 1, 20, 5), rel: num(o.rel, 5, 1000, 25), lim: o.lim !== false };
+}
+
+function ldTune(x, slot, raw, ch) {
+  const cfg = ldCfg(raw, ch);
+  const lat = x.lim_set(slot, cfg.gain, cfg.ceil, cfg.look, cfg.rel, cfg.lim ? 1 : 0);
+  if (lat < 0) throw new Error(dspError(x));
+  if (cfg.gains) cfg.gains.forEach((g, k) => x.lim_gain(slot, k, g));
+  return lat;
+}
+
 function fxSetup(x, kind, slot, raw, c, only) {
   const sr = c.meta.sampleRate, ch = c.meta.channels;
+  if (kind === "ld") {
+    if (x.lim_open(slot, ch, sr) !== 0) throw new Error(dspError(x));
+    const lat = ldTune(x, slot, raw, ch);
+    return { warm: lat + Math.round(sr * 0.3), key: "ld" };
+  }
   if (kind === "hum") {
     if (x.dh_open(slot, ch, sr) !== 0) throw new Error(dspError(x));
     const h = humTune(x, slot, raw, only);
@@ -2051,7 +2074,7 @@ function fxSetup(x, kind, slot, raw, c, only) {
 function fxPreview(x, c) {
   const kind = FX.kind, only = FX.mode === "noise";
   const cfg = kind === "nr" ? nrCfg(FX.raw, c.meta.sampleRate) : null;
-  const key = kind === "hum" ? "hum" : cfg.n + ":" + cfg.k + (cfg.auto ? ":auto" : "");
+  const key = kind === "nr" ? cfg.n + ":" + cfg.k + (cfg.auto ? ":auto" : "") : kind;
   const ref = kind === "nr" ? (cfg.auto ? NR.auto : NR.print) : null;
   let pv = FX.pv;
   if (!pv || pv.doc !== c || pv.kind !== kind || pv.key !== key || pv.ref !== ref || (cfg && cfg.auto && pv.autoKey !== NR.auto.key)) {
@@ -2060,6 +2083,7 @@ function fxPreview(x, c) {
     return;
   }
   if (kind === "hum") pv.warm = humWarm(humTune(x, 0, FX.raw, only), c.meta.sampleRate);
+  else if (kind === "ld") pv.warm = ldTune(x, 0, FX.raw, c.meta.channels) + Math.round(c.meta.sampleRate * 0.3);
   else {
     const curveKey = JSON.stringify(cfg.curve);
     if (pv.curveKey !== curveKey) {
@@ -2074,7 +2098,7 @@ function fxPreview(x, c) {
 async function fxConfig(m) {
   const mode = ["proc", "noise"].includes(m.mode) ? m.mode : "off";
   FX.raw = m.cfg || null;
-  FX.kind = m.kind === "hum" ? "hum" : "nr";
+  FX.kind = fxKind(m.kind);
   const c = cur;
   if (mode === "off" || !c) { FX.mode = "off"; FX.pv = null; ringFlush(); return { t: "fxok", info: nrInfo() }; }
   if (FX.kind === "nr") await nrLoadPrint();
@@ -2312,7 +2336,7 @@ function nrRollback(c, s) {
 async function fxApply(m) {
   const c = cur;
   if (!c || c.meta.id !== m.id) throw new Error("stale");
-  const kind = m.kind === "hum" ? "hum" : "nr";
+  const kind = fxKind(m.kind);
   if (kind === "nr") await nrLoadPrint();
   if (kind === "nr" && nrCfg(m.cfg, c.meta.sampleRate).auto) await nrAutoFind(c, m.jobId);
   const x = await dspExports();
@@ -2390,7 +2414,8 @@ async function fxApply(m) {
     if (cur !== c || c.lists !== lists) { nrRollback(c, snap); throw new Error("changed"); }
     const next = opPatch(c.lists, segs.map((l, k) => chans[k] ? [[a, b, l]] : null));
     const before = { a: clampI(m.a, 0, c.len), b: clampI(m.b, 0, c.len), cursor: clampI(m.cursor, 0, c.len) };
-    pushHist({ op: kind, a, b, n: 0, ch: chans.every(Boolean) ? null : chanLabel(chans) }, next, before, before);
+    const op = kind === "ld" ? (["loud", "norm", "amp"].includes(m.op) ? m.op : "amp") : kind;
+    pushHist({ op, a, b, n: kind === "ld" ? Math.round(ldCfg(m.cfg, ch).gain * 10) / 10 : 0, ch: chans.every(Boolean) ? null : chanLabel(chans) }, next, before, before);
     persist();
     return statePayload(m.have, { t: "state", sel: null });
   });
@@ -2474,6 +2499,150 @@ async function spTiles(m) {
   }
 }
 
+const LD = { job: null };
+
+function ldStatsOut(x) {
+  const n = x.lm_stats();
+  if (n < 0) throw new Error(dspError(x));
+  const p = x.lm_out(), v = Array.from(new Float64Array(x.memory.buffer, p, n)), ch = (n - 5) / 2;
+  const db = a => a > 0 ? 20 * Math.log10(a) : -Infinity;
+  const fin = a => Number.isFinite(a) ? Math.round(a * 100) / 100 : null;
+  return { integrated: fin(v[0]), lra: fin(v[1]), st: fin(v[2]), mom: fin(v[3]), tp: v.slice(5, 5 + ch).map(a => fin(db(a))), sp: v.slice(5 + ch, 5 + 2 * ch).map(a => fin(db(a))), secs: v[4] / 10 };
+}
+
+function ldJob(m, c) {
+  if (LD.job) LD.job.cancel = true;
+  const job = { id: m.jobId, cancel: false, last: 0 };
+  LD.job = job;
+  job.tick = async (frac, phase) => {
+    const now = performance.now();
+    if (now - job.last > 120) { job.last = now; postMessage({ t: "lprog", id: job.id, frac: Math.min(1, frac), phase: phase || 0 }); await new Promise(r => setTimeout(r, 0)); }
+    if (job.cancel || (c && cur !== c)) throw new Error("cancelled");
+  };
+  job.end = () => { if (LD.job === job) LD.job = null; };
+  return job;
+}
+
+async function ldFeed(x, ch, a, b, read, job, w0, w1) {
+  const B = 65536;
+  for (let s = a; s < b; s += B) {
+    const n = Math.min(B, b - s);
+    const p = x.lm_in(n, ch);
+    const inb = new Float32Array(x.memory.buffer, p, n * ch);
+    read(s, n, inb);
+    if (x.lm_feed(n) !== 0) throw new Error(dspError(x));
+    await job.tick(w0 + (w1 - w0) * (s + n - a) / Math.max(1, b - a));
+  }
+}
+
+async function ldMeasure(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const x = await dspExports(), ch = c.meta.channels, F = c.len;
+  const a = clampI(m.a, 0, F), b = m.b > m.a ? clampI(m.b, 0, F) : F;
+  if (b <= a) throw new Error("nothing");
+  const job = ldJob(m, c), lists = c.lists, ver = c.ver;
+  try {
+    if (x.lm_open(ch, c.meta.sampleRate) !== 0) throw new Error(dspError(x));
+    const rd = (src, cc, f, k, out, off) => readSrcOf(c, src, cc, f, k, out, off);
+    await ldFeed(x, ch, a, b, (s, n, out) => { for (let k = 0; k < ch; k++) readList(lists[k], c.cum[k], s, n, out, k * n, rd); }, job, 0, 1);
+    if (c.lists !== lists) throw new Error("stale");
+    return { t: "ldstats", a, b, ver, stats: ldStatsOut(x) };
+  } finally { job.end(); }
+}
+
+async function ldRef(m) {
+  if (cur && cur.meta.id === m.refId) throw new Error("ld-self");
+  const dir = await docsDir();
+  let docDir, meta, pool = null;
+  try {
+    docDir = await dir.getDirectoryHandle(String(m.refId));
+    meta = await readJson(docDir, "meta.json");
+  } catch { throw new Error("ld-ref"); }
+  const x = await dspExports(), ch = meta.channels, F = meta.frames;
+  const job = ldJob(m, null);
+  try {
+    try { pool = await syncHandle(await docDir.getFileHandle("pool.f32"), true); } catch { throw new Error("locked"); }
+    const d = { meta, pool };
+    if (x.lm_open(ch, meta.sampleRate) !== 0) throw new Error(dspError(x));
+    await ldFeed(x, ch, 0, F, (s, n, out) => { for (let k = 0; k < ch; k++) poolRead(d, k, s, n, out, k * n); }, job, 0, 1);
+    return { t: "ldstats", ref: { id: meta.id, name: meta.name, sr: meta.sampleRate }, stats: ldStatsOut(x) };
+  } finally {
+    if (pool) { try { pool.close(); } catch {} }
+    job.end();
+  }
+}
+
+async function ldPass(x, c, lists, segs, raw, job, w0, w1) {
+  const ch = c.meta.channels, sr = c.meta.sampleRate, B = 32768;
+  if (x.lim_open(2, ch, sr) !== 0) throw new Error(dspError(x));
+  ldTune(x, 2, raw, ch);
+  if (x.lm_open(ch, sr) !== 0) throw new Error(dspError(x));
+  const rd = (src, cc, f, k, out, off) => readSrcOf(c, src, cc, f, k, out, off);
+  const total = segs.reduce((v, s) => v + s[1] - s[0], 0);
+  let done = 0;
+  for (const [s0, s1, pre] of segs) {
+    x.lim_reset(2);
+    let inPos = pre, outPos = pre;
+    while (outPos < s1) {
+      const ip = x.lim_in(2, B);
+      const inb = new Float32Array(x.memory.buffer, ip, B * ch);
+      for (let k = 0; k < ch; k++) readList(lists[k], c.cum[k], inPos, B, inb, k * B, rd);
+      inPos += B;
+      const made = x.lim_run(2, B);
+      if (made < 0) throw new Error(dspError(x));
+      const lo = Math.max(outPos, s0), hi = Math.min(outPos + made, s1);
+      if (hi > lo) {
+        const n = hi - lo, op = x.lim_out(2), out = new Float32Array(x.memory.buffer, op, made * ch).slice();
+        const mp = x.lm_in(n, ch), stage = new Float32Array(x.memory.buffer, mp, n * ch);
+        for (let k = 0; k < ch; k++) stage.set(out.subarray(k * made + lo - outPos, k * made + hi - outPos), k * n);
+        if (x.lm_feed(n) !== 0) throw new Error(dspError(x));
+        done += n;
+      }
+      outPos += made;
+      await job.tick(w0 + (w1 - w0) * done / Math.max(1, total), 1);
+    }
+  }
+  const st = ldStatsOut(x);
+  return { out: st.integrated, gr: x.lim_gr(2), tp: Math.max(...st.tp.map(v => v === null ? -Infinity : v)) };
+}
+
+async function ldFit(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const x = await dspExports(), sr = c.meta.sampleRate, F = c.len;
+  const a = clampI(m.a, 0, F), b = m.b > m.a ? clampI(m.b, 0, F) : F;
+  const lin = Number(m.lin), target = Number(m.target);
+  if (!Number.isFinite(lin)) throw new Error("ld-silent");
+  if (!Number.isFinite(target)) throw new Error("nothing");
+  const job = ldJob(m, c), lists = c.lists;
+  try {
+    const len = b - a, piece = 10 * sr;
+    let segs;
+    if (len <= 3 * 60 * sr) segs = [[a, b, a]];
+    else {
+      segs = [];
+      for (let i = 0; i < 18; i++) { const s0 = a + Math.round(i * (len - piece) / 17); segs.push([s0, s0 + piece, Math.max(a, s0 - sr)]); }
+    }
+    const raw = Object.assign({}, m.cfg, { lim: true });
+    let gain = target - lin, prev = null, best = null, iters = 0;
+    for (; iters < 7; iters++) {
+      const r = await ldPass(x, c, lists, segs, Object.assign({}, raw, { gain }), job, iters / 7, (iters + 1) / 7);
+      if (!Number.isFinite(r.out)) throw new Error("ld-silent");
+      best = { gain, out: r.out, gr: r.gr, tp: r.tp };
+      if (Math.abs(r.out - target) < 0.05) break;
+      const slope = prev && Math.abs(gain - prev.gain) > 1e-3 ? Math.max(0.05, Math.min(1, (r.out - prev.out) / (gain - prev.gain))) : 1;
+      if (prev && slope < 0.08 && r.out < target - 0.3) break;
+      prev = { gain, out: r.out };
+      const next = Math.min(36, gain + Math.min(12, (target - r.out) / slope));
+      if (Math.abs(next - gain) < 0.01) break;
+      gain = next;
+    }
+    if (c.lists !== lists) throw new Error("stale");
+    return { t: "ldfit", a, b, ver: c.ver, gain: Math.round(best.gain * 100) / 100, out: Math.round(best.out * 100) / 100, gr: Math.round(best.gr * 10) / 10, tp: Math.round(best.tp * 100) / 100, reached: Math.abs(best.out - target) < 0.3, sampled: segs.length > 1 };
+  } finally { job.end(); }
+}
+
 function opened(req, r) {
   postMessage({ t: "opened", req, meta: r.meta, peaks: r.peaks, bands: r.bands, state: r.state, recovered: r.recovered }, [r.peaks.buffer, r.bands.buffer]);
 }
@@ -2553,6 +2722,13 @@ async function handle(m) {
     return;
   }
   if (m.t === "spec") { await spTiles(m); return; }
+  if (m.t === "ldmeasure" || m.t === "ldref" || m.t === "ldfit") {
+    const f = { ldmeasure: ldMeasure, ldref: ldRef, ldfit: ldFit }[m.t];
+    try { postMessage(Object.assign({ req: m.req }, await f(m))); }
+    catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
+    return;
+  }
+  if (m.t === "ldcancel") { if (LD.job) LD.job.cancel = true; return; }
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
   if (m.t === "fxcancel") { if (FX.job) FX.job.cancel = true; return; }
   if (m.t === "adjust") { postMessage(Object.assign({ req: m.req }, await enqueue(() => adjustSel(m)))); return; }

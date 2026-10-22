@@ -90,6 +90,7 @@ impl Decoder {
 
 pub mod enc;
 pub mod hum;
+pub mod loud;
 pub mod nr;
 pub mod restore;
 pub mod rs;
@@ -648,6 +649,124 @@ mod wasm {
     #[unsafe(no_mangle)]
     pub extern "C" fn sp_img() -> *const u8 {
         spm().map(|s| s.img.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    static mut LM: Option<crate::loud::Meter> = None;
+    static mut LM_OUT: Vec<f64> = Vec::new();
+    static mut LIM: [Option<crate::loud::Limiter>; 3] = [None, None, None];
+
+    fn lmm() -> Option<&'static mut crate::loud::Meter> {
+        unsafe { (*std::ptr::addr_of_mut!(LM)).as_mut() }
+    }
+
+    fn limm(slot: u32) -> Option<&'static mut crate::loud::Limiter> {
+        unsafe { (*std::ptr::addr_of_mut!(LIM)).get_mut(slot as usize).and_then(|s| s.as_mut()) }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lm_open(ch: u32, sr: u32) -> i32 {
+        if ch == 0 || ch > 8 || sr == 0 {
+            return fail("loudness meter settings out of range".into());
+        }
+        unsafe { *std::ptr::addr_of_mut!(LM) = Some(crate::loud::Meter::new(ch as usize, sr as usize)); }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lm_in(m: u32, ch: u32) -> *mut f32 {
+        match lmm() {
+            Some(l) => {
+                l.stage.resize((m * ch) as usize, 0.0);
+                l.stage.as_mut_ptr()
+            }
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lm_feed(m: u32) -> i32 {
+        match lmm() {
+            Some(l) => {
+                l.feed_staged(m as usize);
+                0
+            }
+            None => fail("loudness meter is not open".into()),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lm_stats() -> i32 {
+        let Some(l) = lmm() else { return fail("loudness meter is not open".into()) };
+        let s = l.stats();
+        let out = unsafe { &mut *std::ptr::addr_of_mut!(LM_OUT) };
+        out.clear();
+        out.extend_from_slice(&[s.integrated, s.lra, s.st_max, s.m_max, l.blocks.len() as f64]);
+        out.extend(s.tp.iter().map(|&v| v as f64));
+        out.extend(s.sp.iter().map(|&v| v as f64));
+        out.len() as i32
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lm_out() -> *const f64 {
+        unsafe { (*std::ptr::addr_of!(LM_OUT)).as_ptr() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lim_open(slot: u32, ch: u32, sr: u32) -> i32 {
+        if slot > 2 || ch == 0 || ch > 8 || sr == 0 {
+            return fail("limiter settings out of range".into());
+        }
+        unsafe { (*std::ptr::addr_of_mut!(LIM))[slot as usize] = Some(crate::loud::Limiter::new(ch as usize, sr as usize)); }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lim_set(slot: u32, gain_db: f64, ceil_db: f64, look_ms: f64, rel_ms: f64, on: u32) -> i32 {
+        let Some(l) = limm(slot) else { return fail("limiter is not open".into()) };
+        l.configure(gain_db, ceil_db, look_ms, rel_ms, on != 0);
+        l.latency() as i32
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lim_gain(slot: u32, c: u32, gain_db: f64) {
+        if let Some(l) = limm(slot) {
+            l.set_gain(c as usize, gain_db);
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lim_reset(slot: u32) {
+        if let Some(l) = limm(slot) {
+            l.reset();
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lim_in(slot: u32, m: u32) -> *mut f32 {
+        limm(slot).map(|l| l.stage(m as usize)).unwrap_or(std::ptr::null_mut())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lim_run(slot: u32, m: u32) -> i32 {
+        match limm(slot) {
+            Some(l) => l.run(m as usize) as i32,
+            None => fail("limiter is not open".into()),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lim_out(slot: u32) -> *const f32 {
+        limm(slot).map(|l| l.out.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lim_latency(slot: u32) -> u32 {
+        limm(slot).map(|l| l.latency() as u32).unwrap_or(0)
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn lim_gr(slot: u32) -> f32 {
+        limm(slot).map(|l| l.gr).unwrap_or(0.0)
     }
 
     static mut SH: Option<crate::sheal::Heal> = None;
