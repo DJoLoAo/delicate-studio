@@ -1,4 +1,4 @@
-const DG_ROW = 26;
+function dgRow() { return 26 * thFs(); }
 const DG_LENS = [1, 2, 5, 10, 20];
 const rp = { open: false, tab: "diag", selKey: "" };
 const DG_FX = [{ v: "click", label: "DeClicker" }, { v: "clip", label: "DeClipper" }];
@@ -171,16 +171,16 @@ function dgList() {
   const box = $("dgList"), res = dg.res, n = res ? res.events.length : 0;
   let inner = box.firstElementChild;
   if (!inner) { inner = document.createElement("div"); inner.className = "dgin"; box.appendChild(inner); }
-  inner.style.height = n * DG_ROW + "px";
+  inner.style.height = n * dgRow() + "px";
   box.classList.toggle("hidden", !n);
   const top = box.scrollTop, h = box.clientHeight || 240;
-  const i0 = Math.max(0, Math.floor(top / DG_ROW) - 4), i1 = Math.min(n, Math.ceil((top + h) / DG_ROW) + 4);
+  const i0 = Math.max(0, Math.floor(top / dgRow()) - 4), i1 = Math.min(n, Math.ceil((top + h) / dgRow()) + 4);
   inner.textContent = "";
   for (let i = i0; i < i1; i++) {
     const e = res.events[i];
     const row = document.createElement("div");
     row.className = "dgrow" + (dg.sel.has(i) ? " sel" : "") + (i === dg.focus ? " focus" : "") + (e.ok ? "" : " stale");
-    row.style.top = i * DG_ROW + "px";
+    row.style.top = i * dgRow() + "px";
     row.dataset.i = i;
     const ms = (e.b - e.a) * 1000 / ed.doc.sampleRate;
     row.innerHTML = `<span class="dgn"></span><span class="dgt"></span><span class="dgl"></span><span class="dgc"></span><span class="dgs"></span>`;
@@ -207,8 +207,8 @@ function dgFocus(i, add) {
   ed.sel = { a: e.a, b: e.b };
   ed.cursor = e.a;
   const box = $("dgList");
-  if (i * DG_ROW < box.scrollTop) box.scrollTop = i * DG_ROW;
-  else if ((i + 1) * DG_ROW > box.scrollTop + box.clientHeight) box.scrollTop = (i + 1) * DG_ROW - box.clientHeight;
+  if (i * dgRow() < box.scrollTop) box.scrollTop = i * dgRow();
+  else if ((i + 1) * dgRow() > box.scrollTop + box.clientHeight) box.scrollTop = (i + 1) * dgRow() - box.clientHeight;
   dgRender();
   redraw();
 }
@@ -277,9 +277,9 @@ function drawDiag(g, W, H, dpr) {
     const e = ev[j];
     const x0 = Math.floor(xOf(e.a) * dpr), x1 = Math.max(x0 + Math.max(1, Math.round(dpr)), Math.ceil(xOf(e.b) * dpr));
     const on = j === dg.focus || dg.sel.has(j);
-    g.fillStyle = !e.ok ? "rgba(140,140,140,.7)" : on ? "#ff6b6f" : "rgba(229,72,77,.85)";
+    g.fillStyle = !e.ok ? tc("grey", 0.7) : on ? TH.rred : tc("gred", 0.85);
     g.fillRect(x0, 0, x1 - x0, bar);
-    if (on || x1 - x0 > 6 * dpr) { g.fillStyle = on ? "rgba(255,107,111,.18)" : "rgba(229,72,77,.08)"; g.fillRect(x0, bar, x1 - x0, H - bar); }
+    if (on || x1 - x0 > 6 * dpr) { g.fillStyle = on ? tc("rred", 0.18) : tc("gred", 0.08); g.fillRect(x0, bar, x1 - x0, H - bar); }
   }
 }
 

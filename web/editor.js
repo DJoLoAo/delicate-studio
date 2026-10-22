@@ -2,8 +2,6 @@ const BUCKET = 256;
 const BPB = 256;
 const RING = 1 << 17;
 const DB_RANGE = 60;
-const PALETTE = [[223, 57, 187], [223, 154, 36], [90, 193, 249]];
-const PLAIN = "rgb(223,57,187)";
 const AUDIO_ACCEPT = ".flac,.wav,.wave,.bwf,.aif,.aiff,.aifc,.mp3,.mp2,.m4a,.mp4,.aac,.alac,.caf,.ogg,.oga";
 
 const ed = {
@@ -237,12 +235,12 @@ function amp(v) {
 }
 
 function colourOf(l, m, h) {
-  if (ed.colour !== "spectral") return PLAIN;
+  if (ed.colour !== "spectral") return TH.plain;
   const w0 = l, w1 = m * 1.4, w2 = h * 2.6, s = w0 + w1 + w2;
-  if (!(s > 1e-9)) return PLAIN;
-  const r = (PALETTE[0][0] * w0 + PALETTE[1][0] * w1 + PALETTE[2][0] * w2) / s;
-  const g = (PALETTE[0][1] * w0 + PALETTE[1][1] * w1 + PALETTE[2][1] * w2) / s;
-  const b = (PALETTE[0][2] * w0 + PALETTE[1][2] * w1 + PALETTE[2][2] * w2) / s;
+  if (!(s > 1e-9)) return TH.plain;
+  const r = (TH.wave[0][0] * w0 + TH.wave[1][0] * w1 + TH.wave[2][0] * w2) / s;
+  const g = (TH.wave[0][1] * w0 + TH.wave[1][1] * w1 + TH.wave[2][1] * w2) / s;
+  const b = (TH.wave[0][2] * w0 + TH.wave[1][2] * w1 + TH.wave[2][2] * w2) / s;
   return "rgb(" + (r | 0) + "," + (g | 0) + "," + (b | 0) + ")";
 }
 
@@ -351,7 +349,7 @@ async function pumpRaw() {
 
 function drawWave() {
   const cv = $("wv"), dpr = canvasFit(cv), g = cv.getContext("2d");
-  const key = [cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.chans.join(), ed.raw ? ed.raw.id + ed.raw.ver + ":" + ed.raw.start + ":" + ed.raw.count : "", ed.doc.id, ed.ver].join("|");
+  const key = [THS.rev, cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.chans.join(), ed.raw ? ed.raw.id + ed.raw.ver + ":" + ed.raw.start + ":" + ed.raw.count : "", ed.doc.id, ed.ver].join("|");
   if (!ed.waveBuf) ed.waveBuf = document.createElement("canvas");
   if (key !== ed.waveKey) {
     ed.waveBuf.width = cv.width;
@@ -363,25 +361,25 @@ function drawWave() {
   drawDiag(g, cv.width, cv.height, dpr);
   if (ed.play.on) {
     const px = Math.round(xOf(playhead()) * dpr);
-    if (px >= 0 && px <= cv.width) { g.fillStyle = "#f2efe9"; g.fillRect(px, 0, Math.max(1, dpr), cv.height); }
+    if (px >= 0 && px <= cv.width) { g.fillStyle = TH.ink; g.fillRect(px, 0, Math.max(1, dpr), cv.height); }
   }
 }
 
 function drawWaveBase(g, W, H, dpr) {
   const doc = ed.doc, ch = doc.channels;
   const laneH = H / ch, sppD = ed.view.spp / dpr, start = ed.view.start;
-  g.fillStyle = "#0e0c0a";
+  g.fillStyle = TH.canvas;
   g.fillRect(0, 0, W, H);
   const selOn = ed.sel.b > ed.sel.a;
   const sx0 = Math.max(0, Math.floor(xOf(ed.sel.a) * dpr)), sx1 = Math.min(W, Math.ceil(xOf(ed.sel.b) * dpr));
   for (let c = 0; c < ch; c++) {
     const top = c * laneH, mid = top + laneH / 2, A = laneH / 2 - 3 * dpr;
-    g.fillStyle = c % 2 ? "#110f0c" : "#13110e";
+    g.fillStyle = c % 2 ? TH.laneA : TH.laneB;
     g.fillRect(0, top, W, laneH);
-    if (selOn && ed.chans[c]) { g.fillStyle = "rgba(255,255,255,0.09)"; g.fillRect(sx0, top, Math.max(1, sx1 - sx0), laneH); }
-    g.fillStyle = "rgba(255,255,255,0.07)";
+    if (selOn && ed.chans[c]) { g.fillStyle = tw(0.09); g.fillRect(sx0, top, Math.max(1, sx1 - sx0), laneH); }
+    g.fillStyle = tw(0.07);
     for (const lv of [0.5, -0.5]) { const y = mid - amp(lv) * A; g.fillRect(0, Math.round(y), W, 1); }
-    g.fillStyle = "rgba(255,255,255,0.16)";
+    g.fillStyle = tw(0.16);
     g.fillRect(0, Math.round(mid), W, 1);
     const visA = start, visB = start + W * sppD;
     const useRaw = sppD < BUCKET;
@@ -432,10 +430,10 @@ function drawWaveBase(g, W, H, dpr) {
       g.fillRect(x, y0, 1, y1 - y0);
     }
   }
-  g.fillStyle = "rgba(255,255,255,0.12)";
+  g.fillStyle = tw(0.12);
   for (let c = 1; c < ch; c++) g.fillRect(0, Math.round(c * laneH), W, 1);
   drawAmpLabels(g, W, laneH, ch, dpr);
-  g.fillStyle = "rgba(90,193,249,0.6)";
+  g.fillStyle = tc("blue", 0.6);
   for (const m of shownMarks()) {
     for (const f of m.kind === "range" ? [m.a, m.b] : [m.a]) {
       const x = Math.round(xOf(f) * dpr);
@@ -444,28 +442,32 @@ function drawWaveBase(g, W, H, dpr) {
     }
   }
   const cx = Math.round(xOf(ed.cursor) * dpr);
-  if (cx >= 0 && cx <= W) { g.fillStyle = "#DF9A24"; g.fillRect(cx, 0, Math.max(1, dpr), H); }
+  if (cx >= 0 && cx <= W) { g.fillStyle = TH.gold; g.fillRect(cx, 0, Math.max(1, dpr), H); }
 }
 
 function drawAmpLabels(g, W, laneH, ch, dpr) {
-  g.font = (9 * dpr) + "px JetBrains Mono, monospace";
+  g.font = thFont(9, dpr);
   g.textAlign = "right";
   g.textBaseline = "middle";
   const marks = ed.scale === "db" ? [0, -6, -12, -24, -48] : [0, -6, -12, -18];
   for (let c = 0; c < ch; c++) {
     const top = c * laneH, mid = top + laneH / 2, A = laneH / 2 - 3 * dpr;
+    const k = dpr * thFs();
+    let last = -Infinity;
     for (const db of marks) {
       const v = Math.pow(10, db / 20), y = mid - amp(v) * A;
       if (y < top + 6 * dpr) continue;
-      g.fillStyle = "rgba(10,9,8,0.7)";
-      g.fillRect(W - 30 * dpr, y - 5 * dpr, 30 * dpr, 10 * dpr);
-      g.fillStyle = "#7d776e";
+      if (y - last < 10 * k + dpr) continue;
+      last = y;
+      g.fillStyle = tc("shade", 0.7);
+      g.fillRect(W - 30 * k, y - 5 * k, 30 * k, 10 * k);
+      g.fillStyle = TH.label;
       g.fillText(db === 0 ? "0" : String(db), W - 4 * dpr, y);
     }
     if (ch > 1) {
       g.textAlign = "left";
-      g.fillStyle = ed.chans[c] ? "#c9c3b9" : "#5f5a52";
-      g.fillText(chanName(c, ch), 6 * dpr, top + 9 * dpr);
+      g.fillStyle = ed.chans[c] ? TH.text : TH.faint;
+      g.fillText(chanName(c, ch), 6 * dpr, top + 9 * k);
       g.textAlign = "right";
     }
   }
@@ -495,37 +497,37 @@ const MARK_LANE = 12;
 
 function drawRuler() {
   const cv = $("ru"), dpr = canvasFit(cv), g = cv.getContext("2d");
-  const W = cv.width, H = cv.height, T = H - MARK_LANE * dpr;
-  g.fillStyle = "#12100e";
+  const k = dpr * thFs(), W = cv.width, H = cv.height, T = H - MARK_LANE * k;
+  g.fillStyle = TH.panel;
   g.fillRect(0, 0, W, H);
-  g.fillStyle = "#0e0c0a";
+  g.fillStyle = TH.canvas;
   g.fillRect(0, T, W, H - T);
   if (ed.sel.b > ed.sel.a) {
     const a = xOf(ed.sel.a) * dpr, b = xOf(ed.sel.b) * dpr;
-    g.fillStyle = "rgba(223,154,36,0.22)";
+    g.fillStyle = tc("gold", 0.22);
     g.fillRect(a, 0, Math.max(1, b - a), T);
   }
   const st = tickStep(ed.view.spp);
   const startF = ed.view.start, endF = startF + cv.clientWidth * ed.view.spp;
-  g.fillStyle = "#3a352f";
-  for (let f = Math.ceil(startF / st.minor) * st.minor; f <= endF; f += st.minor) g.fillRect(Math.round(xOf(f) * dpr), T - 5 * dpr, Math.max(1, dpr), 5 * dpr);
-  g.font = (9.5 * dpr) + "px JetBrains Mono, monospace";
+  g.fillStyle = TH.tick;
+  for (let f = Math.ceil(startF / st.minor) * st.minor; f <= endF; f += st.minor) g.fillRect(Math.round(xOf(f) * dpr), T - 5 * k, Math.max(1, dpr), 5 * k);
+  g.font = thFont(9.5, dpr);
   g.textBaseline = "top";
   g.textAlign = "left";
   for (let f = Math.ceil(startF / st.major) * st.major; f <= endF; f += st.major) {
     const x = Math.round(xOf(f) * dpr);
-    g.fillStyle = "#6f695f";
-    g.fillRect(x, T - 10 * dpr, Math.max(1, dpr), 10 * dpr);
-    g.fillStyle = "#a39d93";
-    g.fillText(fmtTime(f, ed.fmt, st.sec), x + 3 * dpr, 3 * dpr);
+    g.fillStyle = TH.label2;
+    g.fillRect(x, T - 10 * k, Math.max(1, dpr), 10 * k);
+    g.fillStyle = TH.muted;
+    g.fillText(fmtTime(f, ed.fmt, st.sec), x + 3 * k, 3 * k);
   }
-  g.fillStyle = "#2a2520";
+  g.fillStyle = TH.line;
   g.fillRect(0, T - dpr, W, dpr);
   g.fillRect(0, H - dpr, W, dpr);
   drawMarkLane(g, W, T, H, dpr);
   const cx = xOf(ed.cursor) * dpr;
-  g.fillStyle = "#DF9A24";
-  g.beginPath(); g.moveTo(cx - 5 * dpr, 0); g.lineTo(cx + 5 * dpr, 0); g.lineTo(cx, 7 * dpr); g.fill();
+  g.fillStyle = TH.gold;
+  g.beginPath(); g.moveTo(cx - 5 * k, 0); g.lineTo(cx + 5 * k, 0); g.lineTo(cx, 7 * k); g.fill();
 }
 
 function shownMarks() {
@@ -534,9 +536,9 @@ function shownMarks() {
 }
 
 function markBoxes(g, dpr) {
-  g.font = (8.5 * dpr) + "px JetBrains Mono, monospace";
+  g.font = thFont(8.5, dpr);
   return shownMarks().map(m => {
-    const x = xOf(m.a) * dpr, w = g.measureText(String(m.n)).width + 6 * dpr;
+    const x = xOf(m.a) * dpr, w = g.measureText(String(m.n)).width + 6 * dpr * thFs();
     return { m, x, w, x2: m.kind === "range" ? xOf(m.b) * dpr : x };
   });
 }
@@ -547,15 +549,15 @@ function drawMarkLane(g, W, T, H, dpr) {
     const { m, x, w, x2 } = bx, on = sel === m.id;
     if (x2 < 0 || x > W + w) continue;
     if (m.kind === "range") {
-      g.fillStyle = on ? "rgba(90,193,249,0.45)" : "rgba(90,193,249,0.22)";
+      g.fillStyle = on ? tc("blue", 0.45) : tc("blue", 0.22);
       g.fillRect(x, T + 3 * dpr, Math.max(dpr, x2 - x), H - T - 6 * dpr);
-      g.fillStyle = "#5AC1F9";
+      g.fillStyle = TH.blue;
       g.fillRect(Math.round(x2), T, Math.max(1, dpr), H - T);
     }
-    g.fillStyle = on ? "#f2efe9" : "#5AC1F9";
+    g.fillStyle = on ? TH.ink : TH.blue;
     g.fillRect(Math.round(x), T, Math.max(1, dpr), H - T);
     g.fillRect(Math.round(x), T + 1 * dpr, w, H - T - 2 * dpr);
-    g.fillStyle = "#0c0a08";
+    g.fillStyle = TH.dark;
     g.textBaseline = "middle";
     g.textAlign = "left";
     g.fillText(String(m.n), x + 3 * dpr, T + (H - T) / 2 + 0.5 * dpr);
@@ -564,7 +566,7 @@ function drawMarkLane(g, W, T, H, dpr) {
 
 function markAt(cssX, cssY) {
   const cv = $("ru"), Hc = cv.clientHeight;
-  if (cssY < Hc - MARK_LANE - 2) return null;
+  if (cssY < Hc - MARK_LANE * thFs() - 2) return null;
   const g = cv.getContext("2d"), boxes = markBoxes(g, 1).reverse();
   for (const b of boxes) if (cssX >= b.x - 4 && cssX <= b.x + b.w) return { m: b.m, part: "a", grab: cssX - b.x };
   for (const b of boxes) if (b.m.kind === "range" && Math.abs(cssX - b.x2) <= 5) return { m: b.m, part: "b", grab: 0 };
@@ -574,7 +576,7 @@ function markAt(cssX, cssY) {
 
 function drawOverview() {
   const cv = $("ov"), dpr = canvasFit(cv), g = cv.getContext("2d");
-  const key = [cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.doc.id, ed.ver].join("|");
+  const key = [THS.rev, cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.doc.id, ed.ver].join("|");
   if (!ed.ovBuf) ed.ovBuf = document.createElement("canvas");
   if (key !== ed.ovKey) {
     ed.ovBuf.width = cv.width;
@@ -583,12 +585,12 @@ function drawOverview() {
     ed.ovKey = key;
   }
   g.drawImage(ed.ovBuf, 0, 0);
-  if (ed.play.on) { g.fillStyle = "#f2efe9"; g.fillRect(Math.round(playhead() / (ed.doc.frames / cv.width)), 0, dpr, cv.height); }
+  if (ed.play.on) { g.fillStyle = TH.ink; g.fillRect(Math.round(playhead() / (ed.doc.frames / cv.width)), 0, dpr, cv.height); }
 }
 
 function drawOverviewBase(g, W, H, dpr) {
   const doc = ed.doc, ch = doc.channels;
-  g.fillStyle = "#0e0c0a";
+  g.fillStyle = TH.canvas;
   g.fillRect(0, 0, W, H);
   const sppD = doc.frames / W, mid = H / 2, A = H / 2 - 2 * dpr, ac = accNew();
   for (let x = 0; x < W; x++) {
@@ -604,15 +606,15 @@ function drawOverviewBase(g, W, H, dpr) {
   }
   g.globalAlpha = 1;
   const vx = ed.view.start / sppD, vw = Math.max(2 * dpr, viewWidth() * ed.view.spp / sppD);
-  g.fillStyle = "rgba(255,255,255,0.10)";
+  g.fillStyle = tw(0.1);
   g.fillRect(vx, 0, vw, H);
-  g.strokeStyle = "rgba(242,239,233,0.55)";
+  g.strokeStyle = tc("ink", 0.55);
   g.lineWidth = dpr;
   g.strokeRect(vx + dpr / 2, dpr / 2, vw - dpr, H - dpr);
-  if (ed.sel.b > ed.sel.a) { g.fillStyle = "rgba(223,154,36,0.25)"; g.fillRect(ed.sel.a / sppD, 0, Math.max(dpr, (ed.sel.b - ed.sel.a) / sppD), H); }
-  g.fillStyle = "#5AC1F9";
+  if (ed.sel.b > ed.sel.a) { g.fillStyle = tc("gold", 0.25); g.fillRect(ed.sel.a / sppD, 0, Math.max(dpr, (ed.sel.b - ed.sel.a) / sppD), H); }
+  g.fillStyle = TH.blue;
   for (const m of shownMarks()) { g.fillRect(Math.round(m.a / sppD), 0, dpr, 6 * dpr); if (m.kind === "range") g.fillRect(Math.round(m.b / sppD), 0, dpr, 6 * dpr); }
-  g.fillStyle = "#DF9A24";
+  g.fillStyle = TH.gold;
   g.fillRect(Math.round(ed.cursor / sppD), 0, dpr, H);
 }
 
@@ -1065,7 +1067,7 @@ function drawMeters() {
   const ch = ed.doc ? ed.doc.channels : 2;
   const dt = M.t ? (now - M.t) / 1000 : 0;
   M.t = now;
-  g.fillStyle = "#0e0c0a";
+  g.fillStyle = TH.canvas;
   g.fillRect(0, 0, W, H);
   const clipW = 14 * dpr, barW = W - clipW - 4 * dpr, scaleH = 11 * dpr;
   const rowH = Math.max(3 * dpr, (H - scaleH - (ch + 1) * 2 * dpr) / ch);
@@ -1073,7 +1075,7 @@ function drawMeters() {
   let active = false;
   for (let c = 0; c < ch; c++) {
     const y = 2 * dpr + c * (rowH + 2 * dpr);
-    g.fillStyle = "#1a1710";
+    g.fillStyle = TH.meterBg;
     g.fillRect(0, y, barW, rowH);
     let pk = M.pk[c] ?? -120;
     if (!ed.play.on) pk -= 30 * dt;
@@ -1082,25 +1084,25 @@ function drawMeters() {
     if (pk > -60) active = true;
     const rms = ed.play.on ? (M.rms[c] ?? -120) : -120;
     const grad = g.createLinearGradient(0, 0, barW, 0);
-    grad.addColorStop(0, "#5AC1F9");
-    grad.addColorStop(xOfDb(-18) / barW, "#5AC1F9");
-    grad.addColorStop(xOfDb(-12) / barW, "#DF9A24");
-    grad.addColorStop(xOfDb(-3) / barW, "#DF39BB");
-    grad.addColorStop(1, "#ff3b30");
+    grad.addColorStop(0, TH.blue);
+    grad.addColorStop(xOfDb(-18) / barW, TH.blue);
+    grad.addColorStop(xOfDb(-12) / barW, TH.gold);
+    grad.addColorStop(xOfDb(-3) / barW, TH.pink);
+    grad.addColorStop(1, TH.peak);
     g.globalAlpha = 0.45;
     g.fillStyle = grad;
     g.fillRect(0, y, xOfDb(pk), rowH);
     g.globalAlpha = 1;
     g.fillRect(0, y + rowH * 0.25, xOfDb(rms), rowH * 0.5);
     const hold = M.hold[c] ?? -120;
-    if (hold > -60 && now - (M.holdT[c] || 0) < 3000) { g.fillStyle = "#f2efe9"; g.fillRect(xOfDb(hold) - dpr, y, 2 * dpr, rowH); active = true; }
-    g.fillStyle = M.clip[c] ? "#ff3b30" : "#231f18";
+    if (hold > -60 && now - (M.holdT[c] || 0) < 3000) { g.fillStyle = TH.ink; g.fillRect(xOfDb(hold) - dpr, y, 2 * dpr, rowH); active = true; }
+    g.fillStyle = M.clip[c] ? TH.peak : TH.meterOff;
     g.fillRect(W - clipW, y, clipW, rowH);
   }
-  g.font = (8.5 * dpr) + "px JetBrains Mono, monospace";
+  g.font = thFont(8.5, dpr);
   g.textBaseline = "bottom";
   g.textAlign = "center";
-  g.fillStyle = "#6f695f";
+  g.fillStyle = TH.label2;
   for (const db of [-60, -48, -36, -24, -18, -12, -6, -3, 0]) {
     const x = xOfDb(db);
     g.fillRect(x, H - scaleH, Math.max(1, dpr), 3 * dpr);
@@ -1698,6 +1700,7 @@ function wireUi() {
     b.blur();
     runCmdById(b.dataset.cmd);
   });
+  thWire();
   ddInit($("xfadeDd"), [{ v: "0", label: "Off" }, { v: "1", label: "1 ms" }, { v: "3", label: "3 ms" }, { v: "5", label: "5 ms" }, { v: "10", label: "10 ms" }, { v: "20", label: "20 ms" }], String(ed.xfade), v => { ed.xfade = Number(v); localStorage.setItem("studioXfade", v); });
   const snapSeg = () => document.querySelectorAll("#snapSeg button").forEach(b => b.classList.toggle("on", (b.dataset.v === "1") === ed.snap));
   $("snapSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ed.snap = b.dataset.v === "1"; localStorage.setItem("studioSnap", ed.snap ? "1" : "0"); snapSeg(); });

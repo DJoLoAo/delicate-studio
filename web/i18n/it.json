@@ -523,5 +523,15 @@
  "Loudness panel": "Pannello Loudness",
  "Match loudness…": "Uguaglia la loudness…",
  "Normalize…": "Normalizza…",
- "Amplify…": "Amplifica…"
+ "Amplify…": "Amplifica…",
+ "Theme": "Tema",
+ "Text size": "Dimensione del testo",
+ "Colours and fonts of the whole app": "Colori e caratteri di tutta l’app",
+ "Size of all text and controls, in any theme": "Dimensione di tutti i testi e i controlli, con ogni tema",
+ "Large print": "Caratteri grandi",
+ "Theme default": "Come il tema",
+ "Normal · 100%": "Normale · 100%",
+ "Large · 115%": "Grande · 115%",
+ "Larger · 130%": "Più grande · 130%",
+ "Largest · 150%": "Massimo · 150%"
 }

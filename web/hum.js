@@ -171,21 +171,21 @@ function humDraw() {
   const x = cv.getContext("2d");
   x.setTransform(dpr, 0, 0, dpr, 0, 0);
   x.clearRect(0, 0, W, H);
-  x.fillStyle = "#0d0c0b";
+  x.fillStyle = TH.graph;
   x.fillRect(g.L, g.T, g.iw, g.ih);
   const ny = (ed.doc ? ed.doc.sampleRate : 48000) / 2, hi = Math.min(2000, ny * 0.95);
   const xf = f => g.L + (Math.log(Math.max(20, f)) - Math.log(20)) / (Math.log(hi) - Math.log(20)) * g.iw;
   const span = Math.max(24, Math.ceil((hum.cfg.gain + 6) / 6) * 6);
   const yd = v => g.T + Math.min(1, Math.max(0, -v / span)) * g.ih;
-  x.font = "9px 'JetBrains Mono', monospace";
+  x.font = thFont(9);
   x.lineWidth = 1;
   x.textBaseline = "middle";
   x.textAlign = "right";
   for (let v = 0; v >= -span; v -= span > 36 ? 12 : 6) {
     const y = Math.round(yd(v)) + 0.5;
-    x.strokeStyle = "rgba(255,255,255,.06)";
+    x.strokeStyle = tw(0.06);
     x.beginPath(); x.moveTo(g.L, y); x.lineTo(g.L + g.iw, y); x.stroke();
-    x.fillStyle = "#6f6a62";
+    x.fillStyle = TH.glabel;
     x.fillText(String(v), g.L - 4, y);
   }
   x.textAlign = "center";
@@ -193,9 +193,9 @@ function humDraw() {
   for (const f of [50, 100, 200, 500, 1000, 2000]) {
     if (f > hi) continue;
     const xx = Math.round(xf(f)) + 0.5;
-    x.strokeStyle = "rgba(255,255,255,.06)";
+    x.strokeStyle = tw(0.06);
     x.beginPath(); x.moveTo(xx, g.T); x.lineTo(xx, g.T + g.ih); x.stroke();
-    x.fillStyle = "#6f6a62";
+    x.fillStyle = TH.glabel;
     x.fillText(f >= 1000 ? f / 1000 + "k" : String(f), xx, H - 3);
   }
   x.save();
@@ -206,7 +206,7 @@ function humDraw() {
   if (f && f.spec && f.spec.length) {
     let top = -Infinity;
     for (let b = 1; b < f.spec.length; b++) if (b * f.bin >= 20 && b * f.bin <= hi) top = Math.max(top, f.spec[b]);
-    x.fillStyle = "rgba(201,169,110,.18)";
+    x.fillStyle = tc("ggold", 0.18);
     x.beginPath();
     x.moveTo(g.L, g.T + g.ih);
     let last = -1;
@@ -223,7 +223,7 @@ function humDraw() {
     x.fill();
   }
   if (hum.resp) {
-    x.strokeStyle = "#5b8def";
+    x.strokeStyle = TH.gblue;
     x.lineWidth = 1.5;
     x.beginPath();
     hum.resp.freqs.forEach((fr, i) => { const px = xf(fr), py = yd(hum.resp.db[i]); if (i) x.lineTo(px, py); else x.moveTo(px, py); });

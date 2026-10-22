@@ -523,5 +523,15 @@
  "Loudness panel": "लाउडनेस पैनल",
  "Match loudness…": "लाउडनेस मिलाएँ…",
  "Normalize…": "नॉर्मलाइज़ करें…",
- "Amplify…": "बढ़ाएँ…"
+ "Amplify…": "बढ़ाएँ…",
+ "Theme": "थीम",
+ "Text size": "टेक्स्ट का आकार",
+ "Colours and fonts of the whole app": "पूरे ऐप के रंग और फ़ॉन्ट",
+ "Size of all text and controls, in any theme": "हर थीम में सारे टेक्स्ट और कंट्रोल का आकार",
+ "Large print": "बड़े अक्षर",
+ "Theme default": "थीम के अनुसार",
+ "Normal · 100%": "सामान्य · 100%",
+ "Large · 115%": "बड़ा · 115%",
+ "Larger · 130%": "और बड़ा · 130%",
+ "Largest · 150%": "सबसे बड़ा · 150%"
 }

@@ -317,7 +317,7 @@ function nrDraw() {
   const x = cv.getContext("2d");
   x.setTransform(dpr, 0, 0, dpr, 0, 0);
   x.clearRect(0, 0, g.W, g.H);
-  x.fillStyle = "#0d0c0b";
+  x.fillStyle = TH.graph;
   x.fillRect(g.L, g.T, g.iw, g.ih);
   const cols = nrCols(g);
   let top = -40, span = 80;
@@ -326,15 +326,15 @@ function nrDraw() {
     span = Math.max(40, Math.min(110, Math.ceil((top - cols.min + 6) / 10) * 10));
   }
   const yDb = v => g.T + (top - v) / span * g.ih;
-  x.font = "9px 'JetBrains Mono', monospace";
+  x.font = thFont(9);
   x.textBaseline = "middle";
   x.lineWidth = 1;
   const step = span > 70 ? 20 : 10;
   for (let v = top; v >= top - span; v -= step) {
     const y = Math.round(yDb(v)) + 0.5;
-    x.strokeStyle = "rgba(255,255,255,.06)";
+    x.strokeStyle = tw(0.06);
     x.beginPath(); x.moveTo(g.L, y); x.lineTo(g.L + g.iw, y); x.stroke();
-    x.fillStyle = "#6f6a62";
+    x.fillStyle = TH.glabel;
     x.textAlign = "right";
     x.fillText(String(v), g.L - 4, y);
   }
@@ -344,9 +344,9 @@ function nrDraw() {
   for (const f of marks) {
     if (f >= ny * 0.98) continue;
     const xx = Math.round(nrX(f, g)) + 0.5;
-    x.strokeStyle = "rgba(255,255,255,.06)";
+    x.strokeStyle = tw(0.06);
     x.beginPath(); x.moveTo(xx, g.T); x.lineTo(xx, g.T + g.ih); x.stroke();
-    x.fillStyle = "#6f6a62";
+    x.fillStyle = TH.glabel;
     x.fillText(f >= 1000 ? f / 1000 + "k" : String(f), xx, g.H - 3);
   }
   x.save();
@@ -355,7 +355,7 @@ function nrDraw() {
   x.clip();
   if (cols) {
     const W = cols.m.length;
-    x.fillStyle = "rgba(201,169,110,.16)";
+    x.fillStyle = tc("ggold", 0.16);
     x.beginPath();
     for (let i = 0; i < W; i++) x.lineTo(g.L + i + 0.5, yDb(cols.hi[i]));
     for (let i = W - 1; i >= 0; i--) x.lineTo(g.L + i + 0.5, yDb(cols.lo[i]));
@@ -369,17 +369,17 @@ function nrDraw() {
       x.stroke();
       x.setLineDash([]);
     };
-    line(i => yDb(cols.m[i]), "#c9a96e");
-    if (nr.cfg.thr) line(i => yDb(cols.m[i] + nr.cfg.thr), "rgba(229,72,77,.8)", [3, 3]);
-    line(i => yDb(cols.m[i] - nr.cfg.floor * nr.cfg.amount / 100 * nrCurveAt(nrF(g.L + i + 0.5, g)) / 100), "rgba(108,196,128,.85)", [2, 2]);
+    line(i => yDb(cols.m[i]), TH.ggold);
+    if (nr.cfg.thr) line(i => yDb(cols.m[i] + nr.cfg.thr), tc("gred", 0.8), [3, 3]);
+    line(i => yDb(cols.m[i] - nr.cfg.floor * nr.cfg.amount / 100 * nrCurveAt(nrF(g.L + i + 0.5, g)) / 100), tc("ggreen", 0.85), [2, 2]);
   } else {
-    x.fillStyle = "#6f6a62";
+    x.fillStyle = TH.glabel;
     x.textAlign = "center";
     x.textBaseline = "middle";
     x.fillText(t("No noise print"), g.L + g.iw / 2, g.T + g.ih / 2);
   }
   const pts = nrPts();
-  x.strokeStyle = "#5b8def";
+  x.strokeStyle = TH.gblue;
   x.lineWidth = 1.5;
   x.beginPath();
   for (let i = 0; i <= g.iw; i += 2) { const y = nrPctY(nrCurveAt(nrF(g.L + i, g)), g); if (i) x.lineTo(g.L + i, y); else x.moveTo(g.L + i, y); }
@@ -387,11 +387,11 @@ function nrDraw() {
   x.lineWidth = 1;
   pts.forEach((p, i) => {
     const px = nrX(p[0], g), py = nrPctY(p[1], g), on = nr.drag && nr.drag.i === i || nr.hover === i;
-    x.fillStyle = on ? "#ffffff" : "#5b8def";
+    x.fillStyle = on ? TH.white : TH.gblue;
     x.fillRect(Math.round(px) - 3, Math.round(py) - 3, 6, 6);
   });
   x.restore();
-  x.fillStyle = "#5b8def";
+  x.fillStyle = TH.gblue;
   x.textAlign = "right";
   x.textBaseline = "top";
   x.fillText("100%", g.L + g.iw - 2, g.T + 6);
@@ -473,9 +473,9 @@ function drawNrPrint(g, W, H, dpr) {
     for (const s of nr.auto.segs) {
       const x0 = Math.floor(xOf(s.a) * dpr), x1 = Math.max(x0 + 1, Math.ceil(xOf(s.b) * dpr));
       if (x1 < 0 || x0 > W) continue;
-      g.fillStyle = "rgba(201,169,110,.85)";
+      g.fillStyle = tc("ggold", 0.85);
       g.fillRect(x0, 0, x1 - x0, Math.round(4 * dpr));
-      g.fillStyle = "rgba(201,169,110,.07)";
+      g.fillStyle = tc("ggold", 0.07);
       g.fillRect(x0, Math.round(4 * dpr), x1 - x0, H);
     }
     return;
@@ -484,9 +484,9 @@ function drawNrPrint(g, W, H, dpr) {
   if (!i || !ed.doc || i.doc !== ed.doc.id || i.b <= i.a) return;
   const x0 = Math.floor(xOf(i.a) * dpr), x1 = Math.max(x0 + 1, Math.ceil(xOf(i.b) * dpr));
   if (x1 < 0 || x0 > W) return;
-  g.fillStyle = "rgba(201,169,110,.85)";
+  g.fillStyle = tc("ggold", 0.85);
   g.fillRect(x0, 0, x1 - x0, Math.round(4 * dpr));
-  g.fillStyle = "rgba(201,169,110,.07)";
+  g.fillStyle = tc("ggold", 0.07);
   g.fillRect(x0, Math.round(4 * dpr), x1 - x0, H);
 }
 

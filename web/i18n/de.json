@@ -523,5 +523,15 @@
  "Loudness panel": "Lautheit-Bereich",
  "Match loudness…": "Lautheit angleichen…",
  "Normalize…": "Normalisieren…",
- "Amplify…": "Verstärken…"
+ "Amplify…": "Verstärken…",
+ "Theme": "Design",
+ "Text size": "Textgröße",
+ "Colours and fonts of the whole app": "Farben und Schriften der ganzen App",
+ "Size of all text and controls, in any theme": "Größe aller Texte und Bedienelemente, in jedem Design",
+ "Large print": "Großdruck",
+ "Theme default": "Wie im Design",
+ "Normal · 100%": "Normal · 100 %",
+ "Large · 115%": "Groß · 115 %",
+ "Larger · 130%": "Größer · 130 %",
+ "Largest · 150%": "Am größten · 150 %"
 }

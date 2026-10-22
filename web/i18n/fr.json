@@ -523,5 +523,15 @@
  "Loudness panel": "Panneau Sonie",
  "Match loudness…": "Égaliser la sonie…",
  "Normalize…": "Normaliser…",
- "Amplify…": "Amplifier…"
+ "Amplify…": "Amplifier…",
+ "Theme": "Thème",
+ "Text size": "Taille du texte",
+ "Colours and fonts of the whole app": "Couleurs et polices de toute l’app",
+ "Size of all text and controls, in any theme": "Taille de tous les textes et commandes, dans chaque thème",
+ "Large print": "Gros caractères",
+ "Theme default": "Selon le thème",
+ "Normal · 100%": "Normal · 100 %",
+ "Large · 115%": "Grand · 115 %",
+ "Larger · 130%": "Plus grand · 130 %",
+ "Largest · 150%": "Très grand · 150 %"
 }

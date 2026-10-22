@@ -1,6 +1,5 @@
 const SP_TILE = 128;
 const SP_MAX = 120;
-const SP_BG = "#0c0a09";
 
 function spStored(key, def, ok) {
   try { const v = localStorage.getItem(key); return v !== null && ok(v) ? v : def; } catch { return def; }
@@ -155,7 +154,7 @@ function spPut(g, tl, lv) {
   if (x + w < 0 || x > lv.W) return;
   g.drawImage(tl.cv, 0, 0, SP_TILE, tl.rows, x, tl.k * lv.laneH, w, lv.laneH);
   const xe = (ed.doc.frames - lv.start) / lv.spp * lv.dpr;
-  if (xe < lv.W) { g.fillStyle = SP_BG; g.fillRect(Math.max(0, Math.floor(xe)), 0, lv.W, lv.H); }
+  if (xe < lv.W) { g.fillStyle = TH.spec; g.fillRect(Math.max(0, Math.floor(xe)), 0, lv.W, lv.H); }
 }
 
 function spErr(m) {
@@ -191,13 +190,13 @@ function drawSpec() {
   for (let k = 0; k < ch; k++) for (let T = Math.max(0, T0); T <= Math.min(T1, lastT); T++) vis.push([T, k]);
   let have = 0;
   for (const [T, k] of vis) { const tl = SPV.tiles.get(pkey + "|" + T + "|" + k); if (tl) { tl.use = SPV.use; have++; } }
-  const lkey = [pkey, W, H, start, SPV.tver].join("|");
+  const lkey = [pkey, W, H, start, SPV.tver, THS.rev].join("|");
   if (lkey !== SPV.lkey) {
     const prev = SPV.layers[0], next = SPV.layers[1] || document.createElement("canvas");
     next.width = W;
     next.height = H;
     const lg = next.getContext("2d");
-    lg.fillStyle = SP_BG;
+    lg.fillStyle = TH.spec;
     lg.fillRect(0, 0, W, H);
     const old = SPV.lv, lv = { pkey, start, spp, gA, dpr, W, H, laneH, log: SPV.log, ch, id: ed.doc.id };
     if (have < vis.length && prev && old && old.log === SPV.log && old.ch === ch && old.id === ed.doc.id) {
@@ -209,7 +208,7 @@ function drawSpec() {
       if (tl) spPut(lg, tl, lv);
     }
     const xe = (ed.doc.frames - start) / spp * dpr;
-    if (xe < W) { lg.fillStyle = SP_BG; lg.fillRect(Math.max(0, Math.floor(xe)), 0, W, H); }
+    if (xe < W) { lg.fillStyle = TH.spec; lg.fillRect(Math.max(0, Math.floor(xe)), 0, W, H); }
     SPV.layers = [next, prev];
     SPV.lv = lv;
     SPV.lkey = lkey;
@@ -235,7 +234,7 @@ function drawSpec() {
   g.drawImage(SPV.buf, 0, 0);
   if (ed.play.on) {
     const px = Math.round(xOf(playhead()) * dpr);
-    if (px >= 0 && px <= W) { g.fillStyle = "#f2efe9"; g.fillRect(px, 0, Math.max(1, dpr), H); }
+    if (px >= 0 && px <= W) { g.fillStyle = TH.ink; g.fillRect(px, 0, Math.max(1, dpr), H); }
   }
   if (SPV.draft) spDrawShape(g, G, SPV.draft, true);
   if (SPV.hover) {
@@ -250,16 +249,16 @@ function spOverlay(g, G) {
     const sx0 = Math.max(0, Math.floor(xOf(ed.sel.a) * dpr)), sx1 = Math.min(W, Math.ceil(xOf(ed.sel.b) * dpr));
     for (let k = 0; k < ch; k++) {
       if (!ed.chans[k]) continue;
-      g.fillStyle = "rgba(255,255,255,0.11)";
+      g.fillStyle = tw(0.11);
       g.fillRect(sx0, k * laneH, Math.max(1, sx1 - sx0), laneH);
-      g.fillStyle = "rgba(255,255,255,0.45)";
+      g.fillStyle = tw(0.45);
       g.fillRect(sx0, k * laneH, Math.max(1, dpr), laneH);
       g.fillRect(Math.max(0, sx1 - Math.max(1, dpr)), k * laneH, Math.max(1, dpr), laneH);
     }
   }
-  g.fillStyle = "rgba(255,255,255,0.14)";
+  g.fillStyle = tw(0.14);
   for (let k = 1; k < ch; k++) g.fillRect(0, k * laneH, W, Math.max(1, dpr));
-  g.fillStyle = "rgba(90,193,249,0.6)";
+  g.fillStyle = tc("blue", 0.6);
   for (const m of shownMarks()) {
     for (const f of m.kind === "range" ? [m.a, m.b] : [m.a]) {
       const x = Math.round(xOf(f) * dpr);
@@ -270,12 +269,12 @@ function spOverlay(g, G) {
   if (spSelLive()) for (const s of SPV.sel.shapes) spDrawShape(g, G, s, false);
   spLabels(g, W, laneH, ch, dpr, n, sr);
   const cx = Math.round(xOf(ed.cursor) * dpr);
-  if (cx >= 0 && cx <= W) { g.fillStyle = "#DF9A24"; g.fillRect(cx, 0, Math.max(1, dpr), H); }
+  if (cx >= 0 && cx <= W) { g.fillStyle = TH.gold; g.fillRect(cx, 0, Math.max(1, dpr), H); }
   if (SPV.err) {
-    g.font = (11 * dpr) + "px JetBrains Mono, monospace";
+    g.font = thFont(11, dpr);
     g.textAlign = "left";
     g.textBaseline = "top";
-    g.fillStyle = "#e0a090";
+    g.fillStyle = TH.warm;
     g.fillText(t("Spectrogram") + ": " + SPV.err, 8 * dpr, 8 * dpr);
   }
 }
@@ -289,7 +288,7 @@ function spLabels(g, W, laneH, ch, dpr, n, sr) {
     fs = [];
     for (let f = step; f < nyq; f += step) fs.push(f);
   }
-  g.font = (9 * dpr) + "px JetBrains Mono, monospace";
+  g.font = thFont(9, dpr);
   g.textAlign = "right";
   g.textBaseline = "middle";
   for (let k = 0; k < ch; k++) {
@@ -302,18 +301,18 @@ function spLabels(g, W, laneH, ch, dpr, n, sr) {
       const y = top + (1 - u) * laneH;
       if (y < top + 6 * dpr || y > top + laneH - 5 * dpr || Math.abs(y - lastY) < 13 * dpr) continue;
       lastY = y;
-      g.fillStyle = "rgba(255,255,255,0.22)";
+      g.fillStyle = tw(0.22);
       g.fillRect(W - 40 * dpr, Math.round(y), 4 * dpr, Math.max(1, dpr));
-      g.fillStyle = "rgba(10,9,8,0.72)";
+      g.fillStyle = tc("shade", 0.72);
       g.fillRect(W - 34 * dpr, y - 5 * dpr, 34 * dpr, 10 * dpr);
-      g.fillStyle = "#a39d93";
+      g.fillStyle = TH.muted;
       g.fillText(f >= 1000 ? f / 1000 + "k" : String(f), W - 4 * dpr, y);
     }
     if (ch > 1) {
       g.textAlign = "left";
-      g.fillStyle = "rgba(10,9,8,0.6)";
+      g.fillStyle = tc("shade", 0.6);
       g.fillRect(3 * dpr, top + 3 * dpr, 14 * dpr, 12 * dpr);
-      g.fillStyle = ed.chans[k] ? "#c9c3b9" : "#5f5a52";
+      g.fillStyle = ed.chans[k] ? TH.text : TH.faint;
       g.fillText(chanName(k, ch), 6 * dpr, top + 9 * dpr);
       g.textAlign = "right";
     }
@@ -340,16 +339,16 @@ function spReadout(g, G) {
   if (!h || h.x < 0 || h.y < 0 || h.x * dpr > W || h.y * dpr > H) return;
   const a = spAt(G, h.x, h.y);
   const txt = spHz(a.f) + (a.db !== null ? " · " + (a.db <= -SPV.range + 0.5 ? "≤ " : "") + Math.round(a.db) + " dB" : "");
-  g.font = (10 * dpr) + "px JetBrains Mono, monospace";
+  g.font = thFont(10, dpr);
   g.textAlign = "left";
   g.textBaseline = "middle";
   const w = g.measureText(txt).width + 10 * dpr, bh = 16 * dpr;
   let x = h.x * dpr + 12 * dpr, y = h.y * dpr - 20 * dpr;
   if (x + w > W - 44 * dpr) x = h.x * dpr - 12 * dpr - w;
   if (y < 2 * dpr) y = h.y * dpr + 12 * dpr;
-  g.fillStyle = "rgba(12,10,9,0.86)";
+  g.fillStyle = tc("shade2", 0.86);
   g.fillRect(x, y, w, bh);
-  g.fillStyle = "#f2efe9";
+  g.fillStyle = TH.ink;
   g.fillText(txt, x + 5 * dpr, y + bh / 2);
 }
 
@@ -378,7 +377,7 @@ function spDrawShape(g, G, s, live) {
     g.rect(0, k * G.laneH, G.W, G.laneH);
     g.clip();
     if (s.kind === "brush") {
-      g.strokeStyle = "rgba(223,57,187,0.42)";
+      g.strokeStyle = tc("pink", 0.42);
       g.lineWidth = SPV.brush * dpr;
       g.lineCap = "round";
       g.lineJoin = "round";
@@ -397,11 +396,11 @@ function spDrawShape(g, G, s, live) {
       s.pts.forEach(([t0, f], i) => { const x = xOf(t0) * dpr, y = spY(G, f, k); if (i) g.lineTo(x, y); else g.moveTo(x, y); });
       if (!live) g.closePath();
     }
-    g.fillStyle = "rgba(90,193,249,0.16)";
+    g.fillStyle = tc("blue", 0.16);
     g.fill();
     g.setLineDash([4 * dpr, 3 * dpr]);
     g.lineWidth = Math.max(1, dpr);
-    g.strokeStyle = "rgba(140,214,255,0.95)";
+    g.strokeStyle = tc("ice", 0.95);
     g.stroke();
     g.restore();
   }
@@ -413,7 +412,7 @@ function spBrushRing(g, G) {
   g.beginPath();
   g.arc(h.x * G.dpr, h.y * G.dpr, r, 0, Math.PI * 2);
   g.lineWidth = Math.max(1, G.dpr);
-  g.strokeStyle = "rgba(242,239,233,0.85)";
+  g.strokeStyle = tc("ink", 0.85);
   g.stroke();
   g.restore();
 }
