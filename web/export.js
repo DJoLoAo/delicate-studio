@@ -1,6 +1,6 @@
 const XP_RATES = [0, 44100, 48000, 88200, 96000, 176400, 192000];
 const XP_DEFAULT = { range: "all", formats: [{ type: "wav", bits: 24, rate: 0 }], gain: 0, dither: "tpdf", shaping: "off", tplFile: "$name", tplRange: "$index $range", dest: "download", folder: "Studio" };
-const xp = { cfg: null, jobs: [], seq: 0 };
+const xp = { cfg: null, jobs: [], seq: 0, pics: {}, batches: [] };
 
 function xpLoad() {
   let v = null;
@@ -42,24 +42,59 @@ function xpClean(s) {
   return parts.join(" - ").replace(/\s{2,}/g, " ").replace(/^[\s.]+|[\s.]+$/g, "").slice(0, 180);
 }
 
+function xpTitle(p) {
+  const g = p.tag;
+  if (!g) return p.range || "";
+  if (p.range && g.name && p.range !== g.name) return g.pos && p.range.startsWith(g.pos + " ") ? p.range.slice(g.pos.length + 1).trim() : p.range;
+  return g.title || p.range || "";
+}
+
+function xpTags(p) {
+  const g = p.tag, src = ed.doc.source || {}, out = [];
+  const add = (k, v) => { const s = String(v == null ? "" : v).trim(); if (s && s !== "0") out.push([k, s]); };
+  if (g) {
+    add("TITLE", xpTitle(p));
+    add("ARTIST", g.artist);
+    add("ALBUM ARTIST", g.albumArtist);
+    add("ALBUMARTIST", g.albumArtist);
+    add("ALBUM", g.album);
+    add("TRACKNUMBER", g.pos || p.index);
+    add("DATE", g.year);
+    add("ORGANIZATION", g.label);
+    add("CATALOGNUMBER", g.catno);
+    for (const v of String(g.genre || "").split(",")) add("GENRE", v);
+    for (const v of String(g.style || "").split(",")) add("STYLE", v);
+    add("MEDIA", String(g.format || "").split(",")[0]);
+    add("CUSTOM2", g.release);
+    add("CUSTOM4", g.country);
+    add("CUSTOM5", g.format);
+    return out;
+  }
+  add("TITLE", p.range || src.title);
+  add("ARTIST", src.artist);
+  add("ALBUM", src.album);
+  if (p.index) add("TRACKNUMBER", p.index);
+  return out;
+}
+
 function xpName(tpl, ctx) {
-  const src = ed.doc.source || {};
+  const src = ed.doc.source || {}, g = ctx.tag;
   const stem = ed.doc.name.replace(/\.[^.]+$/, "");
   const d = new Date();
   const map = {
-    name: stem, range: ctx.range || "", index: ctx.index ? String(ctx.index).padStart(2, "0") : "",
-    artist: src.artist || "", title: src.title || stem, album: src.album || "",
+    name: stem, range: ctx.range || "", index: ctx.index ? String(ctx.index).padStart(2, "0") : "", position: g ? g.pos || "" : "",
+    artist: g ? g.artist || "" : src.artist || "", title: g ? xpTitle(ctx) : src.title || stem, album: g ? g.album || "" : src.album || "",
     date: d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"),
     rate: xpRateLabel(ctx.fmt.rate || ed.doc.sampleRate), bits: ctx.fmt.bits === 32 ? "32f" : String(ctx.fmt.bits)
   };
-  return xpClean(tpl.replace(/\$(name|range|index|artist|title|album|date|rate|bits)/g, (_, k) => map[k])) || "export";
+  return xpClean(tpl.replace(/\$(name|range|index|position|artist|title|album|date|rate|bits)/g, (_, k) => map[k])) || "export";
 }
 
 function xpPlan() {
   const c = xp.cfg, F = ed.doc.frames;
   let pieces = [];
   if (c.range === "sel" && selOn()) pieces = [{ a: ed.sel.a, b: ed.sel.b, range: "", index: 0 }];
-  else if (c.range === "ranges") pieces = xpRanges().map((m, i) => ({ a: m.a, b: Math.min(F, m.b), range: m.name || t("Range") + " " + m.n, index: i + 1 }));
+  else if (c.range === "ranges") pieces = xpRanges().map((m, i) => ({ a: m.a, b: Math.min(F, m.b), range: m.name || t("Range") + " " + m.n, index: i + 1, tag: m.tag || null }));
   else pieces = [{ a: 0, b: F, range: "", index: 0 }];
   const tpl = c.range === "ranges" ? c.tplRange : c.tplFile;
   const byExt = {};
@@ -72,7 +107,7 @@ function xpPlan() {
       let name = base + "." + f.type;
       for (let i = 2; used.has(name.toLowerCase()); i++) name = base + " (" + i + ")." + f.type;
       used.add(name.toLowerCase());
-      out.push({ a: p.a, b: p.b, name, fmt: Object.assign({}, f) });
+      out.push({ a: p.a, b: p.b, name, fmt: Object.assign({}, f), tags: xpTags(p), pos: p.tag ? p.tag.pos || "" : "", cover: p.tag ? p.tag.cover || "" : "", release: p.tag ? p.tag.release || "" : "" });
     }
   }
   return out;
@@ -140,22 +175,65 @@ function closeExport() {
   $("exp").classList.add("hidden");
 }
 
-function xpGo() {
-  if (!ed.doc) return;
+async function xpPic(url) {
+  if (!url) return null;
+  if (xp.pics[url] !== undefined) return xp.pics[url];
+  let pic = null;
+  try {
+    const r = await fetch("/api/locker/discogs/img?u=" + encodeURIComponent(url));
+    const blob = r.ok ? await r.blob() : null;
+    if (blob && blob.size <= 4 << 20 && /^image\/(jpeg|png)/.test(blob.type)) {
+      let w = 0, h = 0;
+      try { const bm = await createImageBitmap(blob); w = bm.width; h = bm.height; bm.close(); } catch {}
+      pic = { mime: blob.type.split(";")[0], w, h, data: await blob.arrayBuffer() };
+    }
+  } catch {}
+  xp.pics[url] = pic;
+  return pic;
+}
+
+function xpBatches() {
+  const live = j => ["queued", "rendering", "hashing", "uploading", "verifying"].includes(j.state);
+  for (const b of xp.batches.slice()) {
+    const js = b.jobs.map(id => xp.jobs.find(j => j.id === id)).filter(Boolean);
+    if (js.some(live)) continue;
+    xp.batches = xp.batches.filter(x => x !== b);
+    const files = js.filter(j => j.state === "done" && j.locker && j.locker.file && j.pos).map(j => ({ file: j.locker.file, position: j.pos }));
+    if (!files.length) continue;
+    fetch("/api/locker/discogs/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ release: b.release, files }) })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j && j.updated) flash(j.updated === 1 ? t("1 file tagged in the Locker from Discogs") : t("{n} files tagged in the Locker from Discogs").replace("{n}", j.updated)); })
+      .catch(() => {});
+  }
+}
+
+async function xpGo() {
+  if (!ed.doc || xp.going) return;
   const c = xp.cfg;
   const g = Number(String($("xGain").value).replace(",", "."));
   c.gain = Number.isFinite(g) ? Math.max(-60, Math.min(24, g)) : 0;
   xpSave();
   const master = { gain: c.gain, dither: c.dither, shaping: c.shaping };
   const dest = c.dest === "locker" ? { kind: "locker", folder: c.folder } : { kind: "download" };
-  const docName = ed.doc.name;
-  for (const p of xpPlan()) {
-    const id = "x" + Date.now().toString(36) + (++xp.seq);
-    const job = { id, name: p.name, fmt: p.fmt, dest, state: "queued", frac: 0, doc: docName, fmtLabel: xpFmtLabel(p.fmt, ed.doc.sampleRate), len: (p.b - p.a) / ed.doc.sampleRate };
-    xp.jobs.push(job);
-    call({ t: "export", id: ed.doc.id, jobId: id, a: p.a, b: p.b, name: p.name, fmt: p.fmt, master, dest }).catch(e => { job.state = "failed"; job.error = e.message; xpQueue(); });
+  const doc = ed.doc, plan = xpPlan(), rel = dest.kind === "locker" ? Number((plan.find(p => p.release) || {}).release) || 0 : 0;
+  const batch = rel ? { release: rel, jobs: [] } : null;
+  xp.going = true;
+  $("xGo").disabled = true;
+  try {
+    for (const p of plan) {
+      const pic = p.fmt.type === "flac" && p.cover ? await xpPic(p.cover) : null;
+      if (ed.doc !== doc) break;
+      const id = "x" + Date.now().toString(36) + (++xp.seq);
+      const job = { id, name: p.name, fmt: p.fmt, dest, state: "queued", frac: 0, doc: doc.name, fmtLabel: xpFmtLabel(p.fmt, doc.sampleRate), len: (p.b - p.a) / doc.sampleRate, pos: p.pos };
+      xp.jobs.push(job);
+      if (batch && p.release) batch.jobs.push(id);
+      call({ t: "export", id: doc.id, jobId: id, a: p.a, b: p.b, name: p.name, fmt: p.fmt, master, dest, tags: p.tags, pic }).catch(e => { job.state = "failed"; job.error = e.message; xpQueue(); xpBatches(); });
+    }
+  } finally {
+    xp.going = false;
+    if (batch && batch.jobs.length) xp.batches.push(batch);
+    xpRender();
   }
-  xpQueue();
 }
 
 function xpJob(m) {
@@ -176,6 +254,7 @@ function xpJob(m) {
   }
   xpQueue();
   xpBadge();
+  if (["done", "failed", "cancelled"].includes(m.state)) xpBatches();
 }
 
 function xpFail(j, m) {

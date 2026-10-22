@@ -334,7 +334,7 @@ canvas.ru{height:calc(34px*var(--fs))}
 .xjob .bbar i{display:block;height:100%;background:var(--pink);transition:width .15s}
 .xjob.done .bbar i{background:var(--green)}
 #expBtn{height:calc(26px*var(--fs))}
-#diag{position:absolute;top:calc(8px*var(--fs));right:calc(8px*var(--fs));bottom:calc(8px*var(--fs));width:min(calc(440px*var(--fs)),calc(100% - 16px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:30;padding:calc(10px*var(--fs)) calc(12px*var(--fs));font-size:calc(11px*var(--fs))}
+#diag{position:absolute;top:calc(8px*var(--fs));right:calc(8px*var(--fs));bottom:calc(8px*var(--fs));width:min(calc(488px*var(--fs)),calc(100% - 16px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:30;padding:calc(10px*var(--fs)) calc(12px*var(--fs));font-size:calc(11px*var(--fs))}
 #diag.hidden{display:none}
 #diag .dgfx{margin-left:calc(8px*var(--fs));color:var(--gold);font-size:calc(10px*var(--fs));letter-spacing:.08em;text-transform:uppercase}
 .dgbody{display:flex;flex-direction:column;gap:calc(9px*var(--fs));min-height:0;flex:1;overflow-y:auto}
@@ -450,3 +450,30 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 #tour .ttext{font-size:calc(12px*var(--fs));color:var(--gray);line-height:1.55}
 #tour .tbtns{display:flex;gap:calc(6px*var(--fs));align-items:center;margin-top:calc(4px*var(--fs))}
 #tour .tnext{color:var(--gold);border-color:var(--gold)}
+#trBody .xtext{flex:1;min-width:calc(160px*var(--fs))}
+#trThr{flex:1;min-width:calc(100px*var(--fs));accent-color:var(--pink)}
+.trres{display:flex;flex-direction:column;gap:calc(2px*var(--fs));max-height:calc(240px*var(--fs));overflow-y:auto;border:1px solid var(--border);padding:calc(3px*var(--fs))}
+.trhit{display:flex;align-items:center;gap:calc(8px*var(--fs));padding:calc(5px*var(--fs)) calc(6px*var(--fs));background:transparent;border:0;color:var(--gray);text-align:left;font:inherit;cursor:pointer}
+.trhit:hover,.trhit:focus-visible{background:var(--bg3);color:var(--white)}
+.trthumb{width:calc(34px*var(--fs));height:calc(34px*var(--fs));object-fit:cover;flex:none;background:var(--bg4)}
+.trht{display:flex;flex-direction:column;gap:calc(2px*var(--fs));min-width:0;flex:1}
+.trht b{color:var(--white);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trht span{font-size:calc(10px*var(--fs));color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trrel{display:flex;align-items:center;gap:calc(10px*var(--fs));padding:calc(6px*var(--fs));background:var(--bg3);border:1px solid var(--border)}
+.trcover{width:calc(46px*var(--fs));height:calc(46px*var(--fs));object-fit:cover;flex:none}
+.trlist{display:flex;flex-direction:column;border:1px solid var(--border);max-height:calc(260px*var(--fs));overflow-y:auto}
+.trrow{display:grid;grid-template-columns:calc(34px*var(--fs)) 1fr calc(66px*var(--fs)) calc(52px*var(--fs)) calc(44px*var(--fs));gap:calc(6px*var(--fs));align-items:center;padding:calc(5px*var(--fs)) calc(8px*var(--fs));background:transparent;border:0;border-bottom:1px solid var(--border);color:var(--gray);font:inherit;text-align:left;cursor:pointer}
+.trrow:last-child{border-bottom:0}
+.trrow:hover,.trrow:focus-visible{background:var(--bg3)}
+.trrow .trp{color:var(--pink)}
+.trrow .trt{color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trrow .trs,.trrow .trl,.trrow .trd{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;font-size:calc(10.5px*var(--fs))}
+.trrow .trd{color:var(--dim)}
+.trrow .trd.off{color:var(--gold)}
+#dlg .pw{position:relative;display:flex}
+#dlg .pw input{flex:1;padding-right:calc(36px*var(--fs))}
+#dlg .eye{position:absolute;right:calc(4px*var(--fs));top:50%;transform:translateY(-50%);background:none;border:0;padding:calc(4px*var(--fs));color:var(--gray);cursor:pointer;width:calc(28px*var(--fs));height:calc(28px*var(--fs))}
+#dlg .eye svg{width:calc(20px*var(--fs));height:calc(20px*var(--fs))}
+#dlg .eye .slash{display:none}
+#dlg .eye.on .slash{display:block}
+#dlg .eye.on{color:var(--pink)}

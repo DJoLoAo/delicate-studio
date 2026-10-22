@@ -40,7 +40,7 @@ function mdRange() {
 
 function mdLive() {
   const r = md.res;
-  return r && ed.doc && r.doc === ed.doc.id && r.ver === ed.ver ? r : null;
+  return r && ed.doc && r.doc === ed.doc.id && r.key === audioKey() ? r : null;
 }
 
 function mdGrid() {
@@ -90,7 +90,7 @@ async function mdConvert() {
   const r = mdRange();
   if (r.b <= r.a) return;
   const R = MD_RANGES.find(x => x.v === md.cfg.range) || MD_RANGES[0];
-  const id = "m" + (++md.seq);
+  const id = "m" + (++md.seq), key = audioKey();
   md.job = { id };
   md.prog = 0;
   md.err = null;
@@ -99,7 +99,7 @@ async function mdConvert() {
   mdRender();
   try {
     const res = await call({ t: "midiscan", id: ed.doc.id, a: r.a, b: r.b, chans: ed.chans, fmin: mdHz(R.lo - 0.5), fmax: mdHz(R.hi + 0.5), sens: md.cfg.sens / 100, minLen: md.cfg.minLen / 1000, follow: md.cfg.follow, jobId: id });
-    md.res = { doc: ed.doc.id, ver: res.ver, a: res.a, b: res.b, sr: ed.doc.sampleRate, notes: res.notes.map(n => ({ s: n[0], e: n[1], p: n[2], v: n[3] })), track: res.track, t0: res.t0, dt: res.dt, tuning: res.tuning, sel: r.sel };
+    md.res = { doc: ed.doc.id, key, a: res.a, b: res.b, sr: ed.doc.sampleRate, notes: res.notes.map(n => ({ s: n[0], e: n[1], p: n[2], v: n[3] })), track: res.track, t0: res.t0, dt: res.dt, tuning: res.tuning, sel: r.sel };
     md.rev++;
     if (!SPV.on) spToggle();
   } catch (e) {

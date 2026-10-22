@@ -1,4 +1,4 @@
-importScripts("/edit.js");
+importScripts("/edit.js", "/trcore.js");
 
 const BLOCK = 65536;
 const BUCKET = 256;
@@ -660,7 +660,8 @@ async function applyEdit(m) {
     }
     case "markadd":
     case "markset":
-    case "markdel": {
+    case "markdel":
+    case "marktracks": {
       const r = markOp(m, before);
       pushHist(r.info, c.lists, before, before, r.marks);
       persist();
@@ -691,6 +692,24 @@ function markOp(m, before) {
     else { if (!(out.b > out.a)) throw new Error("nosel"); }
     return out;
   };
+  if (m.op === "marktracks") {
+    const keep = marks.filter(x => x.kind !== "range"), taken = new Set(keep.map(x => x.n)), add = [];
+    let id = 1, n = 1;
+    for (const h of c.hist) for (const x of h.marks) if (x.id >= id) id = x.id + 1;
+    for (const tr of Array.isArray(m.tracks) ? m.tracks.slice(0, 300) : []) {
+      const a = clampI(tr && tr.a, 0, F), b = clampI(tr && tr.b, 0, F);
+      if (!(b > a)) continue;
+      while (taken.has(n)) n++;
+      if (n > 999) break;
+      const mk = shape({ id: id++, n, kind: "range", a, b, name: "", view: null, chans: null }, { name: tr.name || "" });
+      const tag = trTagClean(tr.tag);
+      if (tag) mk.tag = tag;
+      taken.add(n);
+      add.push(mk);
+    }
+    if (!add.length) throw new Error("nosel");
+    return { id: add[0].id, marks: keep.concat(add).sort((x, y) => x.n - y.n), info: { op: "marktracks", a: add[0].a, b: add[add.length - 1].b, n: add.length, ch: null, mk: { n: add.length, name: "", kind: "range", removed: marks.length - keep.length } } };
+  }
   if (m.op === "markadd") {
     let id = 1;
     for (const h of c.hist) for (const x of h.marks) if (x.id >= id) id = x.id + 1;
@@ -1072,12 +1091,79 @@ function xorshift(seed) {
   return () => { v ^= v << 13; v >>>= 0; v ^= v >>> 17; v ^= v << 5; v >>>= 0; return v / 4294967296; };
 }
 
-function wavHeader(frames, ch, rate, bits, float) {
+function tagList(v) {
+  const out = [];
+  for (const p of Array.isArray(v) ? v.slice(0, 64) : []) {
+    if (!Array.isArray(p) || p.length !== 2) continue;
+    const k = String(p[0]).toUpperCase().replace(/[^A-Z0-9 _]/g, "").trim().slice(0, 40), val = String(p[1]).replace(/\u0000/g, "").trim().slice(0, 1000);
+    if (k && val) out.push([k, val]);
+  }
+  return out;
+}
+
+function picOf(p) {
+  if (!p || !p.data) return null;
+  const data = p.data instanceof ArrayBuffer ? new Uint8Array(p.data) : ArrayBuffer.isView(p.data) ? new Uint8Array(p.data.buffer, p.data.byteOffset, p.data.byteLength) : null;
+  if (!data || !data.length || data.length > 4 << 20) return null;
+  return { mime: /^image\/(jpeg|png)$/.test(p.mime) ? p.mime : "image/jpeg", w: Math.max(0, p.w | 0), h: Math.max(0, p.h | 0), data };
+}
+
+function flacMeta(tags, pic) {
+  const enc = new TextEncoder(), blocks = [];
+  if (tags.length) {
+    const vendor = enc.encode("Delicate Studio"), items = tags.map(([k, v]) => enc.encode(k + "=" + v));
+    const b = new Uint8Array(8 + vendor.length + items.reduce((s, x) => s + 4 + x.length, 0)), v = new DataView(b.buffer);
+    let o = 0;
+    v.setUint32(o, vendor.length, true); o += 4; b.set(vendor, o); o += vendor.length;
+    v.setUint32(o, items.length, true); o += 4;
+    for (const it of items) { v.setUint32(o, it.length, true); o += 4; b.set(it, o); o += it.length; }
+    blocks.push([4, b]);
+  }
+  if (pic) {
+    const mime = enc.encode(pic.mime), b = new Uint8Array(32 + mime.length + pic.data.length), v = new DataView(b.buffer);
+    let o = 0;
+    for (const n of [3, mime.length]) { v.setUint32(o, n); o += 4; }
+    b.set(mime, o); o += mime.length;
+    for (const n of [0, pic.w, pic.h, 24, 0, pic.data.length]) { v.setUint32(o, n); o += 4; }
+    b.set(pic.data, o);
+    blocks.push([6, b]);
+  }
+  const out = new Uint8Array(blocks.reduce((s, x) => s + 4 + x[1].length, 0));
+  let o = 0;
+  blocks.forEach(([type, b], i) => {
+    out[o] = (i === blocks.length - 1 ? 0x80 : 0) | type;
+    out[o + 1] = (b.length >> 16) & 255; out[o + 2] = (b.length >> 8) & 255; out[o + 3] = b.length & 255;
+    out.set(b, o + 4);
+    o += 4 + b.length;
+  });
+  return out;
+}
+
+function wavInfo(tags) {
+  const map = { TITLE: "INAM", ARTIST: "IART", ALBUM: "IPRD", DATE: "ICRD", GENRE: "IGNR", TRACKNUMBER: "ITRK" }, got = {}, enc = new TextEncoder();
+  for (const [k, v] of tags) { const id = map[k]; if (id) got[id] = got[id] ? got[id] + "; " + v : v; }
+  if (!Object.keys(got).length) return new Uint8Array(0);
+  got.ISFT = "Delicate Studio";
+  const parts = Object.entries(got).map(([id, v]) => [id, enc.encode(v)]);
+  const body = parts.reduce((s, [, d]) => s + 8 + d.length + 1 + ((d.length + 1) & 1), 4);
+  const out = new Uint8Array(8 + body), dv = new DataView(out.buffer);
+  const tag = (o, s) => { for (let i = 0; i < 4; i++) out[o + i] = s.charCodeAt(i); };
+  tag(0, "LIST"); dv.setUint32(4, body, true); tag(8, "INFO");
+  let o = 12;
+  for (const [id, d] of parts) {
+    tag(o, id); dv.setUint32(o + 4, d.length + 1, true);
+    out.set(d, o + 8);
+    o += 8 + d.length + 1 + ((d.length + 1) & 1);
+  }
+  return out;
+}
+
+function wavHeader(frames, ch, rate, bits, float, extra) {
   const bps = bits >> 3, align = ch * bps, data = frames * align, pad = data % 2;
   const ext = !float && ch > 2;
   const fmtLen = float ? 18 : ext ? 40 : 16, factLen = float ? 12 : 0;
   const size = 12 + 36 + 8 + fmtLen + factLen + 8;
-  const riff = size - 8 + data + pad, rf64 = riff > 0xFFFFFFFF;
+  const riff = size - 8 + data + pad + (extra || 0), rf64 = riff > 0xFFFFFFFF;
   const b = new ArrayBuffer(size), v = new DataView(b);
   let o = 0;
   const tag = t => { for (let i = 0; i < 4; i++) v.setUint8(o++, t.charCodeAt(i)); };
@@ -1123,7 +1209,7 @@ async function renderJob(job) {
   const dir = await exportsDir();
   const fh = await dir.getFileHandle(job.file, { create: true });
   const hd = await fh.createSyncAccessHandle();
-  let fileOff = 0, peak = 0, clipped = 0, last = performance.now(), lastPost = 0;
+  let fileOff = 0, peak = 0, clipped = 0, last = performance.now(), lastPost = 0, meta = null, info = null;
   const OB = 1 << 22, ob = new Uint8Array(OB), ob16 = new Int16Array(ob.buffer), ob32 = new Float32Array(ob.buffer);
   let o = 0;
   const flush = () => { if (o) { putAt(hd, ob.subarray(0, o), fileOff); fileOff += o; o = 0; } };
@@ -1141,12 +1227,15 @@ async function renderJob(job) {
     hd.truncate(0);
     if (flac) {
       if (x.fl_open(rateOut, ch, bits, block) !== 0) throw new Error(dspError(x));
-      const n = x.fl_header(1);
+      meta = flacMeta(job.tags, job.pic);
+      const n = x.fl_header(meta.length ? 0 : 1);
       if (n < 0) throw new Error(dspError(x));
-      ob.set(new Uint8Array(x.memory.buffer, x.fl_out(), n), 0);
-      o = n;
+      putAt(hd, new Uint8Array(x.memory.buffer, x.fl_out(), n).slice(), 0);
+      fileOff = n;
+      if (meta.length) { putAt(hd, meta, fileOff); fileOff += meta.length; }
     } else {
-      const w = wavHeader(outFrames, ch, rateOut, bits, float);
+      info = wavInfo(job.tags);
+      const w = wavHeader(outFrames, ch, rateOut, bits, float, info.length);
       putAt(hd, w.bytes, 0);
       fileOff = w.bytes.length;
       job.pad = w.pad;
@@ -1224,13 +1313,14 @@ async function renderJob(job) {
     if (flac) {
       if (fi) flFrame();
       flush();
-      const n = x.fl_header(1);
+      const n = x.fl_header(meta.length ? 0 : 1);
       if (n < 0) throw new Error(dspError(x));
       putAt(hd, new Uint8Array(x.memory.buffer, x.fl_out(), n).slice(), 0);
       x.fl_close();
     } else {
       if (job.pad) { if (o + 1 > OB) flush(); ob[o++] = 0; }
       flush();
+      if (info.length) { putAt(hd, info, fileOff); fileOff += info.length; }
     }
     hd.flush();
     let sha = null;
@@ -1275,7 +1365,7 @@ async function lockerUpload(job, res) {
   if (r.status === 402) { const q = await r.json().catch(() => ({})); throw Object.assign(new Error("locker-full"), { quota: q }); }
   if (!r.ok) throw new Error("locker " + r.status + " " + (await r.text()).slice(0, 120));
   const start = await r.json();
-  if (start.duplicate) return { path: start.path, duplicate: true };
+  if (start.duplicate) return { path: start.path, file: start.file || null, duplicate: true };
   let off = start.offset || 0;
   job.state = "uploading";
   const CHUNK = 16 << 20;
@@ -1294,7 +1384,7 @@ async function lockerUpload(job, res) {
   if (r.status === 402) throw new Error("locker-full");
   if (!r.ok) throw new Error("locker " + r.status + " " + (await r.text()).slice(0, 120));
   const j = await r.json();
-  return { path: j.path, duplicate: false };
+  return { path: j.path, file: j.file || null, duplicate: false };
 }
 
 async function pumpExport() {
@@ -1332,7 +1422,7 @@ function queueExport(m) {
   const type = f.type === "flac" ? "flac" : "wav";
   const bits = type === "flac" ? (f.bits === 16 ? 16 : 24) : [16, 24, 32].includes(f.bits) ? f.bits : 24;
   const rate = [0, 44100, 48000, 88200, 96000, 176400, 192000].includes(f.rate) ? f.rate : 0;
-  const job = { id: m.jobId, c, lists: c.lists, a, b, name: String(m.name || "export"), fmt: { type, bits, rate }, master: m.master || {}, dest: m.dest || { kind: "download" }, file: m.jobId + "." + type, state: "queued", frac: 0, seed: XP.jobs.length * 7919 };
+  const job = { id: m.jobId, c, lists: c.lists, a, b, name: String(m.name || "export"), fmt: { type, bits, rate }, master: m.master || {}, dest: m.dest || { kind: "download" }, tags: tagList(m.tags), pic: type === "flac" ? picOf(m.pic) : null, file: m.jobId + "." + type, state: "queued", frac: 0, seed: XP.jobs.length * 7919 };
   c.busy = (c.busy || 0) + 1;
   XP.jobs.push(job);
   xpost(job);
@@ -2603,6 +2693,52 @@ function mdSynth(p0, run, tmp, stride) {
   }
 }
 
+const TRJ = { job: null };
+
+async function trScan(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const ch = c.meta.channels, F = c.len, sr = c.meta.sampleRate;
+  const a = clampI(m.a, 0, F), b = m.b > m.a ? clampI(m.b, 0, F) : F;
+  const hop = Math.max(1, Math.round(sr * TR_HOP)), n = Math.floor((b - a) / hop);
+  if (n < 50) throw new Error("short");
+  if (TRJ.job) TRJ.job.cancel = true;
+  const job = { id: m.jobId, cancel: false, last: 0 };
+  TRJ.job = job;
+  const lists = c.lists, ver = c.ver, pw = new Float64Array(n);
+  const W = 1024, buf = new Float32Array(hop * W), rd = (src, cc, f, k, out, off) => readSrcOf(c, src, cc, f, k, out, off);
+  try {
+    for (let w0 = 0; w0 < n; w0 += W) {
+      const nw = Math.min(W, n - w0), s = a + w0 * hop;
+      for (let ci = 0; ci < ch; ci++) {
+        readList(lists[ci], c.cum[ci], s, nw * hop, buf, 0, rd);
+        for (let i = 0; i < nw; i++) {
+          let p = 0;
+          for (let j = i * hop, e = j + hop; j < e; j++) { const v = buf[j]; p += v * v; }
+          pw[w0 + i] += p;
+        }
+      }
+      const now = performance.now();
+      if (now - job.last > 120) { job.last = now; postMessage({ t: "tprog", id: job.id, frac: (w0 + nw) / n }); await new Promise(r => setTimeout(r, 0)); }
+      if (job.cancel || cur !== c) throw new Error("cancelled");
+    }
+    if (c.lists !== lists) throw new Error("stale");
+    const db = new Float32Array(n), q = 1 / (hop * ch);
+    for (let i = 0; i < n; i++) db[i] = 10 * Math.log10(pw[i] * q + 1e-12);
+    return { t: "trenv", a, b, hop, sr, ver, env: trMedian(db, 25) };
+  } finally { if (TRJ.job === job) TRJ.job = null; }
+}
+
+function trTagClean(t) {
+  if (!t || typeof t !== "object") return null;
+  const out = {};
+  for (const k of ["name", "pos", "title", "artist", "album", "albumArtist", "year", "label", "catno", "country", "genre", "style", "format", "release", "cover"]) {
+    const v = t[k];
+    if (v !== undefined && v !== null && v !== "") out[k] = String(v).slice(0, k === "cover" ? 600 : 200);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 const LD = { job: null };
 
 function ldStatsOut(x) {
@@ -2839,6 +2975,12 @@ async function handle(m) {
     return;
   }
   if (m.t === "mdcancel") { if (MDJ.job) MDJ.job.cancel = true; return; }
+  if (m.t === "trscan") {
+    try { postMessage(Object.assign({ req: m.req }, await trScan(m))); }
+    catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
+    return;
+  }
+  if (m.t === "trcancel") { if (TRJ.job) TRJ.job.cancel = true; return; }
   if (m.t === "mdlisten") { MDL.mode = ["midi", "both"].includes(m.mode) ? m.mode : "off"; MDL.notes = MDL.mode === "off" ? [] : mdClean(m.notes); ringFlush(); return; }
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
   if (m.t === "fxcancel") { if (FX.job) FX.job.cancel = true; return; }

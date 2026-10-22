@@ -64,6 +64,7 @@ ed.worker.onmessage = e => {
   if (m.t === "nprog") { nrProg(m); humProg(m); ldProg(m); return; }
   if (m.t === "lprog") { ldProg(m); return; }
   if (m.t === "mprog") { mdProg(m); return; }
+  if (m.t === "tprog") { trProg(m); return; }
   if (m.t === "aprog") { nrAutoProg(m); return; }
   if (m.t === "spectile") { spTile(m); return; }
   if (m.t === "specerr") { spErr(m); return; }
@@ -691,6 +692,7 @@ function applyState(st) {
   spAfterEdit();
   ldAfterEdit();
   mdAfterEdit();
+  trAfterEdit();
 }
 
 function showOpened(r) {
@@ -740,6 +742,7 @@ function showDoc(meta, peaks, bands, state) {
   humDoc();
   ldDoc();
   mdDoc();
+  trDoc();
   tourDoc();
 }
 
@@ -1204,6 +1207,12 @@ function flash(text) {
   ed.flashT = setTimeout(() => { el.textContent = ""; }, 3000);
 }
 const isMarkOp = h => !!h && h.op.startsWith("mark");
+function audioKey() {
+  let i = ed.histIdx;
+  while (i > 0 && isMarkOp(ed.hist[i])) i--;
+  const h = ed.hist[i];
+  return (ed.doc ? ed.doc.id : "") + ":" + i + ":" + (h ? h.op + ":" + h.t : "");
+}
 function undo() { if (ed.histIdx > 0) { const m = isMarkOp(ed.hist[ed.histIdx]); runEdit({ t: "undo" }, !m, m); } }
 function redo() { if (ed.histIdx < ed.hist.length - 1) { const m = isMarkOp(ed.hist[ed.histIdx + 1]); runEdit({ t: "redo" }, !m, m); } }
 function jumpHist(idx) { if (idx !== ed.histIdx) runEdit({ t: "jump", idx }, true); }
@@ -1221,6 +1230,7 @@ async function insertSilenceDlg() {
 function histLabel(h) {
   if (isMarkOp(h)) {
     const k = h.mk || {}, nm = k.name ? " · " + k.name : "";
+    if (h.op === "marktracks") return (h.n === 1 ? t("Split into 1 track") : t("Split into {n} tracks").replace("{n}", h.n)) + " · " + fmtTime(h.a) + "–" + fmtTime(h.b);
     if (h.op === "markadd") return t(k.kind === "range" ? "Add range" : k.kind === "view" ? "Add view" : "Add marker") + " " + k.n + nm;
     if (h.op === "markdel") return t("Delete location") + " " + k.n + nm;
     if (k.what === "rename") return t("Rename location") + " " + k.n + " → " + (k.name || "");
@@ -1744,6 +1754,7 @@ function wireUi() {
   wireHum();
   wireLoud();
   wireMidi();
+  wireTracks();
   wireRec();
   wireTour();
   wireDrop();
