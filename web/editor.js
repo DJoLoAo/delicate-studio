@@ -67,6 +67,7 @@ ed.worker.onmessage = e => {
   if (m.t === "tprog") { trProg(m); return; }
   if (m.t === "pprog") { pxProg(m); return; }
   if (m.t === "tnprog") { tnProg(m); return; }
+  if (m.t === "sprog") { ssProg(m); return; }
   if (m.t === "aprog") { nrAutoProg(m); return; }
   if (m.t === "spectile") { spTile(m); return; }
   if (m.t === "specerr") { spErr(m); return; }
@@ -88,7 +89,7 @@ function fmtDur(sec) {
 }
 
 function fmtTime(frames, fmt, step) {
-  const sr = ed.doc ? ed.doc.sampleRate : 48000;
+  const sr = ed.doc ? ed.doc.sampleRate : ses.open ? ssRate() : 48000;
   fmt = fmt || ed.fmt;
   if (fmt === "samples") return String(Math.round(frames));
   const neg = frames < 0 ? "-" : "";
@@ -200,8 +201,10 @@ function pyrQuery(lv, c, i0, i1, A) {
   }
 }
 
-function colPeak(c, s0, s1, A) {
-  const C = ed.clip, list = C.lists[c], cum = C.cum[c], E = C.edges[c];
+function colPeak(c, s0, s1, A) { return colPeakOf(ed, c, s0, s1, A); }
+
+function colPeakOf(M, c, s0, s1, A) {
+  const C = M.clip, list = C.lists[c], cum = C.cum[c], E = C.edges[c];
   let lo = 0, hi = list.length - 1, i = 0;
   while (lo <= hi) { const mid = (lo + hi) >> 1; if (cum[mid] <= s0) { i = mid; lo = mid + 1; } else hi = mid - 1; }
   let any = false;
@@ -211,7 +214,7 @@ function colPeak(c, s0, s1, A) {
     if (u1 <= u0) continue;
     any = true;
     if (g[0] === SIL) { if (A.mn > 0) A.mn = 0; if (A.mx < 0) A.mx = 0; continue; }
-    const S = ed.srcs[g[0]];
+    const S = M.srcs[g[0]];
     if (!S) continue;
     const st = g[2], end = st + n, a = st + (u0 - T0), b = st + (u1 - T0), e = E[i];
     const h1 = Math.min(end, Math.ceil(st / BUCKET) * BUCKET), t0 = Math.max(h1, Math.floor(end / BUCKET) * BUCKET);
@@ -485,8 +488,10 @@ function chanName(c, ch) {
   return String(c + 1);
 }
 
-function tickStep(sppCss) {
-  const sr = ed.doc.sampleRate, minPx = 90;
+function tickStep(sppCss) { return tickStepFor(sppCss, ed.doc.sampleRate); }
+
+function tickStepFor(sppCss, sr) {
+  const minPx = 90;
   if (ed.fmt === "samples") {
     const raw = sppCss * minPx;
     const p = Math.pow(10, Math.floor(Math.log10(Math.max(1, raw))));
@@ -778,6 +783,7 @@ function closeDoc() {
 }
 
 async function openDoc(id) {
+  if (ses.open) await ssClose(true);
   try {
     showOpened(await call({ t: "open", id }));
   } catch (e) { openError(e, ""); }
@@ -796,7 +802,9 @@ async function importFiles(files) {
     ed.importing = { name: f.name, frac: 0 };
     importProgress({ name: f.name, frac: 0 });
     try {
-      showOpened(await call({ t: "import", file: f }));
+      const r = await call({ t: "import", file: f });
+      if (ses.open) { $("busy").classList.add("hidden"); await ssAddDoc(r.meta.id); }
+      else showOpened(r);
     } catch (e) { openError(e, f.name); }
   }
   ed.importing = null;
@@ -821,6 +829,7 @@ function srcLabel(src) {
   if (!src) return "";
   if (src.kind === "library") return t("Library");
   if (src.kind === "locker") return t("Locker");
+  if (src.kind === "session") return t("Session mix");
   return "";
 }
 
@@ -837,6 +846,7 @@ function setTab(tab) {
   if (tab === "library") { libHint(); setTimeout(() => $("libQ").focus(), 30); }
   if (tab === "locker") { loadLocker(); setTimeout(() => $("lkQ").focus(), 30); }
   if (tab === "albums") alTab();
+  if (tab === "sessions") ssFilesTab();
 }
 
 async function myAccount() {
@@ -930,11 +940,13 @@ function renderLocker() {
 async function importRemote(src, ext) {
   closeFiles();
   const have = (ed.docs || []).find(d => d.source && d.source.kind === src.kind && d.source.id === src.id);
-  if (have) { openDoc(have.id); return; }
+  if (have) { if (ses.open) ssAddDoc(have.id); else openDoc(have.id); return; }
   const name = [src.artist, src.title].filter(Boolean).join(" - ") || src.path || src.id;
   importProgress({ name, frac: 0, phase: "download" });
   try {
-    showOpened(await call({ t: "import", url: "/api/stream/" + encodeURIComponent(src.id), name, ext: ext || "", source: src }));
+    const r = await call({ t: "import", url: "/api/stream/" + encodeURIComponent(src.id), name, ext: ext || "", source: src });
+    if (ses.open) { $("busy").classList.add("hidden"); await ssAddDoc(r.meta.id); }
+    else showOpened(r);
   } catch (e) {
     if (e && e.message === "login") tell(t("Your session has ended. Log in again."));
     else if (e && e.message === "network") tell(t("The download was interrupted. Try again."), t("Could not open the file"));
@@ -967,7 +979,7 @@ async function refreshFiles() {
       name.innerHTML = `<span class="fn"></span><span class="fi"></span>`;
       name.querySelector(".fn").textContent = d.name;
       name.querySelector(".fi").textContent = [srcLabel(d.source), fmtDur((d.len || d.frames) / d.sampleRate), (d.sampleRate / 1000) + " kHz", d.bits ? d.bits + "-bit" : (d.ext || "").toUpperCase(), d.channels === 1 ? t("mono") : d.channels === 2 ? t("stereo") : d.channels + " ch", d.edits ? d.edits + " " + t(d.edits === 1 ? "edit" : "edits") : "", fmtBytes(d.frames * d.channels * 4 + (d.heapBytes || 0))].filter(Boolean).join(" · ");
-      name.addEventListener("click", () => openDoc(d.id));
+      name.addEventListener("click", () => { if (ses.open) { closeFiles(); ssAddDoc(d.id); } else openDoc(d.id); });
       const x = document.createElement("button");
       x.className = "x fdel";
       x.title = t("Remove from Studio");
@@ -980,7 +992,7 @@ async function refreshFiles() {
           await call({ t: "remove", id: d.id });
           try { localStorage.removeItem("studioView:" + d.id); } catch {}
           if (ed.doc && ed.doc.id === d.id) closeDoc(); else refreshFiles();
-        } catch (e) { tell(e && e.message === "exporting" ? t("This file is being exported. Remove it when its render has finished.") : String(e.message || e)); }
+        } catch (e) { tell(e && e.message === "exporting" ? t("This file is being exported or is used in the open session. Remove it when the render has finished or the session is closed.") : String(e.message || e)); }
       });
       row.appendChild(name);
       row.appendChild(x);
@@ -1003,9 +1015,11 @@ function playhead() {
   return ed.play.loop ? ed.play.start + ((r + ed.play.off) % len) : Math.min(ed.play.end, ed.play.start + r);
 }
 
-async function ensureAudio() {
-  const doc = ed.doc;
-  if (ed.ctx && ed.ctx.sampleRate === doc.sampleRate && ed.node && ed.nodeCh === doc.channels) {
+async function ensureAudio() { return ensureAudioFor(ed.doc.sampleRate, ed.doc.channels); }
+
+async function ensureAudioFor(sr, ch) {
+  const doc = { sampleRate: sr, channels: ch };
+  if (ed.ctx && (ed.ctx.sampleRate === sr || ed.ctxRate === sr) && ed.node && ed.nodeCh === ch) {
     if (ed.ctx.state !== "running") await ed.ctx.resume();
     return;
   }
@@ -1019,6 +1033,7 @@ async function ensureAudio() {
   node.port.onmessage = e => meterIn(e.data);
   node.connect(ctx.destination);
   ed.ctx = ctx;
+  ed.ctxRate = sr;
   ed.node = node;
   ed.nodeCh = doc.channels;
   ed.ring = { data: new Float32Array(data), ctrl: new Int32Array(ctrl) };
@@ -1081,9 +1096,9 @@ function meterIn(m) {
 
 function drawMeters() {
   ed.meterRaf = 0;
-  const cv = $("mt"), dpr = canvasFit(cv), g = cv.getContext("2d");
-  const W = cv.width, H = cv.height, M = ed.meter, now = performance.now();
-  const ch = ed.doc ? ed.doc.channels : 2;
+  const cv = ses.open ? $("sesMeter") : $("mt"), dpr = canvasFit(cv), g = cv.getContext("2d");
+  const W = cv.width, H = cv.height, M = ed.meter, now = performance.now(), on = ed.play.on || ses.play.on;
+  const ch = ses.open ? 2 : ed.doc ? ed.doc.channels : 2;
   const dt = M.t ? (now - M.t) / 1000 : 0;
   M.t = now;
   g.fillStyle = TH.canvas;
@@ -1097,11 +1112,11 @@ function drawMeters() {
     g.fillStyle = TH.meterBg;
     g.fillRect(0, y, barW, rowH);
     let pk = M.pk[c] ?? -120;
-    if (!ed.play.on) pk -= 30 * dt;
+    if (!on) pk -= 30 * dt;
     pk = Math.max(-120, pk - 20 * dt);
     M.pk[c] = pk;
     if (pk > -60) active = true;
-    const rms = ed.play.on ? (M.rms[c] ?? -120) : -120;
+    const rms = on ? (M.rms[c] ?? -120) : -120;
     const grad = g.createLinearGradient(0, 0, barW, 0);
     grad.addColorStop(0, TH.blue);
     grad.addColorStop(xOfDb(-18) / barW, TH.blue);
@@ -1127,7 +1142,7 @@ function drawMeters() {
     g.fillRect(x, H - scaleH, Math.max(1, dpr), 3 * dpr);
     g.fillText(db === 0 ? "0" : String(db), Math.min(Math.max(x, 8 * dpr), barW - 4 * dpr), H);
   }
-  if (active || ed.play.on) ed.meterRaf = requestAnimationFrame(drawMeters);
+  if (active || on) ed.meterRaf = requestAnimationFrame(drawMeters);
 }
 
 const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", pencil: "Pencil", repair: "Repair", nr: "Noise Reduction", hum: "DeHummer", declip: "DeClipper", spot: "Spot Healing", spheal: "Spectral heal", spdel: "Remove frequencies", loud: "Match loudness", norm: "Normalize", amp: "Amplify" };
@@ -1787,6 +1802,7 @@ function wireUi() {
   wirePx();
   wirePen();
   wireTn();
+  wireSes();
   wireTags();
   wireAlbum();
   wireRec();
@@ -1799,8 +1815,10 @@ async function editorStart() {
   ed.started = true;
   wireUi();
   await refreshFiles();
-  const last = localStorage.getItem("studioLastDoc");
-  if (last) {
+  const last = localStorage.getItem("studioLastDoc"), lastSes = localStorage.getItem("studioLastSession");
+  if (lastSes && !last) {
+    try { await ssOpen(lastSes); } catch { try { localStorage.removeItem("studioLastSession"); } catch {} }
+  } else if (last) {
     try {
       showOpened(await call({ t: "open", id: last }));
     } catch (e) {

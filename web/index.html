@@ -34,11 +34,12 @@
     <div class="filesw">
       <button class="outbtn" id="filesBtn" title="Your files in Studio">Files</button>
       <div id="files" class="hidden">
-        <div class="ftabs"><button class="ftab on" data-tab="studio">In Studio</button><button class="ftab" data-tab="library">Library</button><button class="ftab" data-tab="locker">Locker</button><button class="ftab" data-tab="albums">Albums</button><span class="grow"></span><button class="outbtn" id="openBtn2">Open…</button></div>
+        <div class="ftabs"><button class="ftab on" data-tab="studio">In Studio</button><button class="ftab" data-tab="library">Library</button><button class="ftab" data-tab="locker">Locker</button><button class="ftab" data-tab="albums">Albums</button><button class="ftab" data-tab="sessions">Sessions</button><span class="grow"></span><button class="outbtn" id="openBtn2">Open…</button></div>
         <div class="fpane" data-pane="studio"><div id="filesList" class="flist"></div><div class="sinfo" id="storeInfo"></div></div>
         <div class="fpane hidden" data-pane="library"><input id="libQ" class="fsearch" type="search" placeholder="Search your library by title, artist or album" autocomplete="off" spellcheck="false"><div id="libList" class="flist"></div></div>
         <div class="fpane hidden" data-pane="locker"><input id="lkQ" class="fsearch" type="search" placeholder="Filter by title, artist, album or folder" autocomplete="off" spellcheck="false"><div id="lkList" class="flist"></div><div class="sinfo" id="lkInfo"></div></div>
         <div class="fpane hidden" data-pane="albums"><div class="albhead"><span class="sinfo">An album joins the sides of a record: one Discogs release, tracks named on every side, one export.</span><button class="outbtn" id="albNew">New album</button></div><div id="albList" class="flist"></div></div>
+        <div class="fpane hidden" data-pane="sessions"><div class="albhead"><span class="sinfo">A session lays out Studio files on tracks and mixes them: a DJ set with its room microphone, a band, a podcast.</span><button class="outbtn" id="sesNew">New session</button></div><div id="sesList" class="flist"></div></div>
       </div>
     </div>
     <a class="outbtn" href="https://dj.delicateaudio.com/" title="Open Delicate DJ">DJ</a>
@@ -196,6 +197,30 @@
         </div>
       </div>
       <canvas id="mt" class="mt" title="Levels — click to reset the clip lights"></canvas>
+    </div>
+    <div id="ses" class="hidden">
+      <div class="edhead">
+        <div class="docmeta"><b id="sesName" title="Click to rename the session"></b><span id="sesInfo"></span><span class="badge">Session</span></div>
+        <div class="tools" id="sesTools"><button class="tbtn sm" id="sesUndo" data-cmd="undo" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button><button class="tbtn sm" id="sesRedo" data-cmd="redo" title="Redo" aria-label="Redo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button><span class="tsep"></span><button class="tbtn sm" id="sesAdd" data-cmd="sesAdd" title="Add files to the session…" aria-label="Add files to the session…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button><button class="tbtn sm" id="sesSplit" data-cmd="sesSplit" title="Split the clip at the cursor" aria-label="Split the clip at the cursor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M3 8h6v8H3M21 8h-6v8h6"/></svg></button><button class="tbtn sm" id="sesDel" data-cmd="delete" title="Remove the clip" aria-label="Remove the clip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><span class="tsep"></span><button class="tbtn sm" id="sesBounce" data-cmd="sesBounce" title="Mix down to a new file" aria-label="Mix down to a new file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M6 10h12M9 14h6"/><path d="M12 14v6M9 17l3 3 3-3"/></svg></button><button class="tbtn sm" id="sesExport" data-cmd="export" title="Export…" aria-label="Export…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v6H4V6h6"/></svg></button></div>
+        <button class="iconbtn sm" id="sesClose" title="Close the session" aria-label="Close the session"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="sesrow"><div class="seshd"></div><canvas id="sesRu" class="ru" title="Click to place the cursor"></canvas></div>
+      <div class="sesbody" id="sesBody"><div class="sesheads" id="sesHeads"></div><div class="seslanes"><canvas id="sesCv"></canvas></div></div>
+      <div class="edfoot">
+        <div class="transport">
+          <button class="tbtn" id="sesHome" title="Cursor to start" aria-label="Cursor to start"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM19 5v14L9 12z"/></svg></button>
+          <button class="tbtn play" id="sesPlay" title="Play / stop" aria-label="Play"><svg class="ip" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15L20 12z"/></svg><svg class="is" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+          <button class="tbtn" id="sesStop" title="Stop" aria-label="Stop"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg></button>
+          <button class="tbtn" id="sesLoop" title="Loop on / off" aria-label="Loop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
+          <div class="tdisp"><span id="sesNow">0:00.000</span><span id="sesLen"></span></div>
+        </div>
+        <div class="zoom">
+          <button class="tbtn" id="sesZout" title="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5"/></svg></button>
+          <button class="tbtn" id="sesZin" title="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5M10.5 8v5"/></svg></button>
+          <button class="tbtn" id="sesZfit" title="Zoom to the whole session" aria-label="Whole session"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button>
+        </div>
+      </div>
+      <canvas id="sesMeter" class="mt" title="Levels — click to reset the clip lights"></canvas>
     </div>
     <div id="busy" class="hidden"><div class="bbox"><div class="btitle" id="busyTitle">Reading</div><div class="bname" id="busyName"></div><div class="bbar"><i id="busyBar"></i></div><div class="brow"><span id="busyPct"></span><button class="outbtn" id="busyCancel">cancel</button></div></div></div>
     <div id="drop" class="hidden"><div>Drop to open</div></div>
@@ -388,6 +413,7 @@
 <script src="/pen.js"></script>
 <script src="/onset.js"></script>
 <script src="/tn.js"></script>
+<script src="/session.js"></script>
 <script src="/tags.js"></script>
 <script src="/ft.js"></script>
 <script src="/album.js"></script>

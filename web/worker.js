@@ -1176,12 +1176,12 @@ function srcPos(w) {
 }
 
 function fillRing() {
-  if (!play || !cur || !ring) return;
-  const ctrl = ring.ctrl, R = ring.size, ch = cur.meta.channels;
+  if (!play || !ring || (!play.mix && !cur)) return;
+  const ctrl = ring.ctrl, R = ring.size, ch = play.mix ? 2 : cur.meta.channels;
   const len = play.end - play.start;
   for (let guard = 0; guard < 64; guard++) {
     const w = Atomics.load(ctrl, 1), r = Atomics.load(ctrl, 2);
-    const lim = FX.mode !== "off" ? Math.min(R, Math.max(4 * CHUNK, Math.round(cur.meta.sampleRate * 0.5))) : R;
+    const lim = !play.mix && FX.mode !== "off" ? Math.min(R, Math.max(4 * CHUNK, Math.round(cur.meta.sampleRate * 0.5))) : R;
     const free = lim - (w - r);
     if (free < CHUNK) return;
     if (!play.loop && w >= len) return;
@@ -1191,10 +1191,13 @@ function fillRing() {
     while (done < n) {
       const p = srcPos(w + done);
       const run = play.loop ? Math.min(n - done, play.end - p) : n - done;
-      readClip(p, run, play.tmp, CHUNK);
-      if (FX.mode !== "off") fxView(p, run, play.tmp, CHUNK);
-      else if (RP.listen !== "off") rpOverlay(p, run, play.tmp, CHUNK);
-      if (MDL.mode !== "off") mdSynth(p, run, play.tmp, CHUNK);
+      if (play.mix) { if (SES.mix) SES.mix(p, run, play.tmp, CHUNK); else play.tmp.fill(0); }
+      else {
+        readClip(p, run, play.tmp, CHUNK);
+        if (FX.mode !== "off") fxView(p, run, play.tmp, CHUNK);
+        else if (RP.listen !== "off") rpOverlay(p, run, play.tmp, CHUNK);
+        if (MDL.mode !== "off") mdSynth(p, run, play.tmp, CHUNK);
+      }
       for (let c = 0; c < ch; c++) {
         const tmpOff = c * CHUNK;
         for (let i = 0; i < run; i++) ring.data[c * R + ((w + done + i) % R)] = play.tmp[tmpOff + i];
@@ -1227,6 +1230,316 @@ function startPlay(start, end, loop, off) {
     if (st !== 1) { stopPlay(); return; }
     try { fillRing(); } catch (e) { stopPlay(); postMessage({ t: "playerror", msg: errText(e) }); }
   }, 8);
+}
+
+const SES = { s: null, docs: new Map(), mix: null, job: null };
+
+async function sessionsDir() {
+  return (await studioDir()).getDirectoryHandle("sessions", { create: true });
+}
+
+function sesClean(v) {
+  const str = (x, n) => String(x == null ? "" : x).slice(0, n);
+  const int = (x, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(x) || 0)));
+  const num = (x, lo, hi, d) => { const n = Number(x); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
+  const s = v && typeof v === "object" ? v : {};
+  const sr = int(s.sr, 0, 768000);
+  const tracks = [];
+  for (const tr of Array.isArray(s.tracks) ? s.tracks.slice(0, 64) : []) {
+    if (!tr || typeof tr !== "object") continue;
+    const clips = [];
+    for (const k of Array.isArray(tr.clips) ? tr.clips.slice(0, 2000) : []) {
+      if (!k || typeof k !== "object" || !k.doc) continue;
+      const len = int(k.len, 1, 2 ** 40), fin = int(k.fin, 0, len);
+      clips.push({ id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), doc: str(k.doc, 80), at: int(k.at, 0, 2 ** 40), from: int(k.from, 0, 2 ** 40), len, gain: num(k.gain, -96, 24, 0), fin, fout: int(k.fout, 0, len - fin), name: str(k.name, 160) });
+    }
+    clips.sort((a, b) => a.at - b.at);
+    tracks.push({ id: str(tr.id, 40) || crypto.randomUUID().slice(0, 12), name: str(tr.name, 80), gain: num(tr.gain, -96, 12, 0), pan: num(tr.pan, -1, 1, 0), mute: !!tr.mute, solo: !!tr.solo, clips });
+  }
+  return { v: 1, id: str(s.id, 60) || crypto.randomUUID(), name: str(s.name, 160) || "Session", sr: sr >= 8000 ? sr : 0, created: Number(s.created) || Date.now(), modified: Date.now(), tracks };
+}
+
+function sesLen(s) {
+  let n = 0;
+  for (const tr of s.tracks) for (const k of tr.clips) n = Math.max(n, k.at + k.len);
+  return n;
+}
+
+async function sesRead(id) {
+  return sesClean(await readJson(await sessionsDir(), String(id).replace(/[^\w-]/g, "") + ".json"));
+}
+
+async function sesWrite(s) {
+  await writeFile(await sessionsDir(), s.id.replace(/[^\w-]/g, "") + ".json", enc(s));
+}
+
+async function sesList() {
+  const dir = await sessionsDir(), out = [];
+  for await (const [name, h] of dir.entries()) {
+    if (h.kind !== "file" || !name.endsWith(".json")) continue;
+    try {
+      const s = sesClean(JSON.parse(await (await h.getFile()).text()));
+      out.push({ id: s.id, name: s.name, sr: s.sr, tracks: s.tracks.length, len: sesLen(s), modified: s.modified });
+    } catch {}
+  }
+  out.sort((a, b) => (b.modified || 0) - (a.modified || 0));
+  return { t: "seslist", sessions: out };
+}
+
+async function sesUse(id) {
+  if (SES.docs.has(id)) return SES.docs.get(id);
+  let c = cur && cur.meta.id === id ? cur : lingering.get(id) || null;
+  if (!c) {
+    const docDir = await (await docsDir()).getDirectoryHandle(String(id));
+    const meta = await readJson(docDir, "meta.json");
+    if (meta.recording) throw new Error("recording");
+    c = await loadDoc(docDir, meta);
+    lingering.set(c.meta.id, c);
+  }
+  c.busy = (c.busy || 0) + 1;
+  SES.docs.set(id, c);
+  return c;
+}
+
+function sesRelease() {
+  for (const c of SES.docs.values()) releaseDoc(c);
+  SES.docs.clear();
+}
+
+function sesEdge(c, seg) {
+  if (seg[0] === SIL) return null;
+  const st = seg[2], end = st + seg[3];
+  const h1 = Math.min(end, Math.ceil(st / BUCKET) * BUCKET), t0 = Math.max(h1, Math.floor(end / BUCKET) * BUCKET);
+  const e = [Infinity, -Infinity, Infinity, -Infinity], buf = new Float32Array(BUCKET);
+  const mm = (f, n, k) => {
+    readSrcOf(c, seg[0], seg[1], f, n, buf, 0);
+    for (let i = 0; i < n; i++) { const v = buf[i]; if (v < e[k]) e[k] = v; if (v > e[k + 1]) e[k + 1] = v; }
+  };
+  if (h1 > st) mm(st, h1 - st, 0);
+  if (end > t0) mm(t0, end - t0, 2);
+  return e;
+}
+
+async function sesPayload(id) {
+  let c;
+  try { c = await sesUse(id); } catch { return { id, missing: true }; }
+  const slotPeaks = await readFloat(c.dir, "peaks.f32"), bands = await readFloat(c.dir, "bands.f32");
+  const allocs = [];
+  for (let i = 1; i < c.allocs.length; i++) { const s = c.sums[i]; allocs.push({ id: i, n: c.allocs[i][1], pk: s.pk, bd: s.bd }); }
+  return { id, meta: c.meta, len: c.len, peaks: timelinePeaks(slotPeaks, c.meta.channels, c.meta.slots), bands, lists: c.lists, edges: c.lists.map(l => l.map(g => sesEdge(c, g))), allocs };
+}
+
+async function sesOpen(m) {
+  const s = await sesRead(m.id);
+  sesRelease();
+  SES.s = s;
+  const ids = [...new Set(s.tracks.flatMap(tr => tr.clips.map(k => k.doc)))];
+  const docs = [];
+  for (const id of ids) docs.push(await sesPayload(id));
+  SES.mix = sesMixer(s);
+  return { t: "sesopen", s, docs };
+}
+
+function sesMixer(s) {
+  const solo = s.tracks.some(tr => tr.solo);
+  const act = s.tracks.filter(tr => !tr.mute && (!solo || tr.solo)).map(tr => ({ g: tr.gain <= -96 ? 0 : Math.pow(10, tr.gain / 20), pan: tr.pan, clips: tr.clips }));
+  let buf = new Float32Array(0);
+  return (p, n, out, stride) => {
+    out.fill(0, 0, n);
+    out.fill(0, stride, stride + n);
+    for (const T of act) {
+      if (!T.g) continue;
+      for (const k of T.clips) {
+        const a = Math.max(p, k.at), b = Math.min(p + n, k.at + k.len);
+        if (b <= a) continue;
+        const c = SES.docs.get(k.doc);
+        if (!c) continue;
+        const m = b - a, ch = c.meta.channels, s0 = k.from + (a - k.at);
+        if (buf.length < m * 2) buf = new Float32Array(m * 2);
+        const rd = (src, cc, f, q, o, off) => readSrcOf(c, src, cc, f, q, o, off);
+        readList(c.lists[0], c.cum[0], s0, m, buf, 0, rd);
+        if (ch > 1) readList(c.lists[1], c.cum[1], s0, m, buf, m, rd);
+        const g = T.g * (k.gain <= -96 ? 0 : Math.pow(10, k.gain / 20));
+        let gl, gr;
+        if (ch === 1) { const th = (T.pan + 1) * Math.PI / 4; gl = g * Math.cos(th); gr = g * Math.sin(th); }
+        else { gl = g * (T.pan > 0 ? 1 - T.pan : 1); gr = g * (T.pan < 0 ? 1 + T.pan : 1); }
+        const o = a - p, q0 = a - k.at, R = ch > 1 ? m : 0, fi = k.fin, fo = k.fout, len = k.len;
+        for (let i = 0; i < m; i++) {
+          const q = q0 + i;
+          let f = 1;
+          if (fi > 0 && q < fi) f *= fadeGain(q / Math.max(1, fi - 1), "lin", 0);
+          if (fo > 0 && q >= len - fo) f *= fadeGain((len - 1 - q) / Math.max(1, fo - 1), "lin", 0);
+          out[o + i] += buf[i] * gl * f;
+          out[stride + o + i] += buf[R + i] * gr * f;
+        }
+      }
+    }
+  };
+}
+
+function sesSetMix(m) {
+  if (!SES.s) return;
+  const s = sesClean(m.s);
+  if (s.id !== SES.s.id) return;
+  SES.s = s;
+  SES.mix = sesMixer(s);
+}
+
+async function sesPut(m) {
+  const s = sesClean(m.s);
+  await sesWrite(s);
+  if (SES.s && SES.s.id === s.id) { SES.s = s; SES.mix = sesMixer(s); }
+  return { t: "sesput", s };
+}
+
+async function sesNew(m) {
+  const s = sesClean({ name: m.name, tracks: [] });
+  await sesWrite(s);
+  return { t: "sesnew", s };
+}
+
+async function sesDel(m) {
+  const id = String(m.id).replace(/[^\w-]/g, "");
+  if (SES.s && SES.s.id === m.id) { stopPlay(); sesRelease(); SES.s = null; SES.mix = null; }
+  try { await (await sessionsDir()).removeEntry(id + ".json"); } catch {}
+  return { t: "sesdel", id: m.id };
+}
+
+function sesClose() {
+  if (play && play.mix) stopPlay();
+  sesRelease();
+  SES.s = null;
+  SES.mix = null;
+  return { t: "sesclosed" };
+}
+
+function sesStartPlay(m) {
+  stopPlay();
+  if (!SES.s || !SES.mix || !ring) return;
+  const F = sesLen(SES.s);
+  const start = Math.max(0, Math.min(Math.floor(m.start), F)), end = Math.max(start, Math.min(Math.floor(m.end), F));
+  if (end - start < 1) return;
+  const loop = !!m.loop;
+  play = { start, end, loop, off: loop ? Math.max(0, Math.min(end - start - 1, Math.floor(m.off || 0))) : 0, tmp: new Float32Array(CHUNK * 2), mix: true };
+  const ctrl = ring.ctrl;
+  Atomics.store(ctrl, 1, 0);
+  Atomics.store(ctrl, 2, 0);
+  Atomics.store(ctrl, 4, 0);
+  Atomics.store(ctrl, 5, loop ? -1 : end - start);
+  fillRing();
+  Atomics.add(ctrl, 3, 1);
+  Atomics.store(ctrl, 0, 1);
+  fillTimer = setInterval(() => {
+    if (!play) return;
+    if (Atomics.load(ring.ctrl, 0) !== 1) { stopPlay(); return; }
+    try { fillRing(); } catch (e) { stopPlay(); postMessage({ t: "playerror", msg: errText(e) }); }
+  }, 8);
+}
+
+function sesJob(m) {
+  if (SES.job) SES.job.cancel = true;
+  const job = { id: m.jobId, cancel: false, last: 0 };
+  SES.job = job;
+  job.tick = async frac => {
+    const now = performance.now();
+    if (now - job.last > 120) { job.last = now; postMessage({ t: "sprog", id: job.id, frac: Math.min(1, frac) }); await new Promise(r => setTimeout(r, 0)); }
+    if (job.cancel) throw new Error("cancelled");
+  };
+  job.done = () => { if (SES.job === job) SES.job = null; };
+  return job;
+}
+
+async function sesNewDoc(name, sr, ch, frames, fill, job, extra) {
+  const dir = await docsDir(), id = crypto.randomUUID(), docDir = await dir.getDirectoryHandle(id, { create: true });
+  let pool = null;
+  try {
+    pool = await (await docDir.getFileHandle("pool.f32", { create: true })).createSyncAccessHandle();
+    const S = sinkNew(pool, ch, sr);
+    let peak = 0;
+    await fill((o, n) => { for (let i = 0; i < n * ch; i++) { const v = o[i] < 0 ? -o[i] : o[i]; if (v > peak) peak = v; } sinkPush(S, o, n); });
+    const { slots, slotPeaks, bands } = sinkEnd(S);
+    pool.flush();
+    pool.close();
+    pool = null;
+    await writeFile(docDir, "peaks.f32", slotPeaks);
+    await writeFile(docDir, "bands.f32", bands);
+    const meta = Object.assign({ v: 1, id, name: String(name || "").trim().slice(0, 160) || "Untitled", ext: "", size: frames * ch * 4, sampleRate: sr, channels: ch, bits: 32, frames, blockFrames: BLOCK, slots, created: Date.now(), opened: Date.now(), readOnly: false, tags: [] }, extra || {});
+    await writeFile(docDir, "meta.json", enc(meta));
+    return { meta, peak };
+  } catch (e) {
+    if (pool) { try { pool.close(); } catch {} }
+    try { await dir.removeEntry(id, { recursive: true }); } catch {}
+    throw e;
+  }
+}
+
+async function sesBounce(m) {
+  if (!SES.s || !SES.mix) throw new Error("stale");
+  const s = SES.s, F = sesLen(s), a = clampI(m.a, 0, F), b = m.b > a ? clampI(m.b, 0, F) : F;
+  if (b <= a || !s.sr) throw new Error("nothing");
+  const job = sesJob(m), mix = SES.mix, N = 65536, buf = new Float32Array(N * 2), il = new Float32Array(N * 2);
+  try {
+    const r = await sesNewDoc(m.name, s.sr, 2, b - a, async push => {
+      for (let p = a; p < b; p += N) {
+        const n = Math.min(N, b - p);
+        mix(p, n, buf, N);
+        il.set(buf.subarray(0, n), 0);
+        il.set(buf.subarray(N, N + n), n);
+        push(il.subarray(0, n * 2), n);
+        await job.tick((p + n - a) / (b - a));
+      }
+    }, job, { source: { kind: "session", from: s.id } });
+    return { t: "bounced", meta: r.meta, peak: r.peak };
+  } finally { job.done(); }
+}
+
+async function sesConvert(m) {
+  const sr = clampI(m.sr, 8000, 768000);
+  const docDir = await (await docsDir()).getDirectoryHandle(String(m.id));
+  const meta = await readJson(docDir, "meta.json");
+  let c = cur && cur.meta.id === m.id ? cur : lingering.get(m.id) || null, fresh = false;
+  if (!c) { c = await loadDoc(docDir, meta); fresh = true; }
+  const rateIn = c.meta.sampleRate, ch = c.meta.channels, total = c.len;
+  const outFrames = Math.ceil(total * sr / rateIn);
+  const job = sesJob(m), x = await dspExports(), lists = c.lists, cum = c.cum;
+  const rd = (src, cc, f, q, o, off) => readSrcOf(c, src, cc, f, q, o, off);
+  try {
+    if (x.rs_open(rateIn, sr, ch) !== 0) throw new Error(dspError(x));
+    const r = await sesNewDoc(c.meta.name.replace(/\.[^.]+$/, "") + " (" + (sr / 1000) + " kHz)", sr, ch, outFrames, async push => {
+      const need = x.rs_need(), sIn = x.rs_in_stride(), sOut = x.rs_out_stride();
+      let skip = x.rs_delay(), pos = 0, emitted = 0, tmp = null;
+      while (emitted < outFrames) {
+        const take = Math.max(0, Math.min(need, total - pos));
+        const inV = new Float32Array(x.memory.buffer, x.rs_in(), sIn * ch);
+        for (let cc = 0; cc < ch; cc++) {
+          if (take) readList(lists[cc], cum[cc], pos, take, inV, cc * sIn, rd);
+          inV.fill(0, cc * sIn + take, cc * sIn + need);
+        }
+        pos += take;
+        const k = x.rs_process(need);
+        if (k < 0) throw new Error(dspError(x));
+        const outV = new Float32Array(x.memory.buffer, x.rs_out(), sOut * ch);
+        let st = 0;
+        if (skip) { st = Math.min(skip, k); skip -= st; }
+        const q = Math.min(k - st, outFrames - emitted);
+        if (q > 0) {
+          if (!tmp || tmp.length < q * ch) tmp = new Float32Array(Math.max(q, need * 2) * ch);
+          for (let cc = 0; cc < ch; cc++) tmp.set(outV.subarray(cc * sOut + st, cc * sOut + st + q), cc * q);
+          push(tmp.subarray(0, q * ch), q);
+          emitted += q;
+        }
+        await job.tick(emitted / outFrames);
+      }
+      x.rs_close();
+    }, job, { source: { kind: "derived", from: c.meta.id }, tags: c.meta.tags || [], bits: c.meta.bits });
+    return { t: "converted", meta: r.meta };
+  } catch (e) {
+    try { x.rs_close(); } catch {}
+    throw e;
+  } finally {
+    job.done();
+    if (fresh) closeHandles(c);
+  }
 }
 
 const XP = { jobs: [], running: null, dsp: null };
@@ -3406,6 +3719,18 @@ async function handle(m) {
   if (m.t === "mdlisten") { MDL.mode = ["midi", "both"].includes(m.mode) ? m.mode : "off"; MDL.notes = MDL.mode === "off" ? [] : mdClean(m.notes); ringFlush(); return; }
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
   if (m.t === "proc") { postMessage(Object.assign({ req: m.req }, await pxApply(m))); return; }
+  if (m.t === "seslist") { postMessage(Object.assign({ req: m.req }, await sesList())); return; }
+  if (m.t === "sesnew") { postMessage(Object.assign({ req: m.req }, await sesNew(m))); return; }
+  if (m.t === "sesopen") { postMessage(Object.assign({ req: m.req }, await enqueue(() => sesOpen(m)))); return; }
+  if (m.t === "sesdoc") { postMessage(Object.assign({ req: m.req }, await enqueue(async () => ({ t: "sesdoc", doc: await sesPayload(String(m.id)) })))); return; }
+  if (m.t === "sesput") { postMessage(Object.assign({ req: m.req }, await sesPut(m))); return; }
+  if (m.t === "sesmix") { sesSetMix(m); return; }
+  if (m.t === "sesplay") { sesStartPlay(m); return; }
+  if (m.t === "sesclose") { postMessage(Object.assign({ req: m.req }, await enqueue(async () => sesClose()))); return; }
+  if (m.t === "sesdel") { postMessage(Object.assign({ req: m.req }, await sesDel(m))); return; }
+  if (m.t === "sesbounce") { postMessage(Object.assign({ req: m.req }, await sesBounce(m))); return; }
+  if (m.t === "sesconv") { postMessage(Object.assign({ req: m.req }, await sesConvert(m))); return; }
+  if (m.t === "sescancel") { if (SES.job) SES.job.cancel = true; return; }
   if (m.t === "docinfo") { postMessage(Object.assign({ req: m.req }, await enqueue(() => docInfo(m)))); return; }
   if (m.t === "albums") { postMessage(Object.assign({ req: m.req }, await albumsGet())); return; }
   if (m.t === "albumsput") { postMessage(Object.assign({ req: m.req }, await enqueue(() => albumsPut(m)))); return; }

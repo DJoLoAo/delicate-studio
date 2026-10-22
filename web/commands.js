@@ -48,20 +48,20 @@ function keyLabel(combo) {
 }
 
 const CMDS = [
-  { id: "play", g: "Transport", label: "Play / stop", run: () => togglePlay(), doc: true },
-  { id: "stop", g: "Transport", label: "Stop", run: () => stopPlay(), doc: true },
-  { id: "loop", g: "Transport", label: "Loop on / off", run: () => toggleLoop(), doc: true },
-  { id: "home", g: "Transport", label: "Cursor to start", run: () => cursorHome(), doc: true },
-  { id: "end", g: "Transport", label: "Cursor to end", run: () => cursorEnd(), doc: true },
+  { id: "play", g: "Transport", label: "Play / stop", run: () => togglePlay(), doc: true, ss: () => ssToggle() },
+  { id: "stop", g: "Transport", label: "Stop", run: () => stopPlay(), doc: true, ss: () => ssStop() },
+  { id: "loop", g: "Transport", label: "Loop on / off", run: () => toggleLoop(), doc: true, ss: () => ssLoopToggle() },
+  { id: "home", g: "Transport", label: "Cursor to start", run: () => cursorHome(), doc: true, ss: () => ssHome() },
+  { id: "end", g: "Transport", label: "Cursor to end", run: () => cursorEnd(), doc: true, ss: () => ssEnd() },
   { id: "prevMark", g: "Transport", label: "Previous marker", run: () => stepTo(-1, false), doc: true, kw: "location jump back" },
   { id: "nextMark", g: "Transport", label: "Next marker", run: () => stepTo(1, false), doc: true, kw: "location jump forward" },
   { id: "prevEdge", g: "Transport", label: "Cursor to the previous marker or selection edge", run: () => stepTo(-1, true), doc: true },
   { id: "nextTransient", g: "Transport", label: "Next transient", run: () => tnStep(1, false), doc: true, when: () => tn.on, kw: "tab onset beat hit attack drum jump forward" },
   { id: "prevTransient", g: "Transport", label: "Previous transient", run: () => tnStep(-1, false), doc: true, when: () => tn.on, kw: "tab onset beat hit attack drum jump back" },
   { id: "nextEdge", g: "Transport", label: "Cursor to the next marker or selection edge", run: () => stepTo(1, true), doc: true },
-  { id: "zoomIn", g: "View", label: "Zoom in", run: () => zoomAt(0.5), doc: true },
-  { id: "zoomOut", g: "View", label: "Zoom out", run: () => zoomAt(2), doc: true },
-  { id: "zoomFull", g: "View", label: "Zoom to the whole file", run: () => zoomFit(), doc: true },
+  { id: "zoomIn", g: "View", label: "Zoom in", run: () => zoomAt(0.5), doc: true, ss: () => ssZoomAt(0.5) },
+  { id: "zoomOut", g: "View", label: "Zoom out", run: () => zoomAt(2), doc: true, ss: () => ssZoomAt(2) },
+  { id: "zoomFull", g: "View", label: "Zoom to the whole file", run: () => zoomFit(), doc: true, ss: () => ssZoomFit() },
   { id: "zoomSel", g: "View", label: "Zoom to the selection", run: () => zoomSel(), doc: true, when: () => selOn() },
   { id: "zoomToggle", g: "View", label: "Zoom toggle (selection and back)", run: () => zoomToggle(), doc: true, when: () => selOn() || !!ed.zoomBack },
   { id: "zp1", g: "View", label: "Zoom preset 1", labelT: () => t("Zoom preset") + " 1", run: () => zpRecall(0), doc: true },
@@ -80,19 +80,19 @@ const CMDS = [
   { id: "spec", g: "View", label: "Spectrogram on / off", run: () => spToggle(), doc: true, kw: "spectral frequency display spectrum view frequencies" },
   { id: "specScale", g: "View", label: "Spectrogram: logarithmic / linear frequency scale", run: () => spScaleToggle(), doc: true, when: () => SPV.on, kw: "spectral frequency display log linear" },
   { id: "selAll", g: "Selection", label: "Select all", run: () => selectAll(), doc: true },
-  { id: "deselect", g: "Selection", label: "Clear the selection", run: () => deselect(), doc: true },
+  { id: "deselect", g: "Selection", label: "Clear the selection", run: () => deselect(), doc: true, ss: () => ssDeselect() },
   { id: "chanL", g: "Selection", label: "Left channel only / both", run: () => chanOnly(0), doc: true, when: () => ed.doc.channels > 1 },
   { id: "chanR", g: "Selection", label: "Right channel only / both", run: () => chanOnly(1), doc: true, when: () => ed.doc.channels > 1 },
   { id: "selNextTransient", g: "Selection", label: "Extend the selection to the next transient", run: () => tnStep(1, true), doc: true, when: () => tn.on, kw: "onset beat hit attack tab" },
   { id: "selPrevTransient", g: "Selection", label: "Extend the selection to the previous transient", run: () => tnStep(-1, true), doc: true, when: () => tn.on, kw: "onset beat hit attack tab" },
   { id: "zcIn", g: "Selection", label: "Selection to zero crossings, inward", run: () => adjustZero("in"), doc: true, when: () => selOn() },
   { id: "zcOut", g: "Selection", label: "Selection to zero crossings, outward", run: () => adjustZero("out"), doc: true, when: () => selOn() },
-  { id: "undo", g: "Edit", label: "Undo", run: () => undo(), doc: true, when: () => ed.histIdx > 0 },
-  { id: "redo", g: "Edit", label: "Redo", run: () => redo(), doc: true, when: () => ed.histIdx < ed.hist.length - 1 },
+  { id: "undo", g: "Edit", label: "Undo", run: () => undo(), doc: true, when: () => ed.histIdx > 0, ss: () => ssUndo(), ssWhen: () => ses.idx > 0 },
+  { id: "redo", g: "Edit", label: "Redo", run: () => redo(), doc: true, when: () => ed.histIdx < ed.hist.length - 1, ss: () => ssRedo(), ssWhen: () => ses.idx < ses.hist.length - 1 },
   { id: "cut", g: "Edit", label: "Cut", run: () => edit("cut"), doc: true, when: () => selOn() },
   { id: "copy", g: "Edit", label: "Copy", run: () => edit("copy"), doc: true, when: () => selOn() },
   { id: "paste", g: "Edit", label: "Paste", run: () => edit("paste"), doc: true, when: () => !!ed.clipInfo },
-  { id: "delete", g: "Edit", label: "Delete the selection", run: () => spSelLive() ? spEdit("spdel", SPV.sel.shapes, "sel") : edit("delete"), doc: true, when: () => selOn() },
+  { id: "delete", g: "Edit", label: "Delete the selection", run: () => spSelLive() ? spEdit("spdel", SPV.sel.shapes, "sel") : edit("delete"), doc: true, when: () => selOn(), ss: () => ssDelete(), ssWhen: () => !!(ses.clip && ssTrackOf(ses.clip)) },
   { id: "silence", g: "Edit", label: "Silence the selection", run: () => spSelLive() ? spEdit("spdel", SPV.sel.shapes, "sel") : edit("silence"), doc: true, when: () => selOn() },
   { id: "crop", g: "Edit", label: "Crop to the selection", run: () => edit("crop"), doc: true, when: () => selOn() },
   { id: "insert", g: "Edit", label: "Insert silence…", run: () => insertSilenceDlg(), doc: true },
@@ -134,7 +134,13 @@ const CMDS = [
   { id: "open", g: "File", label: "Open a file…", run: () => pickFiles() },
   { id: "recPanel", g: "File", label: "Record…", run: () => recToggle(), kw: "record recording input microphone vinyl rip turntable guitar capture" },
   { id: "rec", g: "Transport", label: "Record / stop recording", run: () => recGo(), kw: "record recording start stop capture" },
-  { id: "export", g: "File", label: "Export…", run: () => openExport(), doc: true, kw: "render bounce save wav flac master dither" },
+  { id: "export", g: "File", label: "Export…", run: () => openExport(), doc: true, kw: "render bounce save wav flac master dither", ss: () => ssBounce(true), ssWhen: () => ssLen() > 0 },
+  { id: "sesNew", g: "File", label: "New session…", run: () => ssNewDlg(), kw: "multitrack session tracks mix arrange daw project" },
+  { id: "sessions", g: "File", label: "Sessions", run: () => openFiles("sessions"), kw: "multitrack session tracks mix arrange project" },
+  { id: "sesAdd", g: "Edit", label: "Add files to the session…", run: () => ssAddDlg(), ss: () => ssAddDlg(), sesOnly: true, kw: "multitrack track import file clip" },
+  { id: "sesSplit", g: "Edit", label: "Split the clip at the cursor", run: () => ssSplit(), ss: () => ssSplit(), sesOnly: true, ssWhen: () => { const k = ses.clip && ssTrackOf(ses.clip); return !!k && ses.cursor > k.k.at && ses.cursor < k.k.at + k.k.len; }, kw: "razor cut separate clip multitrack" },
+  { id: "sesGain", g: "Edit", label: "Clip gain…", run: () => ssClipGain(), ss: () => ssClipGain(), sesOnly: true, ssWhen: () => !!(ses.clip && ssTrackOf(ses.clip)), kw: "volume level clip multitrack" },
+  { id: "sesBounce", g: "File", label: "Mix down to a new file", run: () => ssBounce(false), ss: () => ssBounce(false), sesOnly: true, ssWhen: () => ssLen() > 0, kw: "bounce render mixdown multitrack session" },
   { id: "newMono", g: "File", label: "New mono file from this one…", run: () => pxMonoDlg(), doc: true, when: () => ed.doc.channels > 1, kw: "convert mono downmix channels new file save as" },
   { id: "newStereo", g: "File", label: "New stereo file from this one", run: () => pxNewFile("stereo"), doc: true, when: () => ed.doc.channels === 1, kw: "convert stereo channels new file dual mono save as" },
   { id: "albums", g: "File", label: "Albums", run: () => openFiles("albums"), kw: "album record sides lp vinyl discogs release export all tracks" },
@@ -142,7 +148,7 @@ const CMDS = [
   { id: "albumOpen", g: "File", label: "Album of this file…", run: () => alOpenFor(ed.doc.id), doc: true, when: () => !!alOf(ed.doc.id), kw: "album record sides lp vinyl" },
   { id: "tags", g: "File", label: "File tags…", run: () => ftOpen(false), doc: true, kw: "metadata meta id3 vorbis info bwf title artist album cover art tag edit discogs" },
   { id: "files", g: "File", label: "Files", run: () => openFiles(), kw: "library locker studio" },
-  { id: "close", g: "File", label: "Close file", run: () => closeDoc(), doc: true },
+  { id: "close", g: "File", label: "Close file", labelT: () => t(ses.open ? "Close the session" : "Close file"), run: () => closeDoc(), doc: true, ss: () => ssClose() },
   { id: "settings", g: "File", label: "Settings", run: () => openSettings() },
   { id: "palette", g: "Help", label: "Command palette", run: () => palOpen() },
   { id: "keys", g: "Help", label: "Keyboard shortcuts", run: () => shortcuts() },
@@ -159,7 +165,7 @@ const BASE_KEYS = {
   selAll: ["Mod+A"], deselect: ["Escape"],
   undo: ["Mod+Z"], redo: ["Mod+Shift+Z", "Mod+Y"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
   delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"], heal: ["Mod+U"], nrCap: ["Shift+P"],
-  markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"], spec: ["Shift+D"], toolRect: ["E"], toolLasso: ["D"], toolBrush: ["B"], pencil: ["P"], transients: ["Shift+T"], nextTransient: ["Tab"], prevTransient: ["Shift+Tab"],
+  markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"], spec: ["Shift+D"], toolRect: ["E"], toolLasso: ["D"], toolBrush: ["B"], pencil: ["P"], sesSplit: ["S"], transients: ["Shift+T"], nextTransient: ["Tab"], prevTransient: ["Shift+Tab"],
   open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"], rec: ["Shift+Space"]
 };
 
@@ -185,7 +191,7 @@ const KEYMAPS = {
       zp1: [{ mac: "Ctrl+1", win: { k: "1", native: "Win+1" } }, "1"], zp2: [{ mac: "Ctrl+2", win: { k: "2", native: "Win+2" } }, "2"], zp3: [{ mac: "Ctrl+3", win: { k: "3", native: "Win+3" } }, "3"], zp4: [{ mac: "Ctrl+4", win: { k: "4", native: "Win+4" } }, "4"], zp5: [{ mac: "Ctrl+5", win: { k: "5", native: "Win+5" } }, "5"],
       undo: ["Mod+Z", "Z"], redo: ["Mod+Shift+Z", "Shift+Z"], cut: ["Mod+X", "X"], copy: ["Mod+C", "C"], paste: ["Mod+V", "V"],
       delete: ["Delete", "Backspace"], silence: ["Mod+B"], crop: [{ k: "Shift+T", native: "Mod+T" }], insert: ["Mod+Shift+E"], selAll: ["Mod+A"],
-      locAdd: ["NumEnter"], markAdd: [{ mac: "Mod+Enter" }], locs: ["Mod+Num5"], open: ["Mod+O"], export: ["Mod+Alt+B"], pencil: ["F10"], nextTransient: ["Tab"], prevTransient: [{ mac: "Alt+Tab" }], selNextTransient: ["Shift+Tab"], selPrevTransient: [{ mac: "Alt+Shift+Tab" }], rec: ["F12", "Num3", { k: "Shift+Space", native: "Mod+Space" }]
+      locAdd: ["NumEnter"], markAdd: [{ mac: "Mod+Enter" }], locs: ["Mod+Num5"], open: ["Mod+O"], export: ["Mod+Alt+B"], pencil: ["F10"], sesSplit: ["Mod+E"], nextTransient: ["Tab"], prevTransient: [{ mac: "Alt+Tab" }], selNextTransient: ["Shift+Tab"], selPrevTransient: [{ mac: "Alt+Shift+Tab" }], rec: ["F12", "Num3", { k: "Shift+Space", native: "Mod+Space" }]
     }
   },
   reaper: {
@@ -241,17 +247,22 @@ function keymap() {
 function cmdKeys(id) { return (keymap().byCmd[id] || []); }
 function cmdKeyText(id) { const k = cmdKeys(id)[0]; return k ? keyLabel(k.k) : ""; }
 function cmdLabel(c) { return c.labelT ? c.labelT() : t(c.label); }
-function cmdEnabled(c) { if (c.doc && !ed.doc) return false; try { return !c.when || !!c.when(); } catch { return false; } }
+function cmdEnabled(c) {
+  if (ses.open && c.ss) { try { return !c.ssWhen || !!c.ssWhen(); } catch { return false; } }
+  if (c.sesOnly || (ses.open && c.doc)) return false;
+  if (c.doc && !ed.doc) return false;
+  try { return !c.when || !!c.when(); } catch { return false; }
+}
 
 function runCmd(c) {
   if (!c || !cmdEnabled(c)) return false;
-  c.run();
+  if (ses.open && c.ss) c.ss(); else c.run();
   return true;
 }
 
 function runCmdById(id) { return runCmd(CMD[id]); }
 
-const TIP_IDS = { homeBtn: "home", playBtn: "play", stopBtn: "stop", loopBtn: "loop", zinBtn: "zoomIn", zoutBtn: "zoomOut", zselBtn: "zoomSel", zfitBtn: "zoomFull", keysBtn: "keys", palBtn: "palette", specBtn: "spec", spToolTime: "toolTime", spToolRect: "toolRect", spToolLasso: "toolLasso", spToolBrush: "toolBrush" };
+const TIP_IDS = { homeBtn: "home", playBtn: "play", stopBtn: "stop", loopBtn: "loop", zinBtn: "zoomIn", zoutBtn: "zoomOut", zselBtn: "zoomSel", zfitBtn: "zoomFull", keysBtn: "keys", palBtn: "palette", specBtn: "spec", spToolTime: "toolTime", spToolRect: "toolRect", spToolLasso: "toolLasso", spToolBrush: "toolBrush", sesPlay: "play", sesStop: "stop", sesHome: "home", sesLoop: "loop", sesZin: "zoomIn", sesZout: "zoomOut", sesZfit: "zoomFull", sesClose: "close" };
 
 function applyTitles() {
   const set = (el, id) => {
@@ -261,7 +272,7 @@ function applyTitles() {
     el.title = k ? label + " (" + k + ")" : label;
     el.setAttribute("aria-label", cmdLabel(c));
   };
-  document.querySelectorAll("#edTools [data-cmd]").forEach(el => { if (el.id !== "histX") set(el, el.dataset.cmd); });
+  document.querySelectorAll("#edTools [data-cmd], #sesTools [data-cmd]").forEach(el => { if (el.id !== "histX") set(el, el.dataset.cmd); });
   for (const id in TIP_IDS) set($(id), TIP_IDS[id]);
   document.querySelectorAll("#zpSeg button").forEach((b, i) => {
     const k = cmdKeyText("zp" + (i + 1)), desc = zpDesc(zpGet()[i]);
@@ -388,7 +399,7 @@ function onKey(e) {
     return;
   }
   const c = CMD[id];
-  if (c.doc && !ed.doc) return;
+  if (c.doc && !ed.doc && !(ses.open && c.ss)) return;
   if (/(^|\+)Tab$/.test(combo)) {
     const a = document.activeElement;
     if ((a && a !== document.body && a.tagName !== "CANVAS") || !cmdEnabled(c)) return;
@@ -492,7 +503,7 @@ function palEntries(q) {
     if (f !== null && f >= 0 && /^[\d:.,\s]+$/.test(q.trim())) out.push({ kind: "time", label: t("Go to") + " " + fmtTime(Math.min(f, ed.doc.frames)), score: 1000, run: () => jumpTo(Math.min(f, ed.doc.frames)) });
   }
   for (const c of CMDS) {
-    if (c.hidden) continue;
+    if (c.hidden || (c.sesOnly && !ses.open)) continue;
     const label = cmdLabel(c), hay = [label, t(c.g), c.label, c.kw || ""].join(" · ");
     const sc = fuzzy(q, hay);
     if (!sc) continue;
