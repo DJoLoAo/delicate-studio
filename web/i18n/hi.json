@@ -895,5 +895,7 @@
  "Transients": "ट्रांज़िएंट",
  "How strong an attack has to be to get a transient marker": "ट्रांज़िएंट मार्कर पाने के लिए अटैक कितना तेज़ होना चाहिए",
  "Transients and pencil": "ट्रांज़िएंट और पेंसिल",
- "This button marks the attacks of drums and notes: Tab and Shift+Tab jump between them, and selections snap to them unless you hold Alt. The pencil next to it redraws samples by hand once you zoom in to sample level.": "यह बटन ड्रम और नोट्स के अटैक मार्क करता है: Tab और Shift+Tab उनके बीच कूदते हैं, और चयन उन पर अटकते हैं जब तक आप Alt न दबाएँ। इसके बगल की पेंसिल सैंपल स्तर तक ज़ूम करने पर सैंपल हाथ से दोबारा बनाती है।"
+ "This button marks the attacks of drums and notes: Tab and Shift+Tab jump between them, and selections snap to them unless you hold Alt. The pencil next to it redraws samples by hand once you zoom in to sample level.": "यह बटन ड्रम और नोट्स के अटैक मार्क करता है: Tab और Shift+Tab उनके बीच कूदते हैं, और चयन उन पर अटकते हैं जब तक आप Alt न दबाएँ। इसके बगल की पेंसिल सैंपल स्तर तक ज़ूम करने पर सैंपल हाथ से दोबारा बनाती है।",
+ "show all shortcuts": "सभी शॉर्टकट दिखाएँ",
+ "The same choice is in Settings → Keyboard. Change any key in the command palette.": "यही विकल्प सेटिंग्स → कीबोर्ड में भी है। कमांड पैलेट में कोई भी कुंजी बदलें।"
 }

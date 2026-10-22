@@ -895,5 +895,7 @@
  "Transients": "Transitoires",
  "How strong an attack has to be to get a transient marker": "Force qu’une attaque doit avoir pour recevoir un marqueur de transitoire",
  "Transients and pencil": "Transitoires et crayon",
- "This button marks the attacks of drums and notes: Tab and Shift+Tab jump between them, and selections snap to them unless you hold Alt. The pencil next to it redraws samples by hand once you zoom in to sample level.": "Ce bouton marque les attaques des batteries et des notes : Tab et Maj+Tab passent de l’une à l’autre, et les sélections s’y accrochent, sauf si vous maintenez Alt. Le crayon à côté redessine les échantillons à la main une fois que vous avez zoomé jusqu’aux échantillons."
+ "This button marks the attacks of drums and notes: Tab and Shift+Tab jump between them, and selections snap to them unless you hold Alt. The pencil next to it redraws samples by hand once you zoom in to sample level.": "Ce bouton marque les attaques des batteries et des notes : Tab et Maj+Tab passent de l’une à l’autre, et les sélections s’y accrochent, sauf si vous maintenez Alt. Le crayon à côté redessine les échantillons à la main une fois que vous avez zoomé jusqu’aux échantillons.",
+ "show all shortcuts": "afficher tous les raccourcis",
+ "The same choice is in Settings → Keyboard. Change any key in the command palette.": "Le même choix se trouve dans Réglages → Clavier. Modifiez n'importe quelle touche dans la palette de commandes."
 }

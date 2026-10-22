@@ -895,5 +895,7 @@
  "Transients": "Transienti",
  "How strong an attack has to be to get a transient marker": "Quanto deve essere forte un attacco per avere un marcatore di transiente",
  "Transients and pencil": "Transienti e matita",
- "This button marks the attacks of drums and notes: Tab and Shift+Tab jump between them, and selections snap to them unless you hold Alt. The pencil next to it redraws samples by hand once you zoom in to sample level.": "Questo pulsante segna gli attacchi di batteria e note: Tab e Maiusc+Tab saltano dall’uno all’altro, e le selezioni vi si agganciano a meno che tu non tenga premuto Alt. La matita accanto ridisegna i campioni a mano quando ingrandisci fino ai campioni."
+ "This button marks the attacks of drums and notes: Tab and Shift+Tab jump between them, and selections snap to them unless you hold Alt. The pencil next to it redraws samples by hand once you zoom in to sample level.": "Questo pulsante segna gli attacchi di batteria e note: Tab e Maiusc+Tab saltano dall’uno all’altro, e le selezioni vi si agganciano a meno che tu non tenga premuto Alt. La matita accanto ridisegna i campioni a mano quando ingrandisci fino ai campioni.",
+ "show all shortcuts": "mostra tutte le scorciatoie",
+ "The same choice is in Settings → Keyboard. Change any key in the command palette.": "La stessa scelta è in Impostazioni → Tastiera. Cambia qualsiasi tasto nella palette dei comandi."
 }

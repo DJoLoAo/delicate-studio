@@ -80,10 +80,25 @@ loginEl.querySelector(".eye").addEventListener("click", e => {
   b.setAttribute("aria-label", show ? t("Hide password") : t("Show password"));
 });
 
-function openSettings() { setEl.classList.remove("hidden"); document.getElementById("setClose").focus(); }
+function settingsTab(tab) {
+  const tabs = [...document.querySelectorAll("#setTabs [data-tab]")];
+  if (!tabs.some(b => b.dataset.tab === tab)) tab = "look";
+  for (const b of tabs) { const on = b.dataset.tab === tab; b.classList.toggle("on", on); b.setAttribute("aria-selected", on ? "true" : "false"); }
+  document.querySelectorAll("#settings section[data-tab]").forEach(s => s.classList.toggle("hidden", s.dataset.tab !== tab));
+  try { localStorage.setItem("studioSetTab", tab); } catch {}
+}
+
+function openSettings(tab) {
+  let last = "look";
+  try { last = localStorage.getItem("studioSetTab") || "look"; } catch {}
+  settingsTab(tab || last);
+  setEl.classList.remove("hidden");
+  document.getElementById("setClose").focus();
+}
 function closeSettings() { setEl.classList.add("hidden"); }
 
-document.getElementById("setbtn").addEventListener("click", openSettings);
+document.getElementById("setbtn").addEventListener("click", () => openSettings());
+document.getElementById("setTabs").addEventListener("click", e => { const b = e.target.closest("[data-tab]"); if (b) settingsTab(b.dataset.tab); });
 document.getElementById("setClose").addEventListener("click", closeSettings);
 setEl.addEventListener("pointerdown", e => { if (e.target === setEl) closeSettings(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !setEl.classList.contains("hidden") && !e.target.closest(".lp")) closeSettings(); });

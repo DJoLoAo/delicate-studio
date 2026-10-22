@@ -337,7 +337,8 @@ function wireCommands() {
   });
   $("palBtn").addEventListener("click", ev => { ev.stopPropagation(); palOpen(); });
   palBuild();
-  ddInit($("keymapDd"), Object.keys(KEYMAPS).map(k => ({ v: k, label: KEYMAPS[k].label })), kb.preset, v => { kb.preset = v; kbSave(); keysInfo(); });
+  ddInit($("keymapDd"), kbPresets(), kb.preset, v => kbPreset(v));
+  $("keysShow").addEventListener("click", () => { closeSettings(); shortcuts(); });
   $("keysReset").addEventListener("click", async () => {
     if (!(await ask(t("Reset keys?"), t("This removes the keys you changed for") + " " + KEYMAPS[kb.preset].label + ".", { ok: t("reset") }))) return;
     delete kb.user[kb.preset];
@@ -396,7 +397,22 @@ function onKey(e) {
   runCmd(c);
 }
 
-function shortcuts() {
+function kbPresets() { return Object.keys(KEYMAPS).map(k => ({ v: k, label: KEYMAPS[k].label })); }
+
+function kbPreset(v) {
+  if (!KEYMAPS[v]) return;
+  kb.preset = v;
+  kbSave();
+  keysInfo();
+  for (const id of ["keymapDd", "kbDlgDd"]) {
+    const el = $(id);
+    if (el) { el.querySelector(".cur").textContent = KEYMAPS[v].label; el.dataset.v = v; }
+  }
+  const l = $("kbList");
+  if (l) l.innerHTML = keyRows();
+}
+
+function keyRows() {
   const map = keymap();
   const rows = [];
   for (const g of GROUPS) {
@@ -411,9 +427,15 @@ function shortcuts() {
   }
   if (!map.byKey.has(".") && !map.byKey.has("Num.")) rows.push(`<div class="kgroup">${esc(t("Locations"))}</div><div><kbd>. 1 .</kbd><span>${esc(t("Go to a location by number (period, number, period)"))}</span></div>`);
   rows.push(`<div class="kgroup">${esc(t("Mouse"))}</div><div><kbd>Shift + ${esc(t("click"))}</kbd><span>${esc(t("Extend the selection"))}</span></div><div><kbd>${esc(t("Wheel"))}</kbd><span>${esc(t("Zoom · Shift+wheel scrolls"))}</span></div>`);
-  askForm(t("Keyboard shortcuts") + " · " + KEYMAPS[kb.preset].label, `<div class="keys">${rows.join("")}</div><div class="dnote">${esc(t("Keys follow the preset in Settings → Keyboard. Change any key in the command palette."))}</div>`, { ok: t("close") });
+  return rows.join("");
+}
+
+function shortcuts() {
+  const pick = `<div class="krow"><span>${esc(t("Keys like"))}</span><div class="dd down" id="kbDlgDd" title="${esc(t("Shortcut preset"))}"><div class="cur"></div><div class="list"></div></div></div>`;
+  askForm(t("Keyboard shortcuts"), `${pick}<div class="keys" id="kbList">${keyRows()}</div><div class="dnote">${esc(t("The same choice is in Settings → Keyboard. Change any key in the command palette."))}</div>`, { ok: t("close") });
   const c = document.querySelector("#dlg .dcancel");
   if (c) c.style.display = "none";
+  ddInit($("kbDlgDd"), kbPresets(), kb.preset, v => kbPreset(v));
 }
 
 const pal = { items: [], shown: [], idx: 0, recent: [] };

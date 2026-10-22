@@ -208,37 +208,41 @@
 <div id="settings" class="hidden">
   <div class="panel" role="dialog" aria-labelledby="setTitle">
     <div class="phead"><b id="setTitle">Settings</b><button class="x" id="setClose" title="Close" aria-label="Close">×</button></div>
-    <section>
+    <div class="settabs"><div class="seg" id="setTabs" role="tablist"><button class="segbtn" role="tab" data-tab="look">Look</button><button class="segbtn" role="tab" data-tab="edit">Editing</button><button class="segbtn" role="tab" data-tab="spec">Spectrogram</button><button class="segbtn" role="tab" data-tab="keys">Keyboard</button><button class="segbtn" role="tab" data-tab="help">Help</button><button class="segbtn" role="tab" data-tab="acct">Account</button></div></div>
+    <div class="setbody">
+    <section data-tab="look">
       <h3>Look</h3>
       <div class="row"><label>Language</label><div id="langSettings" class="langpick"></div></div>
       <div class="row"><label>Theme</label><div class="dd down" id="themeDd" title="Colours and fonts of the whole app"><div class="cur"></div><div class="list"></div></div></div>
       <div class="row"><label>Text size</label><div class="dd down" id="textSizeDd" title="Size of all text and controls, in any theme"><div class="cur"></div><div class="list"></div></div><span class="snote" id="textSizeNote"></span></div>
     </section>
-    <section>
+    <section data-tab="edit">
       <h3>Editing</h3>
       <div class="row"><label>Crossfade</label><div class="dd down" id="xfadeDd" title="Short crossfade at every edit point so cuts never click"><div class="cur"></div><div class="list"></div></div></div>
       <div class="row"><label>Transients</label><div class="dd down" id="tnDd" title="How strong an attack has to be to get a transient marker"><div class="cur"></div><div class="list"></div></div></div>
       <div class="row"><label>Zero crossings</label><div class="seg" id="snapSeg" title="Move edit points to the nearest zero crossing (within 10 ms)"><button class="segbtn" data-v="0">Off</button><button class="segbtn" data-v="1">Snap</button></div></div>
     </section>
-    <section>
+    <section data-tab="spec">
       <h3>Spectrogram</h3>
       <div class="row"><label>Frequency scale</label><div class="seg" id="spScaleSeg"><button class="segbtn" data-v="log">Logarithmic</button><button class="segbtn" data-v="lin">Linear</button></div></div>
       <div class="row"><label>Resolution</label><div class="dd down" id="spResDd" title="FFT size: higher is finer in frequency, lower is finer in time"><div class="cur"></div><div class="list"></div></div></div>
       <div class="row"><label>Range</label><div class="dd down" id="spRangeDd" title="How far below full scale the colours reach before black"><div class="cur"></div><div class="list"></div></div></div>
     </section>
-    <section>
+    <section data-tab="keys">
       <h3>Keyboard</h3>
       <div class="row"><label>Keys like</label><div class="dd down" id="keymapDd" title="Shortcut preset"><div class="cur"></div><div class="list"></div></div><button class="outbtn" id="keysReset">reset changes</button></div>
       <div class="row"><span class="snote" id="keysNote"></span></div>
+      <div class="row"><label>Shortcuts</label><button class="outbtn" id="keysShow">show all shortcuts</button></div>
     </section>
-    <section>
+    <section data-tab="help">
       <h3>Help</h3>
       <div class="row"><label>Tour</label><button class="outbtn" id="tourBtn">Show the tour</button></div>
     </section>
-    <section>
+    <section data-tab="acct">
       <h3>Account</h3>
       <div class="row acct"><span id="acctName"></span><button class="outbtn" id="logoutbtn">log out</button></div>
     </section>
+    </div>
   </div>
 </div>
 

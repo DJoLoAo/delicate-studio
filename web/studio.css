@@ -59,7 +59,19 @@ button,a{touch-action:manipulation}
 #stMsg{color:var(--gold)}
 
 #settings{position:fixed;inset:0;background:rgba(12,10,8,.72);display:flex;align-items:flex-start;justify-content:center;z-index:40;padding:calc(60px*var(--fs)) calc(16px*var(--fs)) calc(16px*var(--fs))}
-#settings .panel{background:var(--bg2);border:1px solid var(--border);width:min(calc(440px*var(--fs)),100%);box-shadow:0 14px 48px rgba(0,0,0,.65)}
+#settings .panel{background:var(--bg2);border:1px solid var(--border);width:min(calc(520px*var(--fs)),100%);box-shadow:0 14px 48px rgba(0,0,0,.65)}
+#settings .settabs{padding:calc(8px*var(--fs)) calc(14px*var(--fs));border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+#settings .settabs::-webkit-scrollbar{display:none}
+#settings .settabs .seg{width:max-content}
+#settings .settabs .segbtn{padding:calc(5px*var(--fs)) calc(11px*var(--fs));white-space:nowrap}
+#settings .setbody{min-height:calc(200px*var(--fs))}
+#settings .setbody h3{display:none}
+#settings .setbody section{border-bottom:0}
+@media (max-width:600px){
+  #settings .settabs .seg{width:auto;display:grid;grid-template-columns:repeat(3,1fr)}
+  #settings .settabs .segbtn:nth-child(3n){border-right:0}
+  #settings .settabs .segbtn:nth-child(-n+3){border-bottom:1px solid var(--border)}
+}
 #settings .phead{display:flex;align-items:center;justify-content:space-between;padding:calc(12px*var(--fs)) calc(14px*var(--fs));border-bottom:1px solid var(--border)}
 #settings .phead b{font:400 calc(20px*var(--fs)) var(--serif)}
 #settings section{padding:calc(12px*var(--fs)) calc(14px*var(--fs));border-bottom:1px solid var(--border)}
@@ -279,6 +291,8 @@ canvas.ru{height:calc(34px*var(--fs))}
 .prow .pk.none{color:var(--dim)}
 .prow .pk.cap{border-color:var(--pink);color:var(--pink)}
 .pfoot{display:flex;gap:calc(10px*var(--fs));padding:calc(7px*var(--fs)) calc(14px*var(--fs));font-size:calc(10px*var(--fs));color:var(--dim);border-top:1px solid var(--border)}
+.krow{display:flex;align-items:center;gap:calc(12px*var(--fs));margin-bottom:calc(12px*var(--fs))}
+.krow > span{color:var(--gray);font-size:calc(12px*var(--fs))}
 .keys .kgroup{margin-top:calc(8px*var(--fs));font-size:calc(9px*var(--fs));letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
 .keys span em{display:block;font-style:normal;font-size:calc(10px*var(--fs));color:var(--dim)}
 #dlg .dpanel:has(.keys){width:min(calc(560px*var(--fs)),100%);max-height:calc(100vh - 40px);overflow:auto}
