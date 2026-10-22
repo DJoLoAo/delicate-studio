@@ -65,6 +65,7 @@ ed.worker.onmessage = e => {
   if (m.t === "lprog") { ldProg(m); return; }
   if (m.t === "mprog") { mdProg(m); return; }
   if (m.t === "tprog") { trProg(m); return; }
+  if (m.t === "pprog") { pxProg(m); return; }
   if (m.t === "aprog") { nrAutoProg(m); return; }
   if (m.t === "spectile") { spTile(m); return; }
   if (m.t === "specerr") { spErr(m); return; }
@@ -351,7 +352,7 @@ async function pumpRaw() {
 
 function drawWave() {
   const cv = $("wv"), dpr = canvasFit(cv), g = cv.getContext("2d");
-  const key = [THS.rev, cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.chans.join(), ed.raw ? ed.raw.id + ed.raw.ver + ":" + ed.raw.start + ":" + ed.raw.count : "", ed.doc.id, ed.ver].join("|");
+  const key = [THS.rev, cv.width, cv.height, ed.view.start, ed.view.spp, ed.sel.a, ed.sel.b, ed.cursor, ed.scale, ed.colour, ed.chans.join(), ed.raw ? ed.raw.id + ed.raw.ver + ":" + ed.raw.start + ":" + ed.raw.count : "", ed.doc.id, ed.ver, pxKey()].join("|");
   if (!ed.waveBuf) ed.waveBuf = document.createElement("canvas");
   if (key !== ed.waveKey) {
     ed.waveBuf.width = cv.width;
@@ -361,6 +362,7 @@ function drawWave() {
   }
   g.drawImage(ed.waveBuf, 0, 0);
   drawDiag(g, cv.width, cv.height, dpr);
+  drawFade(g, cv.width, cv.height, dpr);
   if (ed.play.on) {
     const px = Math.round(xOf(playhead()) * dpr);
     if (px >= 0 && px <= cv.width) { g.fillStyle = TH.ink; g.fillRect(px, 0, Math.max(1, dpr), cv.height); }
@@ -369,7 +371,7 @@ function drawWave() {
 
 function drawWaveBase(g, W, H, dpr) {
   const doc = ed.doc, ch = doc.channels;
-  const laneH = H / ch, sppD = ed.view.spp / dpr, start = ed.view.start;
+  const laneH = H / ch, sppD = ed.view.spp / dpr, start = ed.view.start, fz = px.fade ? pxGain : null;
   g.fillStyle = TH.canvas;
   g.fillRect(0, 0, W, H);
   const selOn = ed.sel.b > ed.sel.a;
@@ -396,14 +398,14 @@ function drawWaveBase(g, W, H, dpr) {
       g.lineWidth = Math.max(1, dpr * 1.2);
       g.beginPath();
       for (let i = i0; i <= i1; i++) {
-        const x = (i - start) / sppD, y = mid - amp(d[base + i - raw.start]) * A;
+        const v = d[base + i - raw.start], x = (i - start) / sppD, y = mid - amp(fz ? v * fz(i) : v) * A;
         if (i === i0) g.moveTo(x, y); else g.lineTo(x, y);
       }
       g.stroke();
       if (1 / sppD >= 6) {
         g.fillStyle = g.strokeStyle;
         for (let i = i0; i <= i1; i++) {
-          const x = (i - start) / sppD, y = mid - amp(d[base + i - raw.start]) * A;
+          const v = d[base + i - raw.start], x = (i - start) / sppD, y = mid - amp(fz ? v * fz(i) : v) * A;
           g.fillRect(x - 1.5 * dpr, y - 1.5 * dpr, 3 * dpr, 3 * dpr);
         }
       }
@@ -425,6 +427,7 @@ function drawWaveBase(g, W, H, dpr) {
         if (!colPeak(c, s0, s1, ac) || ac.mx === -Infinity) continue;
         mn = ac.mn; mx = ac.mx;
       }
+      if (fz) { const k = fz(s0 + sppD / 2); mn *= k; mx *= k; }
       const col = colourOf(ac.l, ac.m, ac.h);
       let y0 = mid - amp(mx) * A, y1 = mid - amp(mn) * A;
       if (y1 - y0 < 1) { const ym = (y0 + y1) / 2; y0 = ym - 0.5; y1 = ym + 0.5; }
@@ -469,7 +472,7 @@ function drawAmpLabels(g, W, laneH, ch, dpr) {
     if (ch > 1) {
       g.textAlign = "left";
       g.fillStyle = ed.chans[c] ? TH.text : TH.faint;
-      g.fillText(chanName(c, ch), 6 * dpr, top + 9 * k);
+      g.fillText(chanName(c, ch), (c ? 6 : pxLabelX()) * dpr, top + 9 * k);
       g.textAlign = "right";
     }
   }
@@ -1149,7 +1152,7 @@ function setSelFrom(sel) {
 
 function editError(e) {
   const m = e && e.message || String(e);
-  if (m === "stale" || m === "nothing" || m === "cancelled") return;
+  if (m === "stale" || m === "nothing" || m === "cancelled" || pxErr(m)) return;
   if (m === "hum-short") { tell(t("Select at least a second of audio to look for hum."), t("DeHummer")); return; }
   if (m === "print-none" || m.startsWith("print-rate:") || m.startsWith("print-short:") || m === "changed" || m === "auto-none") { tell(nrErrText(m), t("Noise Reduction")); return; }
   if (m === "nosel") { tell(t("Select a range first.")); return; }
@@ -1237,10 +1240,11 @@ function histLabel(h) {
     if (k.what === "move") return t("Move location") + " " + k.n + " → " + fmtTime(h.a) + nm;
     return t("Change location") + " " + k.n + nm;
   }
-  const name = t(EDIT_LABELS[h.op] || h.op);
+  const name = t(EDIT_LABELS[h.op] || PX_NAMES[h.op] || h.op);
   if (h.op === "open") return name;
   const ch = h.ch ? " · " + h.ch : "";
   if (h.op === "insert") return name + " " + fmtTime(h.n) + " @ " + fmtTime(h.a) + ch;
+  if (h.op === "dc") return name + " " + pxPct(h.n / 1e6) + " · " + fmtTime(h.a) + "–" + fmtTime(h.b) + ch;
   if (h.op === "loud" || h.op === "norm" || h.op === "amp") return name + " " + (h.n > 0 ? "+" : h.n < 0 ? "−" : "") + Math.abs(h.n).toFixed(1) + " dB · " + fmtTime(h.a) + "–" + fmtTime(h.b) + ch;
   if (h.op === "repair") return (h.n === 1 ? t("Repair 1 click") : t("Repair {n} clicks").replace("{n}", h.n)) + " · " + fmtTime(h.a) + "–" + fmtTime(h.b);
   if (h.op === "declip") return (h.n === 1 ? t("Repair 1 clipped span") : t("Repair {n} clipped spans").replace("{n}", h.n)) + " · " + fmtTime(h.a) + "–" + fmtTime(h.b);
@@ -1458,6 +1462,7 @@ function wireWave(cv) {
   const cancelPress = () => { if (press) { clearTimeout(press.timer); press = null; } };
   cv.addEventListener("pointerdown", e => {
     if (!ed.doc || e.button > 0 || (IS_MAC && e.ctrlKey) || (spec && SPV.tool !== "time")) return;
+    if (!spec && pxDown(e, cv, local(e))) return;
     e.preventDefault();
     cv.setPointerCapture(e.pointerId);
     const p = local(e);
@@ -1493,9 +1498,15 @@ function wireWave(cv) {
   cv.addEventListener("pointermove", e => {
     if (!ed.doc) return;
     const p = local(e);
+    if (px.drag) { pxMove(e, p); return; }
     if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) cancelPress();
     if (!ed.dragging) {
       if (spec && SPV.tool !== "time") return;
+      if (!spec) {
+        const h = pxHit(p);
+        if (h !== px.hover) { px.hover = h; redraw(); }
+        if (h) { cv.style.cursor = "ew-resize"; return; }
+      }
       const selOn = ed.sel.b > ed.sel.a;
       cv.style.cursor = selOn && (Math.abs(xOf(ed.sel.a) - p.x) < 6 || Math.abs(xOf(ed.sel.b) - p.x) < 6) ? "ew-resize" : "text";
       return;
@@ -1507,6 +1518,7 @@ function wireWave(cv) {
   });
   const end = e => {
     cancelPress();
+    if (px.drag) { if (e.type === "pointercancel") pxCancel(); else pxUp(); return; }
     if (!ed.dragging) return;
     clearInterval(autoTimer);
     const dg = ed.dragging;
@@ -1524,9 +1536,11 @@ function wireWave(cv) {
   };
   cv.addEventListener("pointerup", end);
   cv.addEventListener("pointercancel", end);
+  if (!spec) cv.addEventListener("pointerleave", () => { if (px.hover) { px.hover = null; redraw(); } });
   cv.addEventListener("contextmenu", e => {
     e.preventDefault();
     if (!ed.doc || !$("ctx").classList.contains("hidden")) return;
+    pxCancel();
     if (ed.dragging) { clearInterval(autoTimer); ed.dragging = null; }
     waveMenuAt(e.clientX, e.clientY, false, undefined, spec);
   });
@@ -1755,6 +1769,7 @@ function wireUi() {
   wireLoud();
   wireMidi();
   wireTracks();
+  wirePx();
   wireRec();
   wireTour();
   wireDrop();

@@ -98,6 +98,17 @@ const CMDS = [
   { id: "ldLoud", g: "Edit", label: "Match loudness…", run: () => ldOpen("loud"), doc: true, kw: "lufs loudness target limiter louder master streaming ebu r128" },
   { id: "ldNorm", g: "Edit", label: "Normalize…", run: () => ldOpen("norm"), doc: true, kw: "normalise peak level maximize" },
   { id: "ldAmp", g: "Edit", label: "Amplify…", run: () => ldOpen("amp"), doc: true, kw: "gain volume louder quieter level" },
+  { id: "fadeIn", g: "Process", label: "Fade in…", run: () => pxFadeDlg("in"), doc: true, when: () => selOn(), kw: "fade in ramp curve envelope volume rise" },
+  { id: "fadeOut", g: "Process", label: "Fade out…", run: () => pxFadeDlg("out"), doc: true, when: () => selOn(), kw: "fade out ramp curve envelope volume fall" },
+  { id: "dcOff", g: "Process", label: "Remove DC offset", run: () => pxRun("dc"), doc: true, kw: "dc offset bias centre center zero line" },
+  { id: "reverse", g: "Process", label: "Reverse", run: () => pxRun("reverse"), doc: true, kw: "backwards backward reversed play back" },
+  { id: "invert", g: "Process", label: "Invert", run: () => pxRun("invert"), doc: true, kw: "polarity phase flip upside down inverse" },
+  { id: "swap", g: "Process", label: "Swap channels", run: () => pxRun("swap"), doc: true, when: () => ed.doc.channels === 2, kw: "swap left right channels stereo flip exchange" },
+  { id: "lToR", g: "Process", label: "Copy left channel to right", run: () => pxRun("lr"), doc: true, when: () => ed.doc.channels === 2, kw: "both left mono duplicate channel dual" },
+  { id: "rToL", g: "Process", label: "Copy right channel to left", run: () => pxRun("rl"), doc: true, when: () => ed.doc.channels === 2, kw: "both right mono duplicate channel dual" },
+  { id: "mono", g: "Process", label: "Mix to mono", run: () => pxRun("mono"), doc: true, when: () => ed.doc.channels === 2, kw: "mono sum downmix average both channels fold down" },
+  { id: "msEnc", g: "Process", label: "Mid/Side encode (L/R to M/S)", run: () => pxRun("msenc"), doc: true, when: () => ed.doc.channels === 2, kw: "mid side ms stereo width sum difference" },
+  { id: "msDec", g: "Process", label: "Mid/Side decode (M/S to L/R)", run: () => pxRun("msdec"), doc: true, when: () => ed.doc.channels === 2, kw: "mid side ms stereo width sum difference" },
   { id: "repair", g: "Repair", label: "Repair panel", run: () => toggleRepair(), doc: true, kw: "restore restoration diagnostics noise hum clicks clipping vinyl" },
   { id: "diag", g: "Repair", label: "Diagnostics: DeClicker…", run: () => toggleDiag("click"), doc: true, kw: "declick decrackle click pop crackle vinyl scan repair restore" },
   { id: "declip", g: "Repair", label: "Diagnostics: DeClipper…", run: () => toggleDiag("clip"), doc: true, kw: "declip clipping clipped distortion overload peaks restore repair" },
@@ -117,6 +128,8 @@ const CMDS = [
   { id: "recPanel", g: "File", label: "Record…", run: () => recToggle(), kw: "record recording input microphone vinyl rip turntable guitar capture" },
   { id: "rec", g: "Transport", label: "Record / stop recording", run: () => recGo(), kw: "record recording start stop capture" },
   { id: "export", g: "File", label: "Export…", run: () => openExport(), doc: true, kw: "render bounce save wav flac master dither" },
+  { id: "newMono", g: "File", label: "New mono file from this one…", run: () => pxMonoDlg(), doc: true, when: () => ed.doc.channels > 1, kw: "convert mono downmix channels new file save as" },
+  { id: "newStereo", g: "File", label: "New stereo file from this one", run: () => pxNewFile("stereo"), doc: true, when: () => ed.doc.channels === 1, kw: "convert stereo channels new file dual mono save as" },
   { id: "files", g: "File", label: "Files", run: () => openFiles(), kw: "library locker studio" },
   { id: "close", g: "File", label: "Close file", run: () => closeDoc(), doc: true },
   { id: "settings", g: "File", label: "Settings", run: () => openSettings() },
@@ -126,7 +139,7 @@ const CMDS = [
 ];
 for (let i = 1; i <= 10; i++) CMDS.push({ id: "loc" + i, g: "Locations", label: "Go to location " + i, labelT: () => t("Go to location") + " " + i, run: () => recallNumber(i), doc: true, hidden: true });
 const CMD = Object.fromEntries(CMDS.map(c => [c.id, c]));
-const GROUPS = ["Transport", "View", "Selection", "Edit", "Repair", "Locations", "File", "Help"];
+const GROUPS = ["Transport", "View", "Selection", "Edit", "Process", "Repair", "Locations", "File", "Help"];
 
 const BASE_KEYS = {
   play: ["Space"], loop: ["L"], home: ["Home"], end: ["End"], prevMark: ["["], nextMark: ["]"],
@@ -537,13 +550,15 @@ function ctxClose() {
   el.classList.add("hidden");
 }
 
-const ctxState = { fresh: true, pid: null };
+const ctxState = { fresh: true, pid: null, at: null, back: null };
 
-function ctxOpen(x, y, items, touch, pid) {
+function ctxOpen(x, y, items, touch, pid, back, first) {
   closePopovers();
   const el = $("ctx");
   ctxState.fresh = !touch;
   ctxState.pid = touch && pid !== undefined ? pid : null;
+  ctxState.at = { x, y, touch, items };
+  ctxState.back = back || null;
   el.innerHTML = "";
   let lastSep = true;
   for (const it of items) {
@@ -554,12 +569,16 @@ function ctxOpen(x, y, items, touch, pid) {
     b.disabled = !it.enabled;
     b.innerHTML = `<span class="cl"></span><span class="ck"></span>`;
     b.querySelector(".cl").textContent = it.label;
-    b.querySelector(".ck").textContent = it.key || "";
+    b.querySelector(".ck").textContent = it.sub ? "›" : it.key || "";
     if (it.id) b.dataset.cmd = it.id;
+    if (it.sub) { b.classList.add("csub"); b.dataset.sub = it.subId || ""; }
+    b._it = it;
     b.addEventListener("click", ev => {
       ev.stopPropagation();
       const fromOpener = ev.pointerId !== undefined && ev.pointerId >= 0 ? ev.pointerId === ctxState.pid : !ctxState.fresh && ev.detail !== 0;
       if (fromOpener) return;
+      if (it.sub) { ctxSub(it, false); return; }
+      if (it.stay) { it.run(); return; }
       ctxClose();
       it.run();
     });
@@ -576,6 +595,15 @@ function ctxOpen(x, y, items, touch, pid) {
   el.style.top = (below + r.height + 4 <= H ? below : above >= 4 ? above : Math.max(4, H - r.height - 4)) + "px";
   el.tabIndex = -1;
   el.focus({ preventScroll: true });
+  if (first) { const f = el.querySelector(".citem:not(:disabled)"); if (f) f.focus({ preventScroll: true }); }
+}
+
+function ctxSub(it, first) {
+  const at = ctxState.at;
+  if (!at) return;
+  const up = () => ctxOpen(at.x, at.y, at.items, at.touch, undefined, null, first);
+  const items = [{ label: "‹ " + t("Back"), enabled: true, stay: true, run: up }, "-"].concat(it.sub);
+  ctxOpen(at.x, at.y, items, at.touch, undefined, up, first);
 }
 
 function ctxKey(e) {
@@ -590,6 +618,8 @@ function ctxKey(e) {
     items[e.key === "ArrowDown" ? (i + 1) % n : i < 0 ? n - 1 : (i - 1 + n) % n].focus({ preventScroll: true });
     return;
   }
+  if (e.key === "ArrowRight" && i >= 0 && items[i]._it && items[i]._it.sub) { e.preventDefault(); ctxSub(items[i]._it, true); return; }
+  if (e.key === "ArrowLeft" && ctxState.back) { e.preventDefault(); ctxState.back(); return; }
   if (e.key === "Home" || e.key === "End") { e.preventDefault(); if (items.length) items[e.key === "Home" ? 0 : items.length - 1].focus({ preventScroll: true }); return; }
   if (e.key === "Enter" || e.key === " ") return;
   e.preventDefault();
@@ -619,6 +649,7 @@ function waveMenuAt(clientX, clientY, touch, pid, spec) {
     "-",
     ctxCmd("cut"), ctxCmd("copy"), ctxCmd("paste", selOn() ? t("Paste — replaces the selection") : t("Paste")),
     ctxCmd("delete"), ctxCmd("silence"), ctxCmd("crop"), ctxCmd("insert"), ctxCmd("heal"), ctxCmd("nrCap"), ctxCmd("midi"), ctxCmd("tracks"),
+    { label: t("Process"), enabled: true, subId: "process", sub: pxMenu(stereo) },
     "-",
     ctxCmd("selAll"), ctxCmd("deselect"), ctxCmd("zoomSel"), ctxCmd("zcIn"), ctxCmd("zcOut")
   ];
@@ -634,6 +665,13 @@ function waveMenuAt(clientX, clientY, touch, pid, spec) {
       { label: t("Delete location") + " " + m.n, enabled: true, run: () => markEdit("markdel", m.id) });
   }
   ctxOpen(clientX, clientY, items, touch, pid);
+}
+
+function pxMenu(stereo) {
+  const out = [ctxCmd("fadeIn"), ctxCmd("fadeOut"), "-", ctxCmd("dcOff"), ctxCmd("reverse"), ctxCmd("invert")];
+  if (stereo && ed.doc.channels === 2) out.push("-", ctxCmd("swap"), ctxCmd("lToR"), ctxCmd("rToL"), ctxCmd("mono"), ctxCmd("msEnc"), ctxCmd("msDec"));
+  out.push("-", ed.doc.channels > 1 ? ctxCmd("newMono") : ctxCmd("newStereo"));
+  return out;
 }
 
 function wireCtx() {

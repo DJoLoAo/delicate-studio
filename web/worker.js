@@ -771,12 +771,95 @@ async function closeCur() {
   FX.pv = null;
   NR.auto = null;
   if (MDJ.job) MDJ.job.cancel = true;
+  if (PX.job) PX.job.cancel = true;
   MDL.mode = "off";
   MDL.notes = [];
   if (c.saving) { try { await c.saving; } catch {} }
   if (clip && !clip.file && clip.doc === c.meta.id) { try { await materializeClip(); } catch { clip = null; } }
   if (c.busy > 0) lingering.set(c.meta.id, c); else closeHandles(c);
   cur = null;
+}
+
+function sinkNew(pool, ch, sr) {
+  return { pool, ch, block: new Float32Array(BLOCK * ch), fill: 0, slot: 0, total: 0, peaks: [], bands: [], lp: biquad("lp", 200, sr), hp: biquad("hp", 2500, sr), bl: 0, bm: 0, bh: 0, bn: 0, band: new Float32Array(BPB * 3), bandK: 0 };
+}
+
+function sinkBand(S) {
+  const k = S.bandK % BPB;
+  S.band[k * 3] = Math.sqrt(S.bl / S.bn);
+  S.band[k * 3 + 1] = Math.sqrt(S.bm / S.bn);
+  S.band[k * 3 + 2] = Math.sqrt(S.bh / S.bn);
+  S.bl = S.bm = S.bh = 0;
+  S.bn = 0;
+  S.bandK++;
+  if (S.bandK % BPB === 0) { S.bands.push(S.band); S.band = new Float32Array(BPB * 3); }
+}
+
+function sinkSlot(S) {
+  const ch = S.ch, block = S.block, fill = S.fill;
+  putAt(S.pool, new Uint8Array(block.buffer), S.slot * BLOCK * ch * 4);
+  const pk = new Float32Array(ch * BPB * 2);
+  for (let c = 0; c < ch; c++) {
+    const base = c * BLOCK;
+    for (let k = 0; k < BPB; k++) {
+      const s0 = k * BUCKET, s1 = Math.min(s0 + BUCKET, fill);
+      let mn = 0, mx = 0;
+      if (s1 > s0) {
+        mn = Infinity; mx = -Infinity;
+        for (let i = base + s0; i < base + s1; i++) { const v = block[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+      }
+      pk[(c * BPB + k) * 2] = mn;
+      pk[(c * BPB + k) * 2 + 1] = mx;
+    }
+  }
+  S.peaks.push(pk);
+  S.slot++;
+  S.fill = 0;
+  block.fill(0);
+}
+
+function sinkPush(S, src, n) {
+  const ch = S.ch, lp = S.lp, hp = S.hp;
+  const lb0 = lp.b0, lb1 = lp.b1, lb2 = lp.b2, la1 = lp.a1, la2 = lp.a2;
+  const hb0 = hp.b0, hb1 = hp.b1, hb2 = hp.b2, ha1 = hp.a1, ha2 = hp.a2;
+  let lx1 = lp.x1, lx2 = lp.x2, ly1 = lp.y1, ly2 = lp.y2, hx1 = hp.x1, hx2 = hp.x2, hy1 = hp.y1, hy2 = hp.y2;
+  let bl = S.bl, bm = S.bm, bh = S.bh, bn = S.bn;
+  const inv = 1 / ch;
+  for (let i = 0; i < n; i++) {
+    let m = src[i];
+    for (let c = 1; c < ch; c++) m += src[c * n + i];
+    m *= inv;
+    const l = lb0 * m + lb1 * lx1 + lb2 * lx2 - la1 * ly1 - la2 * ly2;
+    lx2 = lx1; lx1 = m; ly2 = ly1; ly1 = l;
+    const h = hb0 * m + hb1 * hx1 + hb2 * hx2 - ha1 * hy1 - ha2 * hy2;
+    hx2 = hx1; hx1 = m; hy2 = hy1; hy1 = h;
+    const md = m - l - h;
+    bl += l * l; bm += md * md; bh += h * h;
+    if (++bn === BUCKET) { S.bl = bl; S.bm = bm; S.bh = bh; S.bn = bn; sinkBand(S); bl = bm = bh = 0; bn = 0; }
+  }
+  lp.x1 = lx1; lp.x2 = lx2; lp.y1 = ly1; lp.y2 = ly2; hp.x1 = hx1; hp.x2 = hx2; hp.y1 = hy1; hp.y2 = hy2;
+  S.bl = bl; S.bm = bm; S.bh = bh; S.bn = bn;
+  let done = 0;
+  while (done < n) {
+    const run = Math.min(n - done, BLOCK - S.fill);
+    for (let c = 0; c < ch; c++) S.block.set(src.subarray(c * n + done, c * n + done + run), c * BLOCK + S.fill);
+    S.fill += run;
+    done += run;
+    if (S.fill === BLOCK) sinkSlot(S);
+  }
+  S.total += n;
+}
+
+function sinkEnd(S) {
+  if (S.bn > 0) sinkBand(S);
+  if (S.fill > 0) sinkSlot(S);
+  if (S.bandK % BPB !== 0) S.bands.push(S.band);
+  const ch = S.ch, slots = S.slot;
+  const slotPeaks = new Float32Array(slots * ch * BPB * 2);
+  S.peaks.forEach((p, i) => slotPeaks.set(p, i * ch * BPB * 2));
+  const bands = new Float32Array(slots * BPB * 3);
+  S.bands.forEach((b, i) => { if (i < slots) bands.set(b, i * BPB * 3); });
+  return { slots, slotPeaks, bands };
 }
 
 async function importFile(req, file, opts) {
@@ -821,75 +904,14 @@ async function importFile(req, file, opts) {
     if (x.dec_open(ep, eb.length) !== 0) throw new Error(err());
     const sr = x.dec_sample_rate(), ch = x.dec_channels(), bits = x.dec_bits(), declared = x.dec_frames();
     if (!sr || !ch) throw new Error("unsupported file");
-    const block = new Float32Array(BLOCK * ch);
-    const slotBytes = BLOCK * ch * 4;
-    const peakChunks = [], bandChunks = [];
-    let fill = 0, slot = 0, total = 0;
-    const lp = biquad("lp", 200, sr), hp = biquad("hp", 2500, sr);
-    let bl = 0, bm = 0, bh = 0, bn = 0;
-    let bandSlot = new Float32Array(BPB * 3), bandK = 0;
-    const pushBand = () => {
-      const k = bandK % BPB;
-      bandSlot[k * 3] = Math.sqrt(bl / bn);
-      bandSlot[k * 3 + 1] = Math.sqrt(bm / bn);
-      bandSlot[k * 3 + 2] = Math.sqrt(bh / bn);
-      bl = bm = bh = 0; bn = 0;
-      bandK++;
-      if (bandK % BPB === 0) { bandChunks.push(bandSlot); bandSlot = new Float32Array(BPB * 3); }
-    };
-    const flushSlot = () => {
-      putAt(pool, new Uint8Array(block.buffer), slot * slotBytes);
-      const pk = new Float32Array(ch * BPB * 2);
-      for (let c = 0; c < ch; c++) {
-        const base = c * BLOCK;
-        for (let k = 0; k < BPB; k++) {
-          const s0 = k * BUCKET, s1 = Math.min(s0 + BUCKET, fill);
-          let mn = 0, mx = 0;
-          if (s1 > s0) {
-            mn = Infinity; mx = -Infinity;
-            for (let i = base + s0; i < base + s1; i++) { const v = block[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
-          }
-          pk[(c * BPB + k) * 2] = mn;
-          pk[(c * BPB + k) * 2 + 1] = mx;
-        }
-      }
-      peakChunks.push(pk);
-      slot++;
-      fill = 0;
-      block.fill(0);
-    };
+    const S = sinkNew(pool, ch, sr);
     let lastPost = 0, lastYield = performance.now();
     for (;;) {
       const n = x.dec_next();
       if (n < 0) throw new Error(err());
       if (n === 0) break;
-      const src = new Float32Array(mem.buffer, x.dec_buf(), n * ch);
-      const lb0 = lp.b0, lb1 = lp.b1, lb2 = lp.b2, la1 = lp.a1, la2 = lp.a2;
-      const hb0 = hp.b0, hb1 = hp.b1, hb2 = hp.b2, ha1 = hp.a1, ha2 = hp.a2;
-      let lx1 = lp.x1, lx2 = lp.x2, ly1 = lp.y1, ly2 = lp.y2, hx1 = hp.x1, hx2 = hp.x2, hy1 = hp.y1, hy2 = hp.y2;
-      const inv = 1 / ch, r = n;
-      for (let i = 0; i < n; i++) {
-        let m = src[i];
-        for (let c = 1; c < ch; c++) m += src[c * r + i];
-        m *= inv;
-        const l = lb0 * m + lb1 * lx1 + lb2 * lx2 - la1 * ly1 - la2 * ly2;
-        lx2 = lx1; lx1 = m; ly2 = ly1; ly1 = l;
-        const h = hb0 * m + hb1 * hx1 + hb2 * hx2 - ha1 * hy1 - ha2 * hy2;
-        hx2 = hx1; hx1 = m; hy2 = hy1; hy1 = h;
-        const md = m - l - h;
-        bl += l * l; bm += md * md; bh += h * h;
-        if (++bn === BUCKET) pushBand();
-      }
-      lp.x1 = lx1; lp.x2 = lx2; lp.y1 = ly1; lp.y2 = ly2; hp.x1 = hx1; hp.x2 = hx2; hp.y1 = hy1; hp.y2 = hy2;
-      let done = 0;
-      while (done < n) {
-        const run = Math.min(n - done, BLOCK - fill);
-        for (let c = 0; c < ch; c++) block.set(src.subarray(c * n + done, c * n + done + run), c * BLOCK + fill);
-        fill += run; done += run;
-        if (fill === BLOCK) flushSlot();
-      }
-      total += n;
-      const now = performance.now();
+      sinkPush(S, new Float32Array(mem.buffer, x.dec_buf(), n * ch), n);
+      const total = S.total, now = performance.now();
       if (now - lastPost > 150) {
         lastPost = now;
         postMessage({ t: "progress", req, name: displayName, phase: "decode", frac: declared > 0 ? Math.min(1, total / declared) : Math.min(1, bytesSeen / file.size) });
@@ -901,18 +923,12 @@ async function importFile(req, file, opts) {
       }
     }
     x.dec_close();
+    const total = S.total;
     if (total === 0) throw new Error("no audio in file");
-    if (bn > 0) pushBand();
-    if (fill > 0) flushSlot();
-    if (bandK % BPB !== 0) bandChunks.push(bandSlot);
+    const { slots, slotPeaks, bands } = sinkEnd(S);
     pool.flush();
     pool.close();
     pool = null;
-    const slots = slot;
-    const slotPeaks = new Float32Array(slots * ch * BPB * 2);
-    peakChunks.forEach((p, i) => slotPeaks.set(p, i * ch * BPB * 2));
-    const bands = new Float32Array(slots * BPB * 3);
-    bandChunks.forEach((b, i) => { if (i < slots) bands.set(b, i * BPB * 3); });
     await writeFile(docDir, "peaks.f32", slotPeaks);
     await writeFile(docDir, "bands.f32", bands);
     const source = opts.source || { kind: "local", lastModified: file.lastModified || 0 };
@@ -968,7 +984,8 @@ async function openDoc(id, have) {
     }
   } else {
     const rm = Array.isArray(meta.marks) ? meta.marks.filter(a => Number.isFinite(a) && a >= 0 && a <= meta.frames).slice(0, 999) : [];
-    cur.hist = [{ op: "open", a: 0, b: 0, n: 0, ch: null, t: meta.created || Date.now(), lists: origLists(meta), marks: rm.map((a, i) => ({ id: i + 1, n: i + 1, kind: "point", a: Math.round(a), name: "", view: null, chans: null })), d: null, full: false, before: null, after: null }];
+    const locs = Array.isArray(meta.locs) && validMarks(meta.locs, meta.frames) ? meta.locs : null;
+    cur.hist = [{ op: "open", a: 0, b: 0, n: 0, ch: null, t: meta.created || Date.now(), lists: origLists(meta), marks: locs || rm.map((a, i) => ({ id: i + 1, n: i + 1, kind: "point", a: Math.round(a), name: "", view: null, chans: null })), d: null, full: false, before: null, after: null }];
   }
   setLists(cur.hist[cur.idx].lists);
   cur.io = makeIo();
@@ -2517,6 +2534,189 @@ async function fxApply(m) {
   });
 }
 
+const PX = { job: null };
+const PX_DATA = ["fadein", "fadeout", "dc", "reverse", "invert", "mono", "msenc", "msdec"];
+const PX_REF = { swap: k => 1 - k, lr: () => 0, rl: () => 1 };
+const PX_DC_MIN = 1e-6;
+
+function pxCurve(raw) {
+  const o = raw && typeof raw === "object" ? raw : {};
+  const k = Number(o.k);
+  return { shape: o.shape === "cos" ? "cos" : "lin", k: Number.isFinite(k) ? Math.max(-1, Math.min(1, k)) : 0 };
+}
+
+function pxJob(m, c) {
+  if (PX.job) PX.job.cancel = true;
+  const job = { id: m.jobId, cancel: false, last: 0 };
+  PX.job = job;
+  job.tick = async frac => {
+    const now = performance.now();
+    if (now - job.last > 100) { job.last = now; postMessage({ t: "pprog", id: job.id, frac }); await new Promise(r => setTimeout(r, 0)); }
+    if (job.cancel || cur !== c) throw new Error("cancelled");
+  };
+  job.done = () => { if (PX.job === job) PX.job = null; };
+  return job;
+}
+
+async function pxApply(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const op = m.op, ref = PX_REF[op] || null;
+  if (!ref && !PX_DATA.includes(op)) throw new Error("unknown edit");
+  const ch = c.meta.channels, sr = c.meta.sampleRate, F = c.len;
+  const two = !!ref || op === "mono" || op === "msenc" || op === "msdec", fade = op === "fadein" || op === "fadeout";
+  if (two && ch !== 2) throw new Error("px-stereo");
+  let a, b;
+  if (m.rb > m.ra) { a = clampI(m.ra, 0, F); b = clampI(m.rb, 0, F); }
+  else { a = clampI(m.a, 0, F); b = clampI(m.b, 0, F); if (b < a) [a, b] = [b, a]; }
+  if (b <= a) { if (fade) throw new Error("nosel"); a = 0; b = F; }
+  const chans = Array.isArray(m.chans) && m.chans.length === ch && m.chans.some(Boolean) ? m.chans.map(Boolean) : new Array(ch).fill(true);
+  let outs = op === "lr" ? [1] : op === "rl" ? [0] : two ? [0, 1] : chans.map((v, k) => v ? k : -1).filter(k => k >= 0);
+  if (m.snap && !fade && (a > 0 || b < F)) {
+    const mask = Array.from({ length: ch }, (_, k) => outs.includes(k));
+    const sa = a > 0 ? snapZero(a, mask, 0) : { p: 0, d: 0 }, sb = b < F ? snapZero(b, mask, sa.d) : { p: F, d: 0 };
+    if (sb.p > sa.p) { a = sa.p; b = sb.p; }
+  }
+  const X = fade ? 0 : Math.max(0, Math.round((Number(m.xfade) || 0) * sr / 1000));
+  const xf = Math.min(X, Math.floor((b - a) / 4)), h0 = a > 0 ? xf : 0, h1 = b < F ? xf : 0, i0 = a + h0, i1 = b - h1;
+  const lists = c.lists, cums = c.cum;
+  const rds = (src, cc, f, n, out, off) => readSrcOf(c, src, cc, f, n, out, off);
+  const rd = (k, p, n, out) => readList(lists[k], cums[k], p, n, out, 0, rds);
+  const cv = pxCurve(m.cfg), n1 = Math.max(1, b - a - 1);
+  const CH = Math.min(1 << 20, b - a), buf = new Float32Array(CH), tmp = two ? new Float32Array(CH) : null;
+  const mean = new Float64Array(ch);
+  const make = (k, p, n, o, t) => {
+    if (ref) { rd(ref(k), p, n, o); return; }
+    if (op === "reverse") { rd(k, a + b - p - n, n, o); o.reverse(); return; }
+    if (two) {
+      rd(0, p, n, o);
+      rd(1, p, n, t);
+      const s = op === "mono" || k === 0 ? 1 : -1, g = op === "msdec" ? 1 : 0.5;
+      for (let i = 0; i < n; i++) o[i] = (o[i] + s * t[i]) * g;
+      return;
+    }
+    rd(k, p, n, o);
+    if (fade) { for (let i = 0; i < n; i++) { const x = (p + i - a) / n1; o[i] *= fadeGain(op === "fadein" ? x : 1 - x, cv.shape, cv.k); } }
+    else if (op === "dc") { const d = mean[k]; for (let i = 0; i < n; i++) o[i] -= d; }
+    else for (let i = 0; i < n; i++) o[i] = -o[i];
+  };
+  const job = pxJob(m, c);
+  const snap = { allocs: c.allocs.length, heapEnd: c.heapEnd, pkEnd: c.pkEnd, ver: c.ver };
+  const segs = new Array(ch).fill(null);
+  let dcN = 0;
+  try {
+    let done = 0;
+    const share = op === "mono", work = (op === "dc" ? (b - a) * outs.length : 0) + (ref ? 0 : (i1 - i0) * (share ? 1 : outs.length)) || 1;
+    if (op === "dc") {
+      for (const k of outs) {
+        let s = 0;
+        for (let p = a; p < b; p += CH) {
+          const n = Math.min(CH, b - p), o = buf.subarray(0, n);
+          rd(k, p, n, o);
+          for (let i = 0; i < n; i++) s += o[i];
+          done += n;
+          await job.tick(done / work);
+        }
+        mean[k] = s / (b - a);
+      }
+      outs = outs.filter(k => Math.abs(mean[k]) >= PX_DC_MIN);
+      if (!outs.length) throw new Error("dc-none");
+      for (const k of outs) if (Math.abs(mean[k]) > Math.abs(dcN)) dcN = mean[k];
+      dcN = Math.round(dcN * 1e6);
+    }
+    const edge = (k, p, n, rising) => {
+      const o = new Float32Array(n), org = new Float32Array(n);
+      make(k, p, n, o, new Float32Array(n));
+      rd(k, p, n, org);
+      for (let i = 0; i < n; i++) { const w = rising ? (i + 0.5) / n : (n - i - 0.5) / n; o[i] = org[i] + (o[i] - org[i]) * w; }
+      return [allocData(o), 0, 0, n];
+    };
+    let mid0 = null;
+    for (const k of outs) {
+      let mid = [];
+      if (i1 > i0) {
+        if (ref) mid = sliceList(lists[ref(k)], i0, i1);
+        else if (share && mid0) mid = mid0;
+        else {
+          for (let p = i0; p < i1; p += CH) {
+            const n = Math.min(CH, i1 - p), o = buf.subarray(0, n);
+            make(k, p, n, o, tmp && tmp.subarray(0, n));
+            mid.push([allocData(o), 0, 0, n]);
+            done += n;
+            await job.tick(done / work);
+          }
+          mid0 = mid;
+        }
+      }
+      segs[k] = (h0 ? [edge(k, a, h0, true)] : []).concat(mid, h1 ? [edge(k, b - h1, h1, false)] : []);
+    }
+    if (cur !== c || c.lists !== lists) throw new Error("changed");
+  } catch (e) {
+    job.done();
+    nrRollback(c, snap);
+    throw e;
+  }
+  job.done();
+  return enqueue(() => {
+    if (cur !== c || c.lists !== lists) { nrRollback(c, snap); throw new Error("changed"); }
+    const next = opPatch(c.lists, segs.map(s => s ? [[a, b, s]] : null));
+    const before = { a: clampI(m.a, 0, c.len), b: clampI(m.b, 0, c.len), cursor: clampI(m.cursor, 0, c.len) };
+    pushHist({ op, a, b, n: dcN, ch: two || chans.every(Boolean) ? null : chanLabel(chans) }, next, before, before);
+    persist();
+    return statePayload(m.have, { t: "state", sel: null, dc: op === "dc" ? Array.from(mean, (v, k) => outs.includes(k) ? v : null) : null });
+  });
+}
+
+async function pxNewDoc(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const ch = c.meta.channels, sr = c.meta.sampleRate, F = c.len;
+  const mode = ["mix", "left", "right", "stereo"].includes(m.mode) ? m.mode : "mix";
+  if (mode === "stereo" ? ch !== 1 : ch < 2) throw new Error("px-stereo");
+  const out = mode === "stereo" ? 2 : 1, lists = c.lists, cums = c.cum;
+  const rds = (src, cc, f, n, o, off) => readSrcOf(c, src, cc, f, n, o, off);
+  const rd = (k, p, n, o) => readList(lists[k], cums[k], p, n, o, 0, rds);
+  const job = pxJob(m, c);
+  const dir = await docsDir(), id = crypto.randomUUID(), docDir = await dir.getDirectoryHandle(id, { create: true });
+  let pool = null;
+  try {
+    pool = await (await docDir.getFileHandle("pool.f32", { create: true })).createSyncAccessHandle();
+    const S = sinkNew(pool, out, sr), N = 65536, src = new Float32Array(N * out), t = new Float32Array(N);
+    for (let p = 0; p < F; p += N) {
+      const n = Math.min(N, F - p), o = src.subarray(0, n * out);
+      if (mode === "mix") {
+        o.fill(0);
+        for (let k = 0; k < ch; k++) { rd(k, p, n, t); for (let i = 0; i < n; i++) o[i] += t[i]; }
+        const g = 1 / ch;
+        for (let i = 0; i < n; i++) o[i] *= g;
+      } else if (mode === "stereo") {
+        rd(0, p, n, o);
+        o.copyWithin(n, 0, n);
+      } else rd(mode === "left" ? 0 : 1, p, n, o);
+      sinkPush(S, o, n);
+      await job.tick(Math.min(1, (p + n) / F));
+    }
+    const { slots, slotPeaks, bands } = sinkEnd(S);
+    pool.flush();
+    pool.close();
+    pool = null;
+    await writeFile(docDir, "peaks.f32", slotPeaks);
+    await writeFile(docDir, "bands.f32", bands);
+    const stem = c.meta.name.replace(/\.[^.]+$/, "") || "Untitled";
+    const name = String(m.name || "").trim().slice(0, 160) || stem + " (" + (mode === "mix" ? "mono" : mode) + ")";
+    const locs = c.marks.map(x => Object.assign({}, x, { chans: null }));
+    const meta = { v: 1, id, name, ext: "", size: F * out * 4, sampleRate: sr, channels: out, bits: c.meta.bits, frames: F, blockFrames: BLOCK, slots, created: Date.now(), opened: Date.now(), readOnly: false, source: { kind: "derived", from: c.meta.id }, locs };
+    await writeFile(docDir, "meta.json", enc(meta));
+    job.done();
+    return { t: "made", meta };
+  } catch (e) {
+    job.done();
+    if (pool) { try { pool.close(); } catch {} }
+    try { await dir.removeEntry(id, { recursive: true }); } catch {}
+    throw e;
+  }
+}
+
 async function humFind(m) {
   const c = cur;
   if (!c || c.meta.id !== m.id) throw new Error("stale");
@@ -2983,6 +3183,9 @@ async function handle(m) {
   if (m.t === "trcancel") { if (TRJ.job) TRJ.job.cancel = true; return; }
   if (m.t === "mdlisten") { MDL.mode = ["midi", "both"].includes(m.mode) ? m.mode : "off"; MDL.notes = MDL.mode === "off" ? [] : mdClean(m.notes); ringFlush(); return; }
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
+  if (m.t === "proc") { postMessage(Object.assign({ req: m.req }, await pxApply(m))); return; }
+  if (m.t === "pxnew") { postMessage(Object.assign({ req: m.req }, await pxNewDoc(m))); return; }
+  if (m.t === "pxcancel") { if (PX.job) PX.job.cancel = true; return; }
   if (m.t === "fxcancel") { if (FX.job) FX.job.cancel = true; return; }
   if (m.t === "adjust") { postMessage(Object.assign({ req: m.req }, await enqueue(() => adjustSel(m)))); return; }
   if (m.t === "flush") { await enqueue(async () => { if (cur && cur.saving) await cur.saving; }); postMessage({ t: "flushed", req: m.req, err: cur ? cur.saveErr : null }); return; }

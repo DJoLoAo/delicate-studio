@@ -48,6 +48,12 @@ function fadeMix(a, b, linear) {
   return out;
 }
 
+function fadeGain(x, shape, k) {
+  const u = x <= 0 ? 0 : x >= 1 ? 1 : x, s = -6 * k;
+  const v = Math.abs(s) < 1e-4 ? u : (Math.exp(s * u) - 1) / (Math.exp(s) - 1);
+  return shape === "cos" ? 0.5 - 0.5 * Math.cos(Math.PI * v) : v;
+}
+
 function joinFix(list, j, X, io) {
   const A = list[j - 1], B = list[j];
   if (!A || !B) return;
@@ -238,4 +244,4 @@ function mapMarks(marks, h) {
   return changed ? out : marks;
 }
 
-if (typeof module !== "undefined") module.exports = { SIL, clipLen, mergeList, sliceList, joinFix, opDelete, opInsert, opSilence, opReplace, opOverwrite, opPatch, patchList, opCrop, opCopy, diffList, applyDiff, cumOf, readList, fadeMix, mapMarks };
+if (typeof module !== "undefined") module.exports = { SIL, clipLen, mergeList, sliceList, joinFix, opDelete, opInsert, opSilence, opReplace, opOverwrite, opPatch, patchList, opCrop, opCopy, diffList, applyDiff, cumOf, readList, fadeMix, fadeGain, mapMarks };
