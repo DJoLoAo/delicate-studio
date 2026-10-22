@@ -830,6 +830,7 @@ function srcLabel(src) {
   if (src.kind === "library") return t("Library");
   if (src.kind === "locker") return t("Locker");
   if (src.kind === "session") return t("Session mix");
+  if (src.kind === "dj") return t("DJ recording");
   return "";
 }
 
@@ -1763,7 +1764,7 @@ function wireUi() {
   const snapSeg = () => document.querySelectorAll("#snapSeg button").forEach(b => b.classList.toggle("on", (b.dataset.v === "1") === ed.snap));
   $("snapSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ed.snap = b.dataset.v === "1"; localStorage.setItem("studioSnap", ed.snap ? "1" : "0"); snapSeg(); });
   snapSeg();
-  $("busyCancel").addEventListener("click", () => ed.worker.postMessage({ t: "cancel" }));
+  $("busyCancel").addEventListener("click", () => ed.worker.postMessage({ t: dj.job ? "sescancel" : "cancel" }));
   $("playBtn").addEventListener("click", togglePlay);
   $("stopBtn").addEventListener("click", () => stopPlay());
   $("homeBtn").addEventListener("click", () => { ed.cursor = 0; ensureVisible(0); if (ed.play.on) startPlay(0); redraw(); });

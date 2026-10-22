@@ -1,6 +1,6 @@
 const SS_HEADH = 15, SS_EDGE = 6, SS_SNAP = 8, SS_FBOX = 9, SS_COLORS = ["gold", "blue", "pink", "ggreen"];
 
-const ses = { open: false, s: null, docs: new Map(), view: { start: 0, spp: 256 }, cursor: 0, sel: { a: 0, b: 0 }, clip: null, track: null, hist: [], idx: 0, drag: null, play: { on: false, start: 0, end: 0, loop: false, off: 0, t0: 0 }, loop: false, saveT: 0, mixT: 0, list: [], dirty: false };
+const ses = { open: false, s: null, docs: new Map(), view: { start: 0, spp: 256 }, cursor: 0, sel: { a: 0, b: 0 }, clip: null, track: null, hist: [], idx: 0, drag: null, play: { on: false, start: 0, end: 0, loop: false, off: 0, t0: 0 }, loop: false, saveT: 0, mixT: 0, list: [], dirty: false, mark: null, mdrag: null };
 
 function ssLane() { return Math.round(84 * thFs()); }
 
@@ -138,6 +138,8 @@ async function ssOpen(id) {
   ses.hist = [ssSnap()];
   ses.idx = 0;
   ses.clip = null;
+  ses.mark = null;
+  ses.mdrag = null;
   ses.track = ses.s.tracks[0] ? ses.s.tracks[0].id : null;
   ses.sel = { a: 0, b: 0 };
   ses.cursor = 0;
@@ -271,32 +273,118 @@ function ssRender() {
 }
 
 function ssRuler() {
-  const cv = $("sesRu"), dpr = canvasFit(cv), g = cv.getContext("2d"), k = dpr * thFs(), W = cv.width, H = cv.height;
+  const cv = $("sesRu"), dpr = canvasFit(cv), g = cv.getContext("2d"), k = dpr * thFs(), W = cv.width, H = cv.height, T = H - MARK_LANE * k;
   g.fillStyle = TH.panel;
   g.fillRect(0, 0, W, H);
+  g.fillStyle = TH.canvas;
+  g.fillRect(0, T, W, H - T);
   if (ses.sel.b > ses.sel.a) {
     const a = ssX(ses.sel.a) * dpr, b = ssX(ses.sel.b) * dpr;
     g.fillStyle = tc("gold", 0.22);
-    g.fillRect(a, 0, Math.max(1, b - a), H);
+    g.fillRect(a, 0, Math.max(1, b - a), T);
   }
   const st = tickStepFor(ses.view.spp, ssRate()), a0 = ses.view.start, a1 = a0 + cv.clientWidth * ses.view.spp;
   g.fillStyle = TH.tick;
-  for (let f = Math.ceil(a0 / st.minor) * st.minor; f <= a1; f += st.minor) g.fillRect(Math.round(ssX(f) * dpr), H - 5 * k, Math.max(1, dpr), 5 * k);
+  for (let f = Math.ceil(a0 / st.minor) * st.minor; f <= a1; f += st.minor) g.fillRect(Math.round(ssX(f) * dpr), T - 5 * k, Math.max(1, dpr), 5 * k);
   g.font = thFont(9.5, dpr);
   g.textBaseline = "top";
   g.textAlign = "left";
   for (let f = Math.ceil(a0 / st.major) * st.major; f <= a1; f += st.major) {
     const x = Math.round(ssX(f) * dpr);
     g.fillStyle = TH.label2;
-    g.fillRect(x, H - 10 * k, Math.max(1, dpr), 10 * k);
+    g.fillRect(x, T - 10 * k, Math.max(1, dpr), 10 * k);
     g.fillStyle = TH.muted;
     g.fillText(fmtTime(f, ed.fmt, st.sec), x + 3 * k, 3 * k);
   }
   g.fillStyle = TH.line;
+  g.fillRect(0, T - dpr, W, dpr);
   g.fillRect(0, H - dpr, W, dpr);
+  ssMarkLane(g, W, T, H, dpr);
   const cx = ssX(ses.cursor) * dpr;
   g.fillStyle = TH.gold;
   g.beginPath(); g.moveTo(cx - 5 * k, 0); g.lineTo(cx + 5 * k, 0); g.lineTo(cx, 7 * k); g.fill();
+}
+
+function ssMarks() {
+  const d = ses.mdrag;
+  return ((ses.s && ses.s.marks) || []).map((m, i) => ({ m, n: i + 1, at: d && d.id === m.id ? d.at : m.at }));
+}
+
+function ssMarkText(b) { return b.m.name ? b.n + "  " + b.m.name : String(b.n); }
+
+function ssMarkBoxes(g, dpr) {
+  g.font = thFont(8.5, dpr);
+  const L = ssMarks().map(b => Object.assign(b, { x: ssX(b.at) * dpr })).sort((a, b) => a.x - b.x), pad = 6 * dpr * thFs();
+  return L.map((b, i) => {
+    const nw = g.measureText(String(b.n)).width + pad, room = i + 1 < L.length ? L[i + 1].x - b.x - 2 * dpr : Infinity;
+    return Object.assign(b, { w: Math.max(nw, Math.min(g.measureText(ssMarkText(b)).width + pad, room)) });
+  });
+}
+
+function ssMarkLane(g, W, T, H, dpr) {
+  for (const b of ssMarkBoxes(g, dpr)) {
+    if (b.x > W || b.x + b.w < 0) continue;
+    g.fillStyle = ses.mark === b.m.id ? TH.ink : TH.blue;
+    g.fillRect(Math.round(b.x), T, Math.max(1, dpr), H - T);
+    g.fillRect(Math.round(b.x), T + dpr, b.w, H - T - 2 * dpr);
+    g.save();
+    g.beginPath();
+    g.rect(b.x, T, b.w, H - T);
+    g.clip();
+    g.fillStyle = TH.dark;
+    g.textBaseline = "middle";
+    g.textAlign = "left";
+    g.fillText(ssMarkText(b), b.x + 3 * dpr, T + (H - T) / 2 + 0.5 * dpr);
+    g.restore();
+  }
+}
+
+function ssMarkAt(x, y) {
+  const cv = $("sesRu");
+  if (y < cv.clientHeight - MARK_LANE * thFs() - 2) return null;
+  for (const b of ssMarkBoxes(cv.getContext("2d"), 1).reverse()) if (x >= b.x - 4 && x <= b.x + b.w) return b;
+  return null;
+}
+
+function ssMarkAdd() {
+  if (!ses.open) return;
+  const at = Math.max(0, Math.round(ses.play.on ? ssPlayhead() : ses.cursor));
+  if (!ses.s.marks) ses.s.marks = [];
+  if (ses.s.marks.some(k => k.at === at)) return;
+  const m = { id: ssNewId(), at, name: "" };
+  ses.s.marks.push(m);
+  ses.s.marks.sort((a, b) => a.at - b.at);
+  ses.mark = m.id;
+  ssCommit();
+}
+
+async function ssMarkRename(id) {
+  const i = (ses.s.marks || []).findIndex(k => k.id === id);
+  if (i < 0) return;
+  const v = await askText(t("Rename location") + " " + (i + 1), ses.s.marks[i].name || "");
+  if (v === null || v === undefined || !ses.open) return;
+  const m = (ses.s.marks || []).find(k => k.id === id);
+  if (!m) return;
+  m.name = String(v).trim().slice(0, 160);
+  ssCommit();
+}
+
+function ssMarkDel(id) {
+  if (!ses.open || !(ses.s.marks || []).some(k => k.id === id)) return;
+  ses.s.marks = ses.s.marks.filter(k => k.id !== id);
+  if (ses.mark === id) ses.mark = null;
+  ssCommit();
+}
+
+function ssMarkStep(dir) {
+  if (!ses.open) return;
+  const pos = ses.play.on ? ssPlayhead() : ses.cursor, L = (ses.s.marks || []).map(k => k.at);
+  const to = dir > 0 ? L.find(a => a > pos + 0.5) : L.filter(a => a < pos - ssRate() * (ses.play.on ? 0.5 : 0) - 0.5).pop();
+  if (to === undefined) return;
+  ses.cursor = to;
+  ssEnsure(to);
+  if (ses.play.on) ssPlay(to);
+  ssDraw();
 }
 
 function ssFade(k, q) {
@@ -345,6 +433,8 @@ function ssLanes() {
     g.textBaseline = "middle";
     g.fillText(t("Add files to start: each file becomes a track."), 14 * dpr, L / 2);
   }
+  g.fillStyle = tc("blue", 0.4);
+  for (const b of ssMarks()) { const x = Math.round(ssX(b.at) * dpr); if (x >= 0 && x <= W) g.fillRect(x, 0, Math.max(1, dpr), H); }
   const cx = Math.round(ssX(ses.cursor) * dpr);
   if (cx >= 0 && cx <= W) { g.fillStyle = TH.gold; g.fillRect(cx, 0, Math.max(1, dpr), H); }
   if (ses.play.on) {
@@ -632,6 +722,7 @@ async function ssConvert(id, sr) {
 }
 
 function ssProg(m) {
+  if (djProg(m)) return;
   if (ses.conv && m.id === ses.conv.id) { clearTimeout(ed.flashT); $("stMsg").textContent = t("Converting") + " · " + Math.round(m.frac * 100) + " %"; }
   if (ses.bounce && m.id === ses.bounce.id) { clearTimeout(ed.flashT); $("stMsg").textContent = t("Mixing down") + " · " + Math.round(m.frac * 100) + " %"; }
 }
@@ -787,10 +878,56 @@ function wireSes() {
   cv.addEventListener("dblclick", e => { const r = cv.getBoundingClientRect(), h = ssHit(e.clientX - r.left, e.clientY - r.top); if (h.k) ssClipGain(); });
   const ru = $("sesRu");
   let rd = false;
-  const go = e => { const r = ru.getBoundingClientRect(); ses.cursor = Math.max(0, Math.round(ssF(e.clientX - r.left))); ssDraw(); };
-  ru.addEventListener("pointerdown", e => { if (!ses.open) return; rd = true; ru.setPointerCapture(e.pointerId); go(e); });
-  ru.addEventListener("pointermove", e => { if (rd) go(e); });
-  ru.addEventListener("pointerup", () => { if (rd && ses.play.on) ssPlay(ses.cursor); rd = false; });
+  const at = e => { const r = ru.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const go = e => { ses.cursor = Math.max(0, Math.round(ssF(at(e).x))); ssDraw(); };
+  ru.addEventListener("pointerdown", e => {
+    if (!ses.open || e.button > 0) return;
+    const p = at(e), h = ssMarkAt(p.x, p.y);
+    ru.setPointerCapture(e.pointerId);
+    if (h) { ses.mark = h.m.id; ses.mdrag = { id: h.m.id, x0: p.x, grab: p.x - ssX(h.m.at), at: h.m.at, moved: false }; ssDraw(); return; }
+    rd = true;
+    go(e);
+  });
+  ru.addEventListener("pointermove", e => {
+    if (!ses.open) return;
+    const p = at(e), d = ses.mdrag;
+    if (d) {
+      if (!d.moved && Math.abs(p.x - d.x0) < 3) return;
+      d.moved = true;
+      d.at = Math.max(0, Math.round(ssF(p.x - d.grab)));
+      ssDraw();
+      return;
+    }
+    if (rd) { go(e); return; }
+    const h = ssMarkAt(p.x, p.y);
+    ru.style.cursor = h ? "ew-resize" : "pointer";
+    ru.title = h ? ssMarkText(h) : "";
+  });
+  const up = e => {
+    const d = ses.mdrag;
+    if (d) {
+      ses.mdrag = null;
+      const m = ses.open && (ses.s.marks || []).find(k => k.id === d.id);
+      if (!m || e.type === "pointercancel") { ssDraw(); return; }
+      if (d.moved) { m.at = d.at; ses.s.marks.sort((a, b) => a.at - b.at); ssCommit(); return; }
+      ses.cursor = m.at;
+      if (ses.play.on) ssPlay(ses.cursor);
+      ssDraw();
+      return;
+    }
+    if (rd && ses.play.on) ssPlay(ses.cursor);
+    rd = false;
+  };
+  ru.addEventListener("pointerup", up);
+  ru.addEventListener("pointercancel", up);
+  ru.addEventListener("dblclick", e => { const p = at(e), h = ssMarkAt(p.x, p.y); if (h) ssMarkRename(h.m.id); });
+  ru.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    if (!ses.open) return;
+    const p = at(e), h = ssMarkAt(p.x, p.y);
+    if (!h) return;
+    ctxOpen(e.clientX, e.clientY, [{ label: t("Rename location") + " " + h.n, enabled: true, run: () => ssMarkRename(h.m.id) }, { label: t("Delete location") + " " + h.n, enabled: true, run: () => ssMarkDel(h.m.id) }], false);
+  });
   ru.addEventListener("wheel", ssWheel, { passive: false });
   $("sesTools").addEventListener("click", ev => {
     const b = ev.target.closest("button[data-cmd]");
@@ -809,6 +946,7 @@ function wireSes() {
   $("sesZout").addEventListener("click", () => ssZoomAt(2));
   $("sesZfit").addEventListener("click", ssZoomFit);
   $("sesNew").addEventListener("click", () => ssNewDlg());
+  $("djOpen").addEventListener("click", () => djOpen());
   $("sesMeter").addEventListener("click", () => { ed.meter.clip = []; drawMeters(); });
   window.addEventListener("resize", () => { if (ses.open) { ssClamp(); ssDraw(); } });
 }

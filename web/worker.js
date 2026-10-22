@@ -1256,7 +1256,11 @@ function sesClean(v) {
     clips.sort((a, b) => a.at - b.at);
     tracks.push({ id: str(tr.id, 40) || crypto.randomUUID().slice(0, 12), name: str(tr.name, 80), gain: num(tr.gain, -96, 12, 0), pan: num(tr.pan, -1, 1, 0), mute: !!tr.mute, solo: !!tr.solo, clips });
   }
-  return { v: 1, id: str(s.id, 60) || crypto.randomUUID(), name: str(s.name, 160) || "Session", sr: sr >= 8000 ? sr : 0, created: Number(s.created) || Date.now(), modified: Date.now(), tracks };
+  const marks = [];
+  for (const k of Array.isArray(s.marks) ? s.marks.slice(0, 999) : []) if (k && typeof k === "object") marks.push({ id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), at: int(k.at, 0, 2 ** 40), name: str(k.name, 160) });
+  marks.sort((a, b) => a.at - b.at);
+  const src = s.src && typeof s.src === "object" ? { kind: str(s.src.kind, 20), rec: str(s.src.rec, 80) } : null;
+  return { v: 1, id: str(s.id, 60) || crypto.randomUUID(), name: str(s.name, 160) || "Session", sr: sr >= 8000 ? sr : 0, created: Number(s.created) || Date.now(), modified: Date.now(), tracks, marks, src };
 }
 
 function sesLen(s) {
@@ -1393,7 +1397,7 @@ async function sesPut(m) {
 }
 
 async function sesNew(m) {
-  const s = sesClean({ name: m.name, tracks: [] });
+  const s = sesClean({ name: m.name, sr: m.sr, tracks: m.tracks || [], marks: m.marks || [], src: m.src || null });
   await sesWrite(s);
   return { t: "sesnew", s };
 }
@@ -1488,7 +1492,7 @@ async function sesBounce(m) {
         push(il.subarray(0, n * 2), n);
         await job.tick((p + n - a) / (b - a));
       }
-    }, job, { source: { kind: "session", from: s.id } });
+    }, job, { source: { kind: "session", from: s.id }, locs: djLocs(s.marks.filter(k => k.at >= a && k.at < b).map(k => ({ at: k.at - a, name: k.name })), b - a) });
     return { t: "bounced", meta: r.meta, peak: r.peak };
   } finally { job.done(); }
 }
@@ -1540,6 +1544,221 @@ async function sesConvert(m) {
     job.done();
     if (fresh) closeHandles(c);
   }
+}
+
+const DJ_WIN = 4, DJ_RATE = 4000, DJ_MAXLAG = 1.5, DJ_MINLAG = 0.05, DJ_SCORE = 10, DJ_AGREE = 0.025;
+
+async function djWav(f) {
+  const n = Math.min(f.size, 1 << 18), b = new Uint8Array(await f.slice(0, n).arrayBuffer()), v = new DataView(b.buffer);
+  const id = o => String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]);
+  const txt = (o, l) => { let s = ""; for (let i = o; i < o + l && b[i]; i++) s += String.fromCharCode(b[i]); return s.trim(); };
+  if (n < 12 || id(0) !== "RIFF" || id(8) !== "WAVE") throw new Error("notwav|" + f.name);
+  let p = 12, fmt = null, bext = null;
+  while (p + 8 <= n) {
+    const cid = id(p), size = v.getUint32(p + 4, true), q = p + 8;
+    if (cid === "fmt " && q + 16 <= n) {
+      let tag = v.getUint16(q, true);
+      if (tag === 0xfffe && size >= 26 && q + 26 <= n) tag = v.getUint16(q + 24, true);
+      fmt = { tag, ch: v.getUint16(q + 2, true), sr: v.getUint32(q + 4, true), align: v.getUint16(q + 12, true), bits: v.getUint16(q + 14, true) };
+    } else if (cid === "bext" && q + 346 <= n) {
+      bext = { desc: txt(q, 256), orig: txt(q + 256, 32), oref: txt(q + 288, 32), ref: v.getUint32(q + 338, true) + v.getUint32(q + 342, true) * 4294967296 };
+    } else if (cid === "data") {
+      if (!fmt) break;
+      const ok = (fmt.tag === 1 && [16, 24, 32].includes(fmt.bits)) || (fmt.tag === 3 && fmt.bits === 32);
+      if (!ok || !fmt.ch || fmt.align !== fmt.ch * fmt.bits / 8 || fmt.sr < 8000) throw new Error("format|" + f.name);
+      const left = f.size - q, len = size && size <= left ? size : left;
+      return { file: f, name: f.name, fmt, off: q, frames: Math.floor(len / fmt.align), bext };
+    }
+    p = q + size + (size & 1);
+  }
+  throw new Error("nodata|" + f.name);
+}
+
+function djDecode(u8, fmt, n, out, stride, at) {
+  const ch = fmt.ch;
+  if (fmt.bits === 24) {
+    let o = 0;
+    for (let f = 0; f < n; f++) for (let c = 0; c < ch; c++, o += 3) { let x = u8[o] | (u8[o + 1] << 8) | (u8[o + 2] << 16); if (x & 0x800000) x -= 0x1000000; out[c * stride + at + f] = x / 8388608; }
+    return;
+  }
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  if (fmt.tag === 3) { for (let f = 0; f < n; f++) for (let c = 0; c < ch; c++) out[c * stride + at + f] = dv.getFloat32((f * ch + c) * 4, true); return; }
+  if (fmt.bits === 16) { for (let f = 0; f < n; f++) for (let c = 0; c < ch; c++) out[c * stride + at + f] = dv.getInt16((f * ch + c) * 2, true) / 32768; return; }
+  for (let f = 0; f < n; f++) for (let c = 0; c < ch; c++) out[c * stride + at + f] = dv.getInt32((f * ch + c) * 4, true) / 2147483648;
+}
+
+function djFull(fmt) { return fmt.tag === 3 ? 1 : (2 ** (fmt.bits - 1) - 1) / 2 ** (fmt.bits - 1); }
+
+function djReader(parts) {
+  const fmt = parts[0].fmt, ch = fmt.ch;
+  let i = 0, pos = 0;
+  return {
+    ch,
+    async read(n, out) {
+      let got = 0;
+      while (got < n && i < parts.length) {
+        const P = parts[i], take = Math.min(n - got, P.frames - pos);
+        if (take <= 0) { i++; pos = 0; continue; }
+        const u8 = new Uint8Array(await P.file.slice(P.off + pos * fmt.align, P.off + (pos + take) * fmt.align).arrayBuffer());
+        if (u8.length < take * fmt.align) throw new Error("nodata|" + P.name);
+        djDecode(u8, fmt, take, out, n, got);
+        pos += take;
+        got += take;
+      }
+      for (let c = 0; c < ch; c++) out.fill(0, c * n + got, c * n + n);
+      return got;
+    }
+  };
+}
+
+function djFrames(list) {
+  const f0 = list[0].fmt;
+  for (const p of list) if (p.fmt.sr !== f0.sr || p.fmt.ch !== f0.ch || p.fmt.bits !== f0.bits || p.fmt.tag !== f0.tag) throw new Error("mismatch|" + p.name);
+  return list.reduce((s, p) => s + p.frames, 0);
+}
+
+async function djProbe(m) {
+  const out = [];
+  for (const g of m.groups || []) {
+    try {
+      const mp = [], ap = [];
+      for (const f of g.mix || []) mp.push(await djWav(f));
+      for (const f of g.atmo || []) ap.push(await djWav(f));
+      const M = djFrames(mp), A = ap.length ? djFrames(ap) : 0;
+      out.push({ key: g.key, sr: mp[0].fmt.sr, ch: mp[0].fmt.ch, frames: M, atmo: A, dj: !!(mp[0].bext && mp[0].bext.orig === "Delicate DJ"), date: mp[0].bext ? mp[0].bext.ref : null });
+    } catch (e) {
+      out.push({ key: g.key, err: errText(e) });
+    }
+  }
+  return { t: "djprobe", recs: out };
+}
+
+function djFft(re, im, inv) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const h = len >> 1, ang = (inv ? 2 : -2) * Math.PI / len;
+    for (let k = 0; k < h; k++) {
+      const wr = Math.cos(ang * k), wi = Math.sin(ang * k);
+      for (let i = k; i < n; i += len) {
+        const b = i + h, xr = re[b] * wr - im[b] * wi, xi = re[b] * wi + im[b] * wr;
+        re[b] = re[i] - xr; im[b] = im[i] - xi; re[i] += xr; im[i] += xi;
+      }
+    }
+  }
+}
+
+function djLag(x, y, rate) {
+  const L = x.length;
+  let N = 1;
+  while (N < 2 * L) N <<= 1;
+  const xr = new Float64Array(N), xi = new Float64Array(N), yr = new Float64Array(N), yi = new Float64Array(N);
+  for (let i = 1; i < L; i++) { xr[i] = x[i] - x[i - 1]; yr[i] = y[i] - y[i - 1]; }
+  djFft(xr, xi, false);
+  djFft(yr, yi, false);
+  for (let i = 0; i < N; i++) {
+    const r = xr[i] * yr[i] + xi[i] * yi[i], q = xr[i] * yi[i] - xi[i] * yr[i], a = Math.hypot(r, q);
+    xr[i] = a > 1e-20 ? r / a : 0;
+    xi[i] = a > 1e-20 ? q / a : 0;
+  }
+  djFft(xr, xi, true);
+  const lo = -Math.round(DJ_MINLAG * rate), hi = Math.round(DJ_MAXLAG * rate), at = k => xr[(k + N) % N];
+  let best = lo, bv = -Infinity, s2 = 0;
+  for (let k = lo; k <= hi; k++) { const v = at(k); s2 += v * v; if (v > bv) { bv = v; best = k; } }
+  const rms = Math.sqrt(s2 / (hi - lo + 1));
+  if (!(rms > 0) || !(bv > 0)) return { lag: 0, score: 0 };
+  const a = at(best - 1), b = at(best), c = at(best + 1), den = a - 2 * b + c;
+  return { lag: best + (den < 0 ? Math.max(-0.5, Math.min(0.5, 0.5 * (a - c) / den)) : 0), score: bv / rms };
+}
+
+function djAlign(wins, q, rate) {
+  const all = wins.map(w => djLag(w.x, w.y, rate)).filter(r => r.score >= DJ_SCORE).map(r => r.lag * q).sort((a, b) => a - b);
+  const mid = all.length ? all[all.length >> 1] : 0, tol = DJ_AGREE * rate * q, got = all.filter(v => Math.abs(v - mid) <= tol);
+  if (got.length < Math.min(3, wins.length) || got.length * 3 < wins.length) return { lag: 0, found: false, used: got.length, of: wins.length };
+  const med = got[got.length >> 1];
+  return { lag: Math.round(med), found: true, used: got.length, of: wins.length, spread: Math.round(got[got.length - 1] - got[0]) };
+}
+
+function djLocs(marks, len) {
+  return (Array.isArray(marks) ? marks : []).filter(k => k && Number.isFinite(k.at) && k.at >= 0 && k.at <= len).sort((a, b) => a.at - b.at).slice(0, 999).map((k, i) => ({ id: i + 1, n: i + 1, kind: "point", a: Math.round(k.at), name: String(k.name || "").slice(0, 160), view: null, chans: null }));
+}
+
+async function djImport(m) {
+  const mixP = [], atP = [];
+  for (const f of m.mix || []) mixP.push(await djWav(f));
+  for (const f of m.atmo || []) atP.push(await djWav(f));
+  if (!mixP.length) throw new Error("nodata|");
+  const M = djFrames(mixP), A = atP.length ? djFrames(atP) : 0, fm = mixP[0].fmt, sr = fm.sr;
+  if (A && atP[0].fmt.sr !== sr) throw new Error("mismatch|" + atP[0].name);
+  const bm = mixP[0].bext, ba = A ? atP[0].bext : null, d = bm && ba ? ba.ref - bm.ref : 0;
+  const dj = !!(bm && ba && bm.orig === "Delicate DJ" && ba.orig === "Delicate DJ"), full = djFull(fm);
+  const job = sesJob(m), N = 65536, mr = djReader(mixP), ar = A ? djReader(atP) : null, mch = mr.ch, ach = ar ? ar.ch : 0;
+  const mbuf = new Float32Array(N * mch), abuf = new Float32Array(N * Math.max(1, ach));
+  const s0 = Math.max(0, d), s1 = Math.min(M, d + A), q = Math.max(1, Math.round(sr / DJ_RATE)), Lw = Math.floor(DJ_WIN * sr / q), Wf = Lw * q;
+  const K = dj && s1 - s0 > Wf * 2 ? Math.min(12, Math.floor((s1 - s0) / (Wf * 1.5))) : 0, wins = [];
+  for (let j = 0; j < K; j++) wins.push({ s: s0 + Math.floor((s1 - s0 - Wf) * (j + 0.5) / K), x: new Float32Array(Lw), y: new Float32Array(Lw) });
+  const total = M + A, rec = String(m.rec || "").slice(0, 80);
+  let clipped = 0, done = 0;
+  const atmoOnly = async (pushA, from, to) => {
+    for (let p = from; p < to; p += N) {
+      const k = Math.min(N, to - p);
+      await ar.read(k, abuf);
+      pushA(abuf.subarray(0, k * ach), k);
+      done += k;
+      await job.tick(done / total);
+    }
+  };
+  const run = async (pushM, pushA) => {
+    if (ar && d < 0) await atmoOnly(pushA, 0, -d);
+    for (let p = 0; p < M; p += N) {
+      const n = Math.min(N, M - p);
+      await mr.read(n, mbuf);
+      const a0 = ar ? Math.max(p, d) : 0, a1 = ar ? Math.min(p + n, d + A) : 0;
+      if (a1 > a0) {
+        const k = a1 - a0, o = a0 - p;
+        await ar.read(k, abuf);
+        if (dj) {
+          for (let c = 0; c < mch; c++) {
+            const mo = c * n + o, ao = (ach === mch ? c : 0) * k;
+            for (let j = 0; j < k; j++) { const v = mbuf[mo + j]; if (v >= full || v <= -full) clipped++; mbuf[mo + j] = v - abuf[ao + j]; }
+          }
+        }
+        for (const w of wins) {
+          const g1 = Math.min(a1, w.s + Wf);
+          for (let g = Math.max(a0, w.s); g < g1; g++) {
+            const j = Math.floor((g - w.s) / q);
+            let sm = 0, sa = 0;
+            for (let c = 0; c < mch; c++) sm += mbuf[c * n + g - p];
+            for (let c = 0; c < ach; c++) sa += abuf[c * k + g - a0];
+            w.x[j] += sm / (mch * q);
+            w.y[j] += sa / (ach * q);
+          }
+        }
+        pushA(abuf.subarray(0, k * ach), k);
+        done += k;
+      }
+      pushM(mbuf.subarray(0, n * mch), n);
+      done += n;
+      await job.tick(done / total);
+    }
+    if (ar && d + A > M) await atmoOnly(pushA, Math.max(0, M - d), A);
+  };
+  let am = null;
+  try {
+    const rm = await sesNewDoc(m.mixName, sr, mch, M, async pushM => {
+      if (!ar) { await run(pushM, null); return; }
+      am = (await sesNewDoc(m.atmoName, sr, ach, A, pushA => run(pushM, pushA), job, { source: { kind: "dj", rec, part: "atmo" }, bits: atP[0].fmt.bits })).meta;
+    }, job, { source: { kind: "dj", rec, part: "mix" }, bits: fm.bits, locs: djLocs(m.marks, M) });
+    return { t: "djimported", mix: rm.meta, atmo: am, offset: d, subtracted: dj, clipped, align: K ? djAlign(wins, q, sr / q) : null, sr };
+  } catch (e) {
+    if (am) { try { await (await docsDir()).removeEntry(am.id, { recursive: true }); } catch {} }
+    throw e;
+  } finally { job.done(); }
 }
 
 const XP = { jobs: [], running: null, dsp: null };
@@ -3731,6 +3950,8 @@ async function handle(m) {
   if (m.t === "sesbounce") { postMessage(Object.assign({ req: m.req }, await sesBounce(m))); return; }
   if (m.t === "sesconv") { postMessage(Object.assign({ req: m.req }, await sesConvert(m))); return; }
   if (m.t === "sescancel") { if (SES.job) SES.job.cancel = true; return; }
+  if (m.t === "djprobe") { postMessage(Object.assign({ req: m.req }, await djProbe(m))); return; }
+  if (m.t === "djimport") { postMessage(Object.assign({ req: m.req }, await djImport(m))); return; }
   if (m.t === "docinfo") { postMessage(Object.assign({ req: m.req }, await enqueue(() => docInfo(m)))); return; }
   if (m.t === "albums") { postMessage(Object.assign({ req: m.req }, await albumsGet())); return; }
   if (m.t === "albumsput") { postMessage(Object.assign({ req: m.req }, await enqueue(() => albumsPut(m)))); return; }
