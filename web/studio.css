@@ -586,3 +586,11 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 .sesdoc .sdn{flex:1;min-width:0;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sesdoc .sdi{flex:none;color:var(--dim);font-size:calc(10px*var(--fs))}
 @media (max-width:760px){.seshd,.sesheads{width:calc(156px*var(--fs))}.st2 b{display:none}#ses .docmeta{flex:1 1 0}#sesClose{order:1}#sesTools{order:2;flex-basis:100%}}
+
+#dlg .pbto{align-self:flex-start;margin-bottom:calc(4px*var(--fs))}
+#dlg .pbrow{display:flex;align-items:center;gap:calc(8px*var(--fs))}
+#dlg .pbcn{color:var(--dim);font-size:calc(10px*var(--fs));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+#dlg .pbrow .outbtn.on{color:var(--gold);border-color:var(--gold)}
+#dlg textarea{background:var(--bg3);color:var(--white);border:1px solid var(--border);font:inherit;padding:calc(6px*var(--fs));resize:vertical;min-height:calc(40px*var(--fs))}
+#dlg .pbinfo a{color:var(--pink)}
+.xfoot #xPub{margin-right:calc(8px*var(--fs))}

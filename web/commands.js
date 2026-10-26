@@ -135,6 +135,7 @@ const CMDS = [
   { id: "recPanel", g: "File", label: "Record…", run: () => recToggle(), kw: "record recording input microphone vinyl rip turntable guitar capture" },
   { id: "rec", g: "Transport", label: "Record / stop recording", run: () => recGo(), kw: "record recording start stop capture" },
   { id: "export", g: "File", label: "Export…", run: () => openExport(), doc: true, kw: "render bounce save wav flac master dither", ss: () => ssBounce(true), ssWhen: () => ssLen() > 0 },
+  { id: "publish", g: "File", label: "Publish…", run: () => pbOpen(), doc: true, kw: "mixcloud locker upload share release set mix", ss: () => pbOpen(), ssWhen: () => ssLen() > 0 },
   { id: "sesNew", g: "File", label: "New session…", run: () => ssNewDlg(), kw: "multitrack session tracks mix arrange daw project" },
   { id: "sessions", g: "File", label: "Sessions", run: () => openFiles("sessions"), kw: "multitrack session tracks mix arrange project" },
   { id: "sesAdd", g: "Edit", label: "Add files to the session…", run: () => ssAddDlg(), ss: () => ssAddDlg(), sesOnly: true, kw: "multitrack track import file clip" },

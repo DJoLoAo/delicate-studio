@@ -1228,11 +1228,11 @@ function edit(op, extra) {
   return runEdit(Object.assign({ t: "edit", op }, extra || {}), op !== "copy" && op !== "heal", op === "heal");
 }
 
-function flash(text) {
+function flash(text, ms) {
   const el = $("stMsg");
   el.textContent = text;
   clearTimeout(ed.flashT);
-  ed.flashT = setTimeout(() => { el.textContent = ""; }, 3000);
+  ed.flashT = setTimeout(() => { el.textContent = ""; }, ms || 3000);
 }
 const isMarkOp = h => !!h && h.op.startsWith("mark");
 function audioKey() {

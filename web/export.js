@@ -278,6 +278,7 @@ function openExport(album) {
   closePopovers();
   if (!xp.album && selOn() && xp.cfg.range === "all" && !xp.touched) xp.cfg.range = "sel";
   $("expTitle").textContent = xp.album ? t("Export album") : t("Export");
+  $("xPub").classList.toggle("hidden", !!xp.album);
   $("exp").classList.remove("hidden");
   xpRender();
   setTimeout(() => $("xGo").focus(), 30);
@@ -362,7 +363,8 @@ function xpJob(m) {
     Object.assign(j, { size: m.size, peak: m.peak, clipped: m.clipped, file: m.file, locker: m.locker, ms: m.ms });
     if (was !== "done") {
       if (j.dest.kind === "download") xpDownload(j);
-      flash(t("Exported") + " " + (j.locker ? j.locker.path : j.name));
+      if (j.pub) pbDone(j);
+      else flash(t("Exported") + " " + (j.locker ? j.locker.path : j.name));
     }
   }
   if (m.state === "failed") {
@@ -406,7 +408,7 @@ function xpBadge() {
   $("expN").textContent = n ? String(n) : "";
 }
 
-const XP_STATE = { queued: "Waiting", rendering: "Rendering", hashing: "Checking", uploading: "Uploading", verifying: "Saving in the Locker", done: "Done", failed: "Failed", cancelled: "Cancelled" };
+const XP_STATE = { queued: "Waiting", rendering: "Rendering", hashing: "Checking", uploading: "Uploading", verifying: "Saving in the Locker", publishing: "Publishing", done: "Done", failed: "Failed", cancelled: "Cancelled" };
 
 function xpQueue() {
   const box = $("xQueue");
@@ -418,8 +420,8 @@ function xpQueue() {
     row.className = "xjob " + j.state;
     row.innerHTML = `<div class="xj1"><span class="xn"></span><span class="xs"></span></div><div class="xj2"><span class="xf"></span><span class="xr"></span><span class="grow"></span><span class="xa"></span></div><div class="bbar"><i></i></div>`;
     row.querySelector(".xn").textContent = j.name;
-    row.querySelector(".xs").textContent = t(XP_STATE[j.state] || j.state) + (["rendering", "hashing", "uploading"].includes(j.state) ? " " + Math.round((j.frac || 0) * 100) + "%" : "");
-    row.querySelector(".xf").textContent = j.fmtLabel + " · " + fmtDur(j.len) + (j.dest.kind === "locker" ? " · " + t("Locker") : "");
+    row.querySelector(".xs").textContent = t(XP_STATE[j.state] || j.state) + (["rendering", "hashing", "uploading"].includes(j.state) || (j.state === "publishing" && j.frac > 0) ? " " + Math.round((j.frac || 0) * 100) + "%" : "");
+    row.querySelector(".xf").textContent = j.fmtLabel + " · " + fmtDur(j.len) + (j.pub ? " · " + (j.pub.to === "replay" ? t("Listener page") : t(PB_NAME[j.pub.to])) : j.dest.kind === "locker" ? " · " + t("Locker") : "");
     let res = "";
     if (j.state === "done") {
       const pk = j.peak > 0 ? 20 * Math.log10(j.peak) : -Infinity;
@@ -431,6 +433,15 @@ function xpQueue() {
     row.querySelector(".bbar i").style.width = Math.round((j.state === "done" ? 1 : j.frac || 0) * 100) + "%";
     const act = row.querySelector(".xa");
     const live = ["queued", "rendering", "hashing", "uploading", "verifying"].includes(j.state);
+    if (j.state === "done" && j.url) {
+      const o = document.createElement("a");
+      o.className = "outbtn";
+      o.href = j.url;
+      o.target = "_blank";
+      o.rel = "noopener";
+      o.textContent = t("open");
+      act.appendChild(o);
+    }
     if (j.state === "done" && j.dest.kind === "download") {
       const d = document.createElement("button");
       d.className = "outbtn";
@@ -443,7 +454,7 @@ function xpQueue() {
     x.textContent = "×";
     x.title = live ? t("Cancel") : t("Remove");
     x.addEventListener("click", () => {
-      if (live) ed.worker.postMessage({ t: "xcancel", id: j.id });
+      if (live) { if (!pbCancel(j)) ed.worker.postMessage({ t: "xcancel", id: j.id }); }
       else { ed.worker.postMessage({ t: "xremove", id: j.id }); xp.jobs = xp.jobs.filter(y => y !== j); xpQueue(); }
     });
     act.appendChild(x);
@@ -454,6 +465,7 @@ function xpQueue() {
 function wireExport() {
   xpLoad();
   $("expClose").addEventListener("click", closeExport);
+  $("xPub").addEventListener("click", () => { if (xp.album) return; closeExport(); pbOpen(); });
   $("exp").addEventListener("pointerdown", e => { if (e.target === $("exp")) closeExport(); });
   $("exp").addEventListener("keydown", e => { if (e.key === "Escape" && !e.target.closest(".dd.open")) { e.stopPropagation(); closeExport(); } });
   const seg = (id, key, after) => $(id).addEventListener("click", e => {
