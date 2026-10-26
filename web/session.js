@@ -1,10 +1,23 @@
-const SS_HEADH = 15, SS_EDGE = 6, SS_SNAP = 8, SS_FBOX = 9, SS_COLORS = ["gold", "blue", "pink", "ggreen"];
+const SS_HEADH = 15, SS_EDGE = 6, SS_SNAP = 8, SS_FBOX = 9, SS_PTR = 4, SS_COLORS = ["gold", "blue", "pink", "ggreen"];
 
-const ses = { open: false, s: null, docs: new Map(), view: { start: 0, spp: 256 }, cursor: 0, sel: { a: 0, b: 0 }, clip: null, track: null, hist: [], idx: 0, drag: null, play: { on: false, start: 0, end: 0, loop: false, off: 0, t0: 0 }, loop: false, saveT: 0, mixT: 0, list: [], dirty: false, mark: null, mdrag: null };
+const ses = { open: false, s: null, docs: new Map(), view: { start: 0, spp: 256 }, cursor: 0, sel: { a: 0, b: 0 }, clip: null, track: null, hist: [], idx: 0, drag: null, play: { on: false, start: 0, end: 0, loop: false, off: 0, t0: 0 }, loop: false, saveT: 0, mixT: 0, list: [], dirty: false, mark: null, mdrag: null, apt: null, touch: null, trim: null };
 
 function ssLane() { return Math.round(84 * thFs()); }
 
 function ssLin(db) { return db <= -96 ? 0 : Math.pow(10, db / 20); }
+function ssAuto(tr) { if (!tr.auto || typeof tr.auto !== "object") tr.auto = { vol: [], pan: [] }; if (!Array.isArray(tr.auto.vol)) tr.auto.vol = []; if (!Array.isArray(tr.auto.pan)) tr.auto.pan = []; return tr.auto; }
+function ssAutoRange(kind) { return kind === "pan" ? [-1, 1] : [SM_FLOOR, SM_TOP]; }
+function ssAutoY(kind, v, r) {
+  const L = ssLane(), y0 = r * L + 6, h = L - 12, [lo, hi] = ssAutoRange(kind), u = (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo);
+  return kind === "pan" ? y0 + u * h : y0 + (1 - u) * h;
+}
+function ssAutoV(kind, y, r) {
+  const L = ssLane(), y0 = r * L + 6, h = L - 12, [lo, hi] = ssAutoRange(kind), u = Math.max(0, Math.min(1, (y - y0) / h));
+  const v = kind === "pan" ? lo + u * (hi - lo) : lo + (1 - u) * (hi - lo);
+  return kind === "pan" ? Math.round(v * 100) / 100 : Math.round(v * 2) / 2;
+}
+function ssAutoBase(tr, kind) { return kind === "pan" ? tr.pan : Math.max(SM_FLOOR, tr.gain); }
+function ssAutoVal(tr, kind, f) { const v = smAt(ssAuto(tr)[kind], f); return v === null ? ssAutoBase(tr, kind) : v; }
 function ssRate() { return ses.s && ses.s.sr ? ses.s.sr : 48000; }
 function ssLen() {
   let n = 0;
@@ -244,6 +257,7 @@ function ssTick() {
   const ph = ssPlayhead(), W = ssWidth(), vis = W * ses.view.spp;
   if (!ses.drag && (ph > ses.view.start + vis * 0.98 || ph < ses.view.start)) { ses.view.start = ph - vis * 0.02; ssClamp(); }
   ssDraw();
+  ssFollow(ph);
   $("sesNow").textContent = fmtTime(ph);
   requestAnimationFrame(ssTick);
 }
@@ -267,7 +281,7 @@ function ssRender() {
   ssButtons();
   ssRuler();
   ssLanes();
-  if (!ses.play.on) $("sesNow").textContent = fmtTime(ses.cursor);
+  if (!ses.play.on) { $("sesNow").textContent = fmtTime(ses.cursor); ssFollow(ses.cursor); }
   $("sesLen").textContent = "/ " + fmtTime(ssLen());
   try { localStorage.setItem("studioSesView:" + ses.s.id, JSON.stringify({ start: ses.view.start, spp: ses.view.spp, cursor: ses.cursor })); } catch {}
 }
@@ -420,11 +434,15 @@ function ssLanes() {
   }
   const d = ses.drag;
   s.tracks.forEach((tr, r) => {
+    const shown = [];
     for (const k0 of tr.clips) {
       if (d && d.id === k0.id && d.row !== undefined && d.row !== r) continue;
-      ssClip(g, ssShown(tr, k0), r, dpr, W, r);
+      shown.push([ssShown(tr, k0), r]);
     }
-    if (d && d.cur && d.row === r && !tr.clips.some(k => k.id === d.id)) ssClip(g, d.cur, r, dpr, W, d.srcRow);
+    if (d && d.cur && d.row === r && !tr.clips.some(k => k.id === d.id)) shown.push([d.cur, d.srcRow]);
+    const xf = smXfades(shown.map(x => x[0]));
+    for (const [k, cr] of shown) ssClip(g, k, r, dpr, W, cr, xf.get(k.id));
+    if (tr.view) ssAutoDraw(g, tr, r, dpr, W);
   });
   if (!s.tracks.length) {
     g.fillStyle = TH.muted;
@@ -443,7 +461,45 @@ function ssLanes() {
   }
 }
 
-function ssClip(g, k, r, dpr, W, colorRow) {
+function ssAutoDraw(g, tr, r, dpr, W) {
+  const kind = tr.view, pts = ssAuto(tr)[kind], L = ssLane() * dpr, top = r * L;
+  g.save();
+  g.globalAlpha = 0.55;
+  g.fillStyle = TH.canvas;
+  g.fillRect(0, top, W, L - dpr);
+  g.globalAlpha = 1;
+  const ref = ssAutoY(kind, 0, r) * dpr;
+  g.fillStyle = tw(0.14);
+  for (let x = 0; x < W; x += 6 * dpr) g.fillRect(x, Math.round(ref), 3 * dpr, Math.max(1, dpr));
+  const col = kind === "pan" ? tc("blue", 0.95) : tc("pink", 0.95);
+  g.strokeStyle = col;
+  g.lineWidth = Math.max(1.5, 1.5 * dpr);
+  if (!pts.length) g.setLineDash([5 * dpr, 4 * dpr]);
+  g.beginPath();
+  for (let x = 0; x <= W; x += 2 * dpr) {
+    const y = ssAutoY(kind, ssAutoVal(tr, kind, ssF(x / dpr)), r) * dpr;
+    if (x === 0) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  g.stroke();
+  g.setLineDash([]);
+  const P = SS_PTR * dpr;
+  pts.forEach((q, i) => {
+    const x = ssX(q[0]) * dpr;
+    if (x < -P || x > W + P) return;
+    const y = ssAutoY(kind, q[1], r) * dpr, on = ses.apt && ses.apt.tr === tr.id && ses.apt.i === i;
+    g.fillStyle = on ? TH.gold : col;
+    g.fillRect(x - P, y - P, P * 2, P * 2);
+  });
+  g.fillStyle = col;
+  g.font = thFont(9, dpr);
+  g.textAlign = "left";
+  g.textBaseline = "bottom";
+  g.fillText((kind === "pan" ? t("Pan automation") + " · L ↑ R ↓" : t("Volume automation")) + (pts.length ? "" : " · " + t("click to add a point")), 6 * dpr, top + L - 5 * dpr);
+  g.restore();
+}
+
+function ssClip(g, k, r, dpr, W, colorRow, x) {
+  x = x || { xi: 0, xo: 0 };
   const L = ssLane() * dpr, y0 = r * L + 2 * dpr, h = L - 4 * dpr;
   const x0 = ssX(k.at) * dpr, x1 = ssX(k.at + k.len) * dpr;
   if (x1 < 0 || x0 > W) return;
@@ -457,18 +513,18 @@ function ssClip(g, k, r, dpr, W, colorRow) {
   if (M && !M.missing) {
     const mid = y0 + hh + (h - hh) / 2, A = (h - hh) / 2 - 3 * dpr, ch = M.meta.channels, gk = ssLin(k.gain), acc = accNew();
     g.fillStyle = tc(col, 0.85);
-    for (let x = Math.floor(a); x < b; x++) {
-      const s0 = Math.max(k.at, ssF(x / dpr)), s1 = Math.min(k.at + k.len, ssF((x + 1) / dpr));
+    for (let px = Math.floor(a); px < b; px++) {
+      const s0 = Math.max(k.at, ssF(px / dpr)), s1 = Math.min(k.at + k.len, ssF((px + 1) / dpr));
       if (s1 <= s0) continue;
       const u0 = k.from + (s0 - k.at), u1 = Math.min(M.len, k.from + (s1 - k.at));
       if (u1 <= u0) continue;
       accReset(acc);
       for (let c = 0; c < ch; c++) colPeakOf(M, c, u0, Math.max(u0 + 1, u1), acc);
       if (acc.mx === -Infinity) continue;
-      const f = gk * ssFade(k, Math.round((s0 + s1) / 2 - k.at));
+      const q = Math.round((s0 + s1) / 2 - k.at), f = gk * ssFade(k, q) * smXin(q, x.xi) * smXout(q, k.len, x.xo);
       let y1 = mid - Math.max(-1, Math.min(1, acc.mx * f)) * A, y2 = mid - Math.max(-1, Math.min(1, acc.mn * f)) * A;
       if (y2 - y1 < 1) { const ym = (y1 + y2) / 2; y1 = ym - 0.5; y2 = ym + 0.5; }
-      g.fillRect(x, y1, 1, y2 - y1);
+      g.fillRect(px, y1, 1, y2 - y1);
     }
   } else {
     g.fillStyle = tc("peak", 0.3);
@@ -478,6 +534,9 @@ function ssClip(g, k, r, dpr, W, colorRow) {
   g.lineWidth = Math.max(1, dpr);
   if (k.fin > 0) { const xf = ssX(k.at + k.fin) * dpr; g.beginPath(); g.moveTo(x0, y0 + h); g.lineTo(xf, y0 + hh); g.stroke(); }
   if (k.fout > 0) { const xf = ssX(k.at + k.len - k.fout) * dpr; g.beginPath(); g.moveTo(xf, y0 + hh); g.lineTo(x1, y0 + h); g.stroke(); }
+  const curve = (f0, n, fn) => { g.beginPath(); for (let i = 0; i <= 24; i++) { const q = i / 24, xx = ssX(f0 + q * n) * dpr, yy = y0 + h - fn(q) * (h - hh); if (i) g.lineTo(xx, yy); else g.moveTo(xx, yy); } g.stroke(); };
+  if (x.xi) curve(k.at, x.xi, q => Math.sin(q * Math.PI / 2));
+  if (x.xo) curve(k.at + k.len - x.xo, x.xo, q => Math.cos(q * Math.PI / 2));
   g.strokeStyle = sel ? TH.gold : tc(col, 0.5);
   g.strokeRect(x0 + 0.5, y0 + 0.5, Math.max(1, x1 - x0 - 1), h - 1);
   g.save();
@@ -537,9 +596,38 @@ function ssMinLen() { return Math.max(1, Math.round(ssRate() * 0.01)); }
 
 function ssDocLen(k) { const M = ses.docs.get(k.doc); return M && !M.missing ? M.len : k.from + k.len; }
 
+function ssAutoHit(tr, row, x, y) {
+  const pts = ssAuto(tr)[tr.view];
+  for (let i = pts.length - 1; i >= 0; i--) if (Math.abs(ssX(pts[i][0]) - x) <= SS_PTR + 2 && Math.abs(ssAutoY(tr.view, pts[i][1], row) - y) <= SS_PTR + 2) return i;
+  return -1;
+}
+
+function ssAutoDown(e, tr, row, x, y) {
+  const cv = $("sesCv"), kind = tr.view, pts = ssAuto(tr)[kind];
+  e.preventDefault();
+  cv.setPointerCapture(e.pointerId);
+  ses.track = tr.id;
+  let i = ssAutoHit(tr, row, x, y), added = false;
+  if (i >= 0 && e.altKey) { pts.splice(i, 1); ses.apt = null; ssCommit(); return; }
+  if (i < 0) {
+    const f = Math.max(0, Math.round(ssF(x))), v = ssAutoV(kind, y, row), j = pts.findIndex(q => q[0] >= f);
+    if (j >= 0 && pts[j][0] === f) { pts[j][1] = v; i = j; }
+    else { i = j < 0 ? pts.length : j; pts.splice(i, 0, [f, v]); }
+    added = true;
+    ssMix();
+  }
+  ses.apt = { tr: tr.id, i };
+  ses.drag = { kind: "apt", tr: tr.id, auto: kind, i, row, x0: x, y0: y, orig: pts[i].slice(), added, moved: false };
+  ssHeads();
+  ssDraw();
+}
+
 function ssDown(e) {
   if (!ses.open || e.button > 0) return;
   const cv = $("sesCv"), r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  const ar = Math.floor(y / ssLane()), atr = ses.s.tracks[ar];
+  if (atr && atr.view) { ssAutoDown(e, atr, ar, x, y); return; }
+  ses.apt = null;
   const h = ssHit(x, y);
   e.preventDefault();
   cv.setPointerCapture(e.pointerId);
@@ -564,12 +652,24 @@ function ssMove(e) {
   if (!ses.open) return;
   const cv = $("sesCv"), r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, d = ses.drag;
   if (!d) {
+    const ar = Math.floor(y / ssLane()), atr = ses.s.tracks[ar];
+    if (atr && atr.view) { cv.style.cursor = ssAutoHit(atr, ar, x, y) >= 0 ? "move" : "crosshair"; return; }
     const h = ssHit(x, y);
     cv.style.cursor = !h.k ? "text" : h.part === "l" || h.part === "r" ? "ew-resize" : h.part === "fin" || h.part === "fout" ? "col-resize" : "grab";
     return;
   }
   if (!d.moved && Math.abs(x - d.x0) < 3 && Math.abs(y - (d.y0 || 0)) < 3) return;
   d.moved = true;
+  if (d.kind === "apt") {
+    const tr = ses.s.tracks.find(q => q.id === d.tr);
+    if (!tr) return;
+    const pts = ssAuto(tr)[d.auto], i = d.i, lo = i > 0 ? pts[i - 1][0] + 1 : 0, hi = i + 1 < pts.length ? pts[i + 1][0] - 1 : Infinity;
+    pts[i] = [Math.max(lo, Math.min(hi, Math.round(ssF(x)))), ssAutoV(d.auto, y, d.row)];
+    ssMix();
+    ssHeads();
+    ssDraw();
+    return;
+  }
   if (d.kind === "sel") {
     const f = Math.max(0, Math.round(ssF(x)));
     ses.sel = { a: Math.min(d.anchor, f), b: Math.max(d.anchor, f) };
@@ -605,6 +705,19 @@ function ssUp(e) {
   const d = ses.drag;
   if (!d) return;
   ses.drag = null;
+  if (d.kind === "apt") {
+    const tr = ses.s.tracks.find(q => q.id === d.tr);
+    if (tr && e.type === "pointercancel") {
+      const pts = ssAuto(tr)[d.auto];
+      if (d.added) pts.splice(d.i, 1); else pts[d.i] = d.orig;
+      ses.apt = null;
+      ssMix();
+      ssDraw();
+      return;
+    }
+    if (d.moved || d.added) ssCommit(); else ssDraw();
+    return;
+  }
   if (d.kind === "sel") {
     if (!d.moved) { ses.sel = { a: 0, b: 0 }; ses.cursor = d.anchor; if (ses.play.on) ssPlay(ses.cursor); }
     ssButtons();
@@ -754,27 +867,73 @@ function ssHeads() {
     el.className = "sestrack" + (tr.id === ses.track ? " cur" : "");
     el.style.height = ssLane() + "px";
     el.dataset.id = tr.id;
-    el.innerHTML = `<div class="st1"><i class="sdot" style="background:${tc(SS_COLORS[r % SS_COLORS.length])}"></i><button class="stn"></button><button class="stm" title="${esc(t("Mute"))}">M</button><button class="sts" title="${esc(t("Solo"))}">S</button><button class="x std" title="${esc(t("Remove the track"))}" aria-label="${esc(t("Remove the track"))}">×</button></div>`
+    el.innerHTML = `<div class="st1"><i class="sdot" style="background:${tc(SS_COLORS[r % SS_COLORS.length])}"></i><button class="stn"></button><button class="stm" title="${esc(t("Mute"))}">M</button><button class="sts" title="${esc(t("Solo"))}">S</button><button class="sta"></button><button class="x std" title="${esc(t("Remove the track"))}" aria-label="${esc(t("Remove the track"))}">×</button></div>`
       + `<label class="st2"><span>${esc(t("Vol"))}</span><input type="range" class="stg" min="-48" max="12" step="0.5"><b class="stgv"></b></label>`
       + `<label class="st2"><span>${esc(t("Pan"))}</span><input type="range" class="stp" min="-100" max="100" step="1"><b class="stpv"></b></label>`;
     el.querySelector(".stn").textContent = tr.name;
     el.querySelector(".stn").title = t("Rename the track");
     el.querySelector(".stm").classList.toggle("on", tr.mute);
     el.querySelector(".sts").classList.toggle("on", tr.solo);
+    const au = ssAuto(tr), sta = el.querySelector(".sta");
+    sta.textContent = tr.view === "pan" ? "P" : tr.view === "vol" ? "V" : "A";
+    sta.classList.toggle("on", !!tr.view);
+    sta.classList.toggle("has", !!(au.vol.length || au.pan.length));
+    sta.title = tr.view === "vol" ? t("Volume automation shown — click for pan") : tr.view === "pan" ? t("Pan automation shown — click to hide") : t("Show the automation");
+    sta.setAttribute("aria-label", sta.title);
+    el.querySelector(".st2:nth-of-type(1)").classList.toggle("auto", au.vol.length > 0);
+    el.querySelector(".st2:nth-of-type(2)").classList.toggle("auto", au.pan.length > 0);
+    ssHeadVals(el, tr, ses.play.on ? ssPlayhead() : ses.cursor);
     const gi = el.querySelector(".stg"), pi = el.querySelector(".stp");
-    gi.value = String(Math.max(-48, tr.gain));
-    pi.value = String(Math.round(tr.pan * 100));
-    const gv = () => { el.querySelector(".stgv").textContent = tr.gain <= -48 ? "−∞" : (tr.gain > 0 ? "+" : tr.gain < 0 ? "−" : "") + Math.abs(tr.gain).toFixed(1); };
-    const pv = () => { const p = Math.round(tr.pan * 100); el.querySelector(".stpv").textContent = p === 0 ? "C" : (p < 0 ? "L" : "R") + Math.abs(p); };
-    gv();
-    pv();
-    const live = (k, v) => { const T = ses.s.tracks.find(x => x.id === tr.id); if (T) { T[k] = v; tr[k] = v; } ssMix(); };
-    gi.addEventListener("input", () => { live("gain", gi.value <= -48 ? -96 : Number(gi.value)); gv(); });
-    gi.addEventListener("change", () => ssCommit());
-    gi.addEventListener("dblclick", () => { live("gain", 0); ssCommit(); });
-    pi.addEventListener("input", () => { live("pan", Number(pi.value) / 100); pv(); });
-    pi.addEventListener("change", () => ssCommit());
-    pi.addEventListener("dblclick", () => { live("pan", 0); ssCommit(); });
+    const write = (kind, v) => {
+      const at = Math.round(ssPlayhead()), T = ses.touch;
+      if (!T || T.id !== tr.id || T.kind !== kind) {
+        ses.touch = { id: tr.id, kind, pts: [], g0: tr.gain, p0: tr.pan };
+        tr.touch = kind;
+      }
+      const L = ses.touch.pts, last = L[L.length - 1];
+      if (!last || at - last[0] >= ssRate() * 0.02 || Math.abs(v - last[1]) >= (kind === "pan" ? 0.02 : 0.25)) L.push([at, v]);
+      else last[1] = v;
+      if (kind === "vol") tr.gain = v <= SM_FLOOR ? -96 : v; else tr.pan = v;
+      ssMix();
+    };
+    const trim = (kind, v) => {
+      if (!ses.trim || ses.trim.id !== tr.id || ses.trim.kind !== kind) ses.trim = { id: tr.id, kind, base: au[kind].map(q => q.slice()), ref: ssAutoVal(tr, kind, ses.cursor) };
+      const [lo, hi] = ssAutoRange(kind), dv = v - ses.trim.ref;
+      au[kind] = ses.trim.base.map(q => [q[0], Math.max(lo, Math.min(hi, q[1] + dv))]);
+      ssMix();
+      ssDraw();
+    };
+    const finish = () => {
+      const T = ses.touch;
+      if (T && T.id === tr.id) {
+        const L = T.pts.slice().sort((a, b) => a[0] - b[0]);
+        if (L.length) {
+          const f0 = L[0][0], f1 = L[L.length - 1][0], keep = au[T.kind].filter(q => q[0] < f0 || q[0] > f1);
+          au[T.kind] = keep.concat(L).sort((a, b) => a[0] - b[0]).filter((q, i, A) => i === 0 || q[0] !== A[i - 1][0]);
+        }
+        tr.gain = T.g0;
+        tr.pan = T.p0;
+        tr.touch = "";
+        ses.touch = null;
+      }
+      ses.trim = null;
+      ssCommit();
+    };
+    const onInput = (kind, v) => {
+      if (ses.play.on && tr.view === kind) write(kind, v);
+      else if (au[kind].length) trim(kind, v);
+      else if (kind === "vol") tr.gain = v <= SM_FLOOR ? -96 : v;
+      else tr.pan = v;
+      if (!ses.touch) ssMix();
+      ssHeadVals(el, tr, ses.play.on ? ssPlayhead() : ses.cursor, kind, v);
+    };
+    gi.addEventListener("input", () => onInput("vol", gi.value <= -48 ? SM_FLOOR : Number(gi.value)));
+    gi.addEventListener("change", finish);
+    gi.addEventListener("dblclick", () => { if (au.vol.length) return; tr.gain = 0; ssCommit(); });
+    pi.addEventListener("input", () => onInput("pan", Number(pi.value) / 100));
+    pi.addEventListener("change", finish);
+    pi.addEventListener("dblclick", () => { if (au.pan.length) return; tr.pan = 0; ssCommit(); });
+    sta.addEventListener("click", () => { tr.view = tr.view === "" || !tr.view ? "vol" : tr.view === "vol" ? "pan" : ""; ses.apt = null; ssSaveSoon(); ssHeads(); ssDraw(); });
     el.querySelector(".stm").addEventListener("click", () => { tr.mute = !tr.mute; ssCommit(); });
     el.querySelector(".sts").addEventListener("click", () => { tr.solo = !tr.solo; ssCommit(); });
     el.querySelector(".stn").addEventListener("click", () => ssRenameTrack(tr.id));
@@ -782,6 +941,30 @@ function ssHeads() {
     el.addEventListener("pointerdown", () => { if (ses.track !== tr.id) { ses.track = tr.id; box.querySelectorAll(".sestrack").forEach(x => x.classList.toggle("cur", x.dataset.id === tr.id)); ssDraw(); } });
     box.appendChild(el);
   });
+}
+
+function ssDbText(v) { return v <= SM_FLOOR || v <= -48 ? "−∞" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1); }
+function ssPanText(v) { const p = Math.round(v * 100); return p === 0 ? "C" : (p < 0 ? "L" : "R") + Math.abs(p); }
+
+function ssHeadVals(el, tr, f, kind, v) {
+  const au = ssAuto(tr), gi = el.querySelector(".stg"), pi = el.querySelector(".stp");
+  const vol = kind === "vol" ? v : tr.touch === "vol" ? tr.gain : au.vol.length ? smAt(au.vol, f) : tr.gain;
+  const pan = kind === "pan" ? v : tr.touch === "pan" ? tr.pan : au.pan.length ? smAt(au.pan, f) : tr.pan;
+  if (kind !== "vol") gi.value = String(Math.max(-48, vol));
+  if (kind !== "pan") pi.value = String(Math.round(pan * 100));
+  el.querySelector(".stgv").textContent = ssDbText(vol);
+  el.querySelector(".stpv").textContent = ssPanText(pan);
+}
+
+function ssFollow(f) {
+  if (!ses.open || !ses.s) return;
+  const box = $("sesHeads");
+  for (const tr of ses.s.tracks) {
+    const au = ssAuto(tr);
+    if (!au.vol.length && !au.pan.length) continue;
+    const el = box.querySelector('.sestrack[data-id="' + CSS.escape(tr.id) + '"]');
+    if (el && !(ses.touch && ses.touch.id === tr.id) && !(ses.trim && ses.trim.id === tr.id)) ssHeadVals(el, tr, f);
+  }
 }
 
 async function ssRenameTrack(id) {
@@ -818,13 +1001,22 @@ function ssMenu(e) {
   e.preventDefault();
   if (!ses.open) return;
   const cv = $("sesCv"), r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, h = ssHit(x, y);
-  if (h.k) { ses.clip = h.k.id; ssButtons(); ssDraw(); }
+  const arow = Math.floor(y / ssLane()), atr = ses.s.tracks[arow];
+  if (h.k && !(atr && atr.view)) { ses.clip = h.k.id; ssButtons(); ssDraw(); }
   else { ses.cursor = Math.max(0, Math.round(ssF(x))); ssDraw(); }
   const items = [
     ses.play.on ? { label: t("Stop"), key: cmdKeyText("stop"), enabled: true, run: () => ssStop() } : { label: t("Play from here"), key: cmdKeyText("play"), enabled: true, run: () => ssPlay(ses.cursor) },
     "-"
   ];
-  if (h.k) {
+  if (atr) {
+    const au = ssAuto(atr), pi = atr.view ? ssAutoHit(atr, arow, x, y) : -1;
+    if (pi >= 0) items.push({ label: t("Delete the point"), enabled: true, run: () => { au[atr.view].splice(pi, 1); ses.apt = null; ssCommit(); } });
+    items.push({ label: atr.view === "vol" ? t("Hide the volume automation") : t("Show the volume automation"), enabled: true, run: () => { atr.view = atr.view === "vol" ? "" : "vol"; ssSaveSoon(); ssHeads(); ssDraw(); } },
+      { label: atr.view === "pan" ? t("Hide the pan automation") : t("Show the pan automation"), enabled: true, run: () => { atr.view = atr.view === "pan" ? "" : "pan"; ssSaveSoon(); ssHeads(); ssDraw(); } },
+      { label: t("Clear the volume automation"), enabled: au.vol.length > 0, run: () => { au.vol = []; ssCommit(); } },
+      { label: t("Clear the pan automation"), enabled: au.pan.length > 0, run: () => { au.pan = []; ssCommit(); } }, "-");
+  }
+  if (h.k && !(atr && atr.view)) {
     items.push({ label: t("Split at the cursor"), key: cmdKeyText("sesSplit"), enabled: true, run: () => { ses.cursor = Math.round(ssF(x)); ssSplit(); } },
       { label: t("Clip gain…"), enabled: true, run: () => ssClipGain() },
       { label: t("Remove the clip"), key: cmdKeyText("delete"), enabled: true, run: () => ssDelete() },
@@ -875,7 +1067,12 @@ function wireSes() {
   cv.addEventListener("pointercancel", ssUp);
   cv.addEventListener("wheel", ssWheel, { passive: false });
   cv.addEventListener("contextmenu", ssMenu);
-  cv.addEventListener("dblclick", e => { const r = cv.getBoundingClientRect(), h = ssHit(e.clientX - r.left, e.clientY - r.top); if (h.k) ssClipGain(); });
+  cv.addEventListener("dblclick", e => {
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, row = Math.floor(y / ssLane()), tr = ses.s && ses.s.tracks[row];
+    if (tr && tr.view) { const i = ssAutoHit(tr, row, x, y); if (i >= 0) { ssAuto(tr)[tr.view].splice(i, 1); ses.apt = null; ssCommit(); } return; }
+    const h = ssHit(x, y);
+    if (h.k) ssClipGain();
+  });
   const ru = $("sesRu");
   let rd = false;
   const at = e => { const r = ru.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };

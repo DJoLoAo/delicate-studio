@@ -1,4 +1,4 @@
-importScripts("/edit.js", "/trcore.js", "/tags.js", "/onset.js");
+importScripts("/edit.js", "/trcore.js", "/tags.js", "/onset.js", "/sesmath.js");
 
 const BLOCK = 65536;
 const BUCKET = 256;
@@ -1254,7 +1254,16 @@ function sesClean(v) {
       clips.push({ id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), doc: str(k.doc, 80), at: int(k.at, 0, 2 ** 40), from: int(k.from, 0, 2 ** 40), len, gain: num(k.gain, -96, 24, 0), fin, fout: int(k.fout, 0, len - fin), name: str(k.name, 160) });
     }
     clips.sort((a, b) => a.at - b.at);
-    tracks.push({ id: str(tr.id, 40) || crypto.randomUUID().slice(0, 12), name: str(tr.name, 80), gain: num(tr.gain, -96, 12, 0), pan: num(tr.pan, -1, 1, 0), mute: !!tr.mute, solo: !!tr.solo, clips });
+    const env = (L, lo, hi) => {
+      const out = [];
+      for (const q of Array.isArray(L) ? L.slice(0, 20000) : []) if (Array.isArray(q) && q.length >= 2 && Number.isFinite(Number(q[0])) && Number.isFinite(Number(q[1]))) out.push([int(q[0], 0, 2 ** 40), num(q[1], lo, hi, 0)]);
+      out.sort((a, b) => a[0] - b[0]);
+      return out.filter((q, i) => i === 0 || q[0] !== out[i - 1][0]);
+    };
+    const au = tr.auto && typeof tr.auto === "object" ? tr.auto : {};
+    const auto = { vol: env(au.vol, SM_FLOOR, SM_TOP), pan: env(au.pan, -1, 1) };
+    const touch = tr.touch === "vol" || tr.touch === "pan" ? tr.touch : "";
+    tracks.push({ id: str(tr.id, 40) || crypto.randomUUID().slice(0, 12), name: str(tr.name, 80), gain: num(tr.gain, -96, 12, 0), pan: num(tr.pan, -1, 1, 0), mute: !!tr.mute, solo: !!tr.solo, clips, auto, touch, view: ["vol", "pan"].includes(tr.view) ? tr.view : "" });
   }
   const marks = [];
   for (const k of Array.isArray(s.marks) ? s.marks.slice(0, 999) : []) if (k && typeof k === "object") marks.push({ id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), at: int(k.at, 0, 2 ** 40), name: str(k.name, 160) });
@@ -1346,13 +1355,19 @@ async function sesOpen(m) {
 
 function sesMixer(s) {
   const solo = s.tracks.some(tr => tr.solo);
-  const act = s.tracks.filter(tr => !tr.mute && (!solo || tr.solo)).map(tr => ({ g: tr.gain <= -96 ? 0 : Math.pow(10, tr.gain / 20), pan: tr.pan, clips: tr.clips }));
-  let buf = new Float32Array(0);
+  const act = s.tracks.filter(tr => !tr.mute && (!solo || tr.solo)).map(tr => ({
+    g: tr.gain <= -96 ? 0 : Math.pow(10, tr.gain / 20), pan: tr.pan, clips: tr.clips, xf: smXfades(tr.clips),
+    vol: tr.touch === "vol" || !tr.auto.vol.length ? null : tr.auto.vol, pn: tr.touch === "pan" || !tr.auto.pan.length ? null : tr.auto.pan
+  }));
+  let buf = new Float32Array(0), gv = new Float32Array(0), pv = new Float32Array(0);
   return (p, n, out, stride) => {
     out.fill(0, 0, n);
     out.fill(0, stride, stride + n);
+    if (gv.length < n) { gv = new Float32Array(n); pv = new Float32Array(n); }
     for (const T of act) {
-      if (!T.g) continue;
+      if (!T.vol && !T.g) continue;
+      if (T.vol) { smBlock(T.vol, p, n, gv); for (let i = 0; i < n; i++) gv[i] = smGain(gv[i]); }
+      if (T.pn) smBlock(T.pn, p, n, pv);
       for (const k of T.clips) {
         const a = Math.max(p, k.at), b = Math.min(p + n, k.at + k.len);
         if (b <= a) continue;
@@ -1363,18 +1378,21 @@ function sesMixer(s) {
         const rd = (src, cc, f, q, o, off) => readSrcOf(c, src, cc, f, q, o, off);
         readList(c.lists[0], c.cum[0], s0, m, buf, 0, rd);
         if (ch > 1) readList(c.lists[1], c.cum[1], s0, m, buf, m, rd);
-        const g = T.g * (k.gain <= -96 ? 0 : Math.pow(10, k.gain / 20));
-        let gl, gr;
-        if (ch === 1) { const th = (T.pan + 1) * Math.PI / 4; gl = g * Math.cos(th); gr = g * Math.sin(th); }
-        else { gl = g * (T.pan > 0 ? 1 - T.pan : 1); gr = g * (T.pan < 0 ? 1 + T.pan : 1); }
-        const o = a - p, q0 = a - k.at, R = ch > 1 ? m : 0, fi = k.fin, fo = k.fout, len = k.len;
+        const kg = k.gain <= -96 ? 0 : Math.pow(10, k.gain / 20), g = (T.vol ? 1 : T.g) * kg;
+        const [pl, pr] = smPanGains(T.pan, ch === 1);
+        const o = a - p, q0 = a - k.at, R = ch > 1 ? m : 0, fi = k.fin, fo = k.fout, len = k.len, x = T.xf.get(k.id) || { xi: 0, xo: 0 };
         for (let i = 0; i < m; i++) {
           const q = q0 + i;
           let f = 1;
           if (fi > 0 && q < fi) f *= fadeGain(q / Math.max(1, fi - 1), "lin", 0);
           if (fo > 0 && q >= len - fo) f *= fadeGain((len - 1 - q) / Math.max(1, fo - 1), "lin", 0);
-          out[o + i] += buf[i] * gl * f;
-          out[stride + o + i] += buf[R + i] * gr * f;
+          if (x.xi) f *= smXin(q, x.xi);
+          if (x.xo) f *= smXout(q, len, x.xo);
+          let gl = pl, gr = pr;
+          if (T.pn) { const v = pv[o + i]; if (ch === 1) { const th = (v + 1) * Math.PI / 4; gl = Math.cos(th); gr = Math.sin(th); } else { gl = v > 0 ? 1 - v : 1; gr = v < 0 ? 1 + v : 1; } }
+          const gg = g * f * (T.vol ? gv[o + i] : 1);
+          out[o + i] += buf[i] * gl * gg;
+          out[stride + o + i] += buf[R + i] * gr * gg;
         }
       }
     }

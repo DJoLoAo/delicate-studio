@@ -1021,5 +1021,18 @@
  "The listener page plays it as a replay with the tracklist, under your live stream. Listeners need no account.": "लिसनर पेज इसे आपकी लाइव स्ट्रीम के नीचे ट्रैकलिस्ट के साथ रीप्ले के रूप में चलाता है। सुनने वालों को खाते की ज़रूरत नहीं।",
  "private: only you on SoundCloud": "निजी: SoundCloud पर सिर्फ़ आप",
  "{n} is not connected. Connect it in Delicate DJ under Settings → Sources.": "{n} जुड़ा नहीं है। इसे Delicate DJ में सेटिंग्स → स्रोत में जोड़ें।",
- "{n} is not set up on this server yet.": "{n} अभी इस सर्वर पर सेट नहीं है।"
+ "{n} is not set up on this server yet.": "{n} अभी इस सर्वर पर सेट नहीं है।",
+ "Clear the pan automation": "पैन ऑटोमेशन साफ़ करें",
+ "Clear the volume automation": "वॉल्यूम ऑटोमेशन साफ़ करें",
+ "Delete the point": "पॉइंट हटाएँ",
+ "Hide the pan automation": "पैन ऑटोमेशन छिपाएँ",
+ "Hide the volume automation": "वॉल्यूम ऑटोमेशन छिपाएँ",
+ "Pan automation": "पैन ऑटोमेशन",
+ "Pan automation shown — click to hide": "पैन ऑटोमेशन दिख रहा है — छिपाने के लिए क्लिक करें",
+ "Show the automation": "ऑटोमेशन दिखाएँ",
+ "Show the pan automation": "पैन ऑटोमेशन दिखाएँ",
+ "Show the volume automation": "वॉल्यूम ऑटोमेशन दिखाएँ",
+ "Volume automation": "वॉल्यूम ऑटोमेशन",
+ "Volume automation shown — click for pan": "वॉल्यूम ऑटोमेशन दिख रहा है — पैन के लिए क्लिक करें",
+ "click to add a point": "पॉइंट जोड़ने के लिए क्लिक करें"
 }

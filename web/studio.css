@@ -566,9 +566,13 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 .sdot{width:calc(8px*var(--fs));height:calc(8px*var(--fs));border-radius:50%;flex:none}
 .stn{flex:1;min-width:0;text-align:left;background:none;border:0;color:var(--white);font:inherit;font-size:calc(11px*var(--fs));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;padding:0}
 .stn:hover{color:var(--gold)}
-.stm,.sts{flex:none;background:var(--bg3);border:1px solid var(--border);color:var(--gray);font:inherit;font-size:calc(9px*var(--fs));width:calc(20px*var(--fs));height:calc(18px*var(--fs));cursor:pointer;padding:0}
+.stm,.sts,.sta{flex:none;background:var(--bg3);border:1px solid var(--border);color:var(--gray);font:inherit;font-size:calc(9px*var(--fs));width:calc(20px*var(--fs));height:calc(18px*var(--fs));cursor:pointer;padding:0}
 .stm.on{color:var(--bg);background:var(--gold);border-color:var(--gold)}
 .sts.on{color:var(--bg);background:var(--blue);border-color:var(--blue)}
+.sta.has{color:var(--pink);border-color:var(--pink)}
+.sta.on{color:var(--bg);background:var(--pink);border-color:var(--pink)}
+.st2.auto input{accent-color:var(--pink)}
+.st2.auto b{color:var(--pink)}
 .sestrack .x{flex:none}
 .st2{display:flex;align-items:center;gap:calc(6px*var(--fs));font-size:calc(9px*var(--fs));color:var(--dim)}
 .st2 span{flex:none;width:calc(24px*var(--fs));text-transform:uppercase;letter-spacing:.06em}
@@ -585,7 +589,7 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 #dlg .djother{align-self:flex-start}
 .sesdoc .sdn{flex:1;min-width:0;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sesdoc .sdi{flex:none;color:var(--dim);font-size:calc(10px*var(--fs))}
-@media (max-width:760px){.seshd,.sesheads{width:calc(156px*var(--fs))}.st2 b{display:none}#ses .docmeta{flex:1 1 0}#sesClose{order:1}#sesTools{order:2;flex-basis:100%}}
+@media (max-width:760px){.seshd,.sesheads{width:calc(172px*var(--fs))}.st2 b{display:none}#ses .docmeta{flex:1 1 0}#sesClose{order:1}#sesTools{order:2;flex-basis:100%}}
 
 #dlg .pbto{align-self:flex-start;margin-bottom:calc(4px*var(--fs))}
 #dlg .pbrow{display:flex;align-items:center;gap:calc(8px*var(--fs))}

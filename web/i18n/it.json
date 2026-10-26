@@ -1021,5 +1021,18 @@
  "The listener page plays it as a replay with the tracklist, under your live stream. Listeners need no account.": "La pagina d'ascolto lo riproduce come replay con la tracklist, sotto la tua diretta. Chi ascolta non ha bisogno di un account.",
  "private: only you on SoundCloud": "privato: solo tu su SoundCloud",
  "{n} is not connected. Connect it in Delicate DJ under Settings → Sources.": "{n} non è collegato. Collegalo in Delicate DJ in Impostazioni → Sorgenti.",
- "{n} is not set up on this server yet.": "{n} non è ancora configurato su questo server."
+ "{n} is not set up on this server yet.": "{n} non è ancora configurato su questo server.",
+ "Clear the pan automation": "Cancella l'automazione del pan",
+ "Clear the volume automation": "Cancella l'automazione del volume",
+ "Delete the point": "Elimina il punto",
+ "Hide the pan automation": "Nascondi l'automazione del pan",
+ "Hide the volume automation": "Nascondi l'automazione del volume",
+ "Pan automation": "Automazione del pan",
+ "Pan automation shown — click to hide": "Automazione del pan visibile — fai clic per nascondere",
+ "Show the automation": "Mostra l'automazione",
+ "Show the pan automation": "Mostra l'automazione del pan",
+ "Show the volume automation": "Mostra l'automazione del volume",
+ "Volume automation": "Automazione del volume",
+ "Volume automation shown — click for pan": "Automazione del volume visibile — fai clic per il pan",
+ "click to add a point": "fai clic per aggiungere un punto"
 }
