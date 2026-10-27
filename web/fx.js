@@ -1,12 +1,13 @@
 const FX_MAX_BANDS = 8;
 const FX_TYPES = [{ v: "bell", label: "Bell" }, { v: "lowshelf", label: "Low shelf" }, { v: "highshelf", label: "High shelf" }, { v: "notch", label: "Notch" }];
-const FX_FLAT = { hp: { on: false, f: 30, ord: 4 }, lp: { on: false, f: 18000, ord: 4 }, bands: [], comp: { on: false, thr: -18, ratio: 3, knee: 6, att: 5, rel: 150, makeup: 0 }, lim: { on: false, ceil: -1, look: 2, rel: 100 }, out: 0, bpm: 120, mod: { mode: "off", rate: 0.5, depth: 0.5, fb: 0.5, mix: 0.5 }, delay: { on: false, ms: 250, fb: 0.45, mix: 0.35, pp: false, note: "free" }, rev: { on: false, decay: 2, damp: 0.5, pre: 10, mix: 0.25, cut: 180 }, gate: { on: false, rate: 4, depth: 1, square: true, note: "free" } };
+const FX_FLAT = { hp: { on: false, f: 30, ord: 4 }, lp: { on: false, f: 18000, ord: 4 }, bands: [], comp: { on: false, thr: -18, ratio: 3, knee: 6, att: 5, rel: 150, makeup: 0 }, lim: { on: false, ceil: -1, look: 2, rel: 100 }, out: 0, bpm: 120, mod: { mode: "off", rate: 0.5, depth: 0.5, fb: 0.5, mix: 0.5 }, delay: { on: false, ms: 250, fb: 0.45, mix: 0.35, pp: false, note: "free" }, rev: { on: false, decay: 2, damp: 0.5, pre: 10, mix: 0.25, cut: 180 }, gate: { on: false, rate: 4, depth: 1, square: true, note: "free" }, ds: { on: false, f: 6500, thr: -30, range: 6 } };
 const FX_MODS = [{ v: "off", label: "Off" }, { v: "chorus", label: "Chorus" }, { v: "flanger", label: "Flanger" }, { v: "phaser", label: "Phaser" }];
 const FX_NOTES = [{ v: "free", label: "free" }, { v: "1/16", label: "1/16" }, { v: "1/8", label: "1/8" }, { v: "3/16", label: "1/8 dotted" }, { v: "1/4", label: "1/4" }, { v: "3/8", label: "1/4 dotted" }, { v: "1/2", label: "1/2" }, { v: "3/4", label: "1/2 dotted" }, { v: "1/1", label: "1 bar" }];
 const FX_FACTORY = [
   { v: "flat", label: "Flat", cfg: {} },
   { v: "deck", label: "DJ deck EQ", cfg: { bands: [{ type: "lowshelf", f: 200, g: 0, q: 0.7071068 }, { type: "bell", f: 1000, g: 0, q: 0.7 }, { type: "highshelf", f: 2500, g: 0, q: 0.7071068 }] } },
   { v: "mic", label: "DJ mic voice", cfg: { hp: { on: true, f: 100, ord: 2 }, comp: { on: true, thr: -18, ratio: 3, knee: 6, att: 5, rel: 150, makeup: 3 } } },
+  { v: "deess", label: "Vocal de-esser", cfg: { hp: { on: true, f: 80, ord: 2 }, ds: { on: true, f: 6500, thr: -30, range: 8 } } },
   { v: "atmo", label: "Room mic (atmo)", cfg: { hp: { on: true, f: 200, ord: 2 } } },
   { v: "master", label: "DJ master limiter", cfg: { lim: { on: true, ceil: -1, look: 1, rel: 100 } } },
   { v: "rumble", label: "Vinyl rumble cut", cfg: { hp: { on: true, f: 25, ord: 4 } } },
@@ -20,14 +21,14 @@ const FX_FACTORY = [
   { v: "dphaser", label: "DJ deck phaser", cfg: { mod: { mode: "phaser", rate: 1.05, depth: 1, fb: 0.35, mix: 0.5 } } },
   { v: "glue", label: "Mastering glue", cfg: { hp: { on: true, f: 20, ord: 2 }, comp: { on: true, thr: -14, ratio: 2, knee: 6, att: 30, rel: 200, makeup: 2 }, lim: { on: true, ceil: -1, look: 2, rel: 100 } } }
 ];
-const fx = { target: null, edCfg: null, commitT: 0, cfg: null, preset: "flat", match: true, listen: "off", band: 0, job: null, seq: 0, busy: false, again: false, done: null, err: null, meter: { comp: 0, lim: 0, match: 0 }, poll: 0, drag: null, user: [] };
+const fx = { target: null, edCfg: null, commitT: 0, cfg: null, preset: "flat", match: true, listen: "off", band: 0, job: null, seq: 0, busy: false, again: false, done: null, err: null, meter: { comp: 0, lim: 0, match: 0, ds: 0 }, poll: 0, drag: null, user: [] };
 
 function fxClone(v) { return JSON.parse(JSON.stringify(v)); }
 
 function fxMake(part) {
   const p = part || {};
   const c = fxClone(FX_FLAT);
-  for (const k of ["hp", "lp", "comp", "lim", "mod", "delay", "rev", "gate"]) if (p[k]) Object.assign(c[k], p[k]);
+  for (const k of ["hp", "lp", "comp", "lim", "mod", "delay", "rev", "gate", "ds"]) if (p[k]) Object.assign(c[k], p[k]);
   if (Number.isFinite(Number(p.bpm))) c.bpm = Math.max(40, Math.min(240, Number(p.bpm)));
   fxSync(c);
   if (Array.isArray(p.bands)) c.bands = p.bands.slice(0, FX_MAX_BANDS).map(b => ({ on: b.on !== false, type: FX_TYPES.some(t => t.v === b.type) ? b.type : "bell", f: Number(b.f) || 1000, g: Number(b.g) || 0, q: Number(b.q) || 0.7071068 }));
@@ -101,7 +102,7 @@ function fxSend() {
 function fxListen(mode) {
   fx.listen = mode;
   document.querySelectorAll("#fxListen button").forEach(b => b.classList.toggle("on", b.dataset.v === mode));
-  fx.meter = { comp: 0, lim: 0, match: 0 };
+  fx.meter = { comp: 0, lim: 0, match: 0, ds: 0 };
   clearInterval(fx.poll);
   if (mode === "proc") fx.poll = setInterval(fxPoll, 100);
   fxSend();
@@ -116,6 +117,7 @@ async function fxPoll() {
     if (!r.on) return;
     fx.meter.comp = Math.max(r.comp, fx.meter.comp * 0.8);
     fx.meter.lim = Math.max(r.lim, fx.meter.lim * 0.8);
+    fx.meter.ds = Math.max(r.ds || 0, fx.meter.ds * 0.8);
     fx.meter.match = r.match;
     fxMeters();
   } catch {}
@@ -379,6 +381,8 @@ function fxMeters() {
   const bar = (id, db) => { const el = $(id); if (el) el.querySelector("i").style.width = Math.min(100, db / 20 * 100) + "%"; };
   bar("fxCpGr", fx.meter.comp);
   bar("fxLmGr", fx.meter.lim);
+  bar("fxDsGr", fx.meter.ds);
+  if ($("fxDsGrV")) $("fxDsGrV").textContent = fx.meter.ds > 0.05 ? "−" + fx.meter.ds.toFixed(1) + " dB" : "";
   if ($("fxCpGrV")) $("fxCpGrV").textContent = fx.meter.comp > 0.05 ? "−" + fx.meter.comp.toFixed(1) + " dB" : "";
   if ($("fxLmGrV")) $("fxLmGrV").textContent = fx.meter.lim > 0.05 ? "−" + fx.meter.lim.toFixed(1) + " dB" : "";
   const m = $("fxMatchV");
@@ -458,6 +462,11 @@ function fxRender() {
   sl("fxRvMix", Math.round(c.rev.mix * 100), pc(c.rev.mix));
   document.querySelectorAll("#fxBody .fxrv").forEach(el => el.classList.toggle("hidden", !c.rev.on));
   onoff("fxGtOn", c.gate.on);
+  onoff("fxDsOn", c.ds.on);
+  sl("fxDsF", c.ds.f, fxHz(c.ds.f));
+  sl("fxDsThr", c.ds.thr, c.ds.thr.toFixed(1) + " dB");
+  sl("fxDsRange", c.ds.range, c.ds.range.toFixed(1) + " dB");
+  document.querySelectorAll("#fxBody .fxds").forEach(el => el.classList.toggle("hidden", !c.ds.on));
   document.querySelectorAll("#fxGtShape button").forEach(x => x.classList.toggle("on", x.dataset.v === (c.gate.square ? "square" : "sine")));
   fxNoteShow("fxGtNote", c.gate.note);
   if (document.activeElement !== $("fxGtRate")) $("fxGtRate").value = String(c.gate.rate);
@@ -570,7 +579,7 @@ function fxSesOpen(target) {
   ["dgBody", "nrBody", "humBody", "ldBody", "mdBody", "trBody"].forEach(id => $(id).classList.add("hidden"));
   $("fxBody").classList.remove("hidden");
   d.classList.remove("hidden");
-  fx.meter = { comp: 0, lim: 0, match: 0 };
+  fx.meter = { comp: 0, lim: 0, match: 0, ds: 0 };
   clearInterval(fx.poll);
   fx.poll = setInterval(fxPoll, 100);
   fxPresetsUi();
@@ -674,6 +683,10 @@ function wireFx() {
   slider("fxRvCut", v => { fx.cfg.rev.cut = v; });
   slider("fxRvMix", v => { fx.cfg.rev.mix = v / 100; });
   slider("fxGtDepth", v => { fx.cfg.gate.depth = v / 100; });
+  slider("fxDsF", v => { fx.cfg.ds.f = v; });
+  slider("fxDsThr", v => { fx.cfg.ds.thr = v; });
+  slider("fxDsRange", v => { fx.cfg.ds.range = v; });
+  seg("fxDsOn", v => { fx.cfg.ds.on = v === "on"; });
   seg("fxMdMode", v => { fx.cfg.mod.mode = v; });
   seg("fxDlOn", v => { fx.cfg.delay.on = v === "on"; });
   seg("fxDlPp", v => { fx.cfg.delay.pp = v === "on"; });

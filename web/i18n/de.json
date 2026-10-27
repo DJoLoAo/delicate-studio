@@ -1119,5 +1119,20 @@
  "DJ deck delay": "DJ-Deck-Delay",
  "DJ deck reverb": "DJ-Deck-Hall",
  "DJ deck flanger": "DJ-Deck-Flanger",
- "DJ deck phaser": "DJ-Deck-Phaser"
+ "DJ deck phaser": "DJ-Deck-Phaser",
+ "Stretch and pitch": "Dehnen und Tonhöhe",
+ "Stretch and pitch…": "Dehnen und Tonhöhe…",
+ "Speed": "Tempo",
+ "Tempo from": "Tempo von",
+ "to": "auf",
+ "Pitch": "Tonhöhe",
+ "Fine": "Fein",
+ "semitones": "Halbtöne",
+ "cents": "Cent",
+ "Speed changes the length and keeps the pitch; Pitch changes the pitch and keeps the length. The same time-stretch as on the DJ decks.": "Tempo ändert die Länge und behält die Tonhöhe; Tonhöhe ändert die Tonhöhe und behält die Länge. Dasselbe Time-Stretching wie auf den DJ-Decks.",
+ "Speed goes from 25 % to 400 %.": "Das Tempo geht von 25 % bis 400 %.",
+ "Speed and pitch are unchanged, so there is nothing to do.": "Tempo und Tonhöhe sind unverändert, es gibt nichts zu tun.",
+ "De-esser": "De-Esser",
+ "Frequency": "Frequenz",
+ "Vocal de-esser": "Stimm-De-Esser"
 }

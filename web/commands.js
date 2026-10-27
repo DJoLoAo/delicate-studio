@@ -107,6 +107,7 @@ const CMDS = [
   { id: "fadeIn", g: "Process", label: "Fade in…", run: () => pxFadeDlg("in"), doc: true, when: () => selOn(), kw: "fade in ramp curve envelope volume rise" },
   { id: "fadeOut", g: "Process", label: "Fade out…", run: () => pxFadeDlg("out"), doc: true, when: () => selOn(), kw: "fade out ramp curve envelope volume fall" },
   { id: "dcOff", g: "Process", label: "Remove DC offset", run: () => pxRun("dc"), doc: true, kw: "dc offset bias centre center zero line" },
+  { id: "stretch", g: "Process", label: "Stretch and pitch…", run: () => stDialog(), doc: true, kw: "time stretch tempo speed slower faster pitch shift transpose semitone key bpm length" },
   { id: "reverse", g: "Process", label: "Reverse", run: () => pxRun("reverse"), doc: true, kw: "backwards backward reversed play back" },
   { id: "invert", g: "Process", label: "Invert", run: () => pxRun("invert"), doc: true, kw: "polarity phase flip upside down inverse" },
   { id: "swap", g: "Process", label: "Swap channels", run: () => pxRun("swap"), doc: true, when: () => ed.doc.channels === 2, kw: "swap left right channels stereo flip exchange" },

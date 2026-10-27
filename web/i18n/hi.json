@@ -1119,5 +1119,20 @@
  "DJ deck delay": "DJ डेक डिले",
  "DJ deck reverb": "DJ डेक रिवर्ब",
  "DJ deck flanger": "DJ डेक फ़्लेंजर",
- "DJ deck phaser": "DJ डेक फ़ेज़र"
+ "DJ deck phaser": "DJ डेक फ़ेज़र",
+ "Stretch and pitch": "स्ट्रेच और पिच",
+ "Stretch and pitch…": "स्ट्रेच और पिच…",
+ "Speed": "गति",
+ "Tempo from": "टेम्पो से",
+ "to": "तक",
+ "Pitch": "पिच",
+ "Fine": "बारीक",
+ "semitones": "सेमीटोन",
+ "cents": "सेंट",
+ "Speed changes the length and keeps the pitch; Pitch changes the pitch and keeps the length. The same time-stretch as on the DJ decks.": "गति लंबाई बदलती है और पिच रखती है; पिच, पिच बदलती है और लंबाई रखती है। वही टाइम-स्ट्रेच जो DJ डेक पर है।",
+ "Speed goes from 25 % to 400 %.": "गति 25 % से 400 % तक होती है।",
+ "Speed and pitch are unchanged, so there is nothing to do.": "गति और पिच नहीं बदली, कुछ करने को नहीं है।",
+ "De-esser": "डी-एसर",
+ "Frequency": "आवृत्ति",
+ "Vocal de-esser": "वोकल डी-एसर"
 }

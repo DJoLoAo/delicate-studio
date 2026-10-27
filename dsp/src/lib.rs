@@ -104,6 +104,7 @@ pub mod rs;
 pub mod sheal;
 pub mod space;
 pub mod spec;
+pub mod stretch;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
@@ -874,6 +875,68 @@ mod wasm {
     #[unsafe(no_mangle)]
     pub extern "C" fn rk_info(slot: u32) -> *mut f64 {
         rkm(slot).map(|r| r.info.as_mut_ptr()).unwrap_or(std::ptr::null_mut())
+    }
+
+    static mut ST: Option<crate::stretch::Stretch> = None;
+
+    fn stm() -> Option<&'static mut crate::stretch::Stretch> {
+        unsafe { (*std::ptr::addr_of_mut!(ST)).as_mut() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn st_open(ch: u32, start: f64, rate: f64, pitch: f64) -> i32 {
+        if ch == 0 || ch > 8 || !(rate > 0.0) || !(pitch > 0.0) {
+            return fail("stretch settings out of range".into());
+        }
+        let mut s = crate::stretch::Stretch::new(ch as usize);
+        s.begin(start, rate, pitch);
+        unsafe { *std::ptr::addr_of_mut!(ST) = Some(s); }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn st_first() -> f64 {
+        stm().map(|s| s.first() as f64).unwrap_or(0.0)
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn st_need() -> f64 {
+        stm().map(|s| s.need_end() as f64).unwrap_or(0.0)
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn st_have() -> f64 {
+        stm().map(|s| s.have_end() as f64).unwrap_or(0.0)
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn st_in(m: u32) -> *mut f32 {
+        stm().map(|s| s.stage_in(m as usize)).unwrap_or(std::ptr::null_mut())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn st_push(m: u32) {
+        if let Some(s) = stm() {
+            s.push(m as usize);
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn st_run(want: u32) -> i32 {
+        match stm() {
+            Some(s) => s.run(want as usize) as i32,
+            None => fail("stretch is not open".into()),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn st_out() -> *const f32 {
+        stm().map(|s| s.out.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn st_close() {
+        unsafe { *std::ptr::addr_of_mut!(ST) = None; }
     }
 
     static mut MD: Option<crate::midi::Melody> = None;

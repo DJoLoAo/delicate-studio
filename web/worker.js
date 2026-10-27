@@ -1509,9 +1509,10 @@ function sesRackMeter(key) {
   const R = SES_RK.racks.get(key);
   if (!R) return { t: "rkmeter", on: false };
   const v = new Float64Array(R.x.memory.buffer, R.x.rk_info(R.slot), 4);
-  const out = { t: "rkmeter", on: true, comp: v[0], lim: v[1], match: 0 };
+  const out = { t: "rkmeter", on: true, comp: v[0], lim: v[1], match: 0, ds: v[3] };
   v[0] = 0;
   v[1] = 0;
+  v[3] = 0;
   return out;
 }
 
@@ -2969,18 +2970,19 @@ function humTune(x, slot, raw, only) {
   return h;
 }
 
-const RK_BANDS = 8, RK_LEN = 80, RK_TYPES = ["bell", "lowshelf", "highshelf", "notch"], RK_MODS = ["off", "chorus", "flanger", "phaser"];
+const RK_BANDS = 8, RK_LEN = 84, RK_TYPES = ["bell", "lowshelf", "highshelf", "notch"], RK_MODS = ["off", "chorus", "flanger", "phaser"];
 
 function rkSp(o) {
   const num = (v, lo, hi, d) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
-  const md = o.mod || {}, dl = o.delay || {}, rv = o.rev || {}, gt = o.gate || {};
+  const md = o.mod || {}, dl = o.delay || {}, rv = o.rev || {}, gt = o.gate || {}, ds = o.ds || {};
   const note = v => typeof v === "string" && /^(free|\d+\/\d+d?)$/.test(v) ? v : "free";
   return {
     bpm: num(o.bpm, 40, 240, 120),
     mod: { mode: RK_MODS.includes(md.mode) ? md.mode : "off", rate: num(md.rate, 0.01, 20, 0.5), depth: num(md.depth, 0, 1, 0.5), fb: num(md.fb, 0, 0.95, 0.5), mix: num(md.mix, 0, 1, 0.5) },
     delay: { on: !!dl.on, ms: num(dl.ms, 1, 2000, 250), fb: num(dl.fb, 0, 0.95, 0.45), mix: num(dl.mix, 0, 1, 0.35), pp: !!dl.pp, note: note(dl.note) },
     rev: { on: !!rv.on, decay: num(rv.decay, 0.1, 20, 2), damp: num(rv.damp, 0, 1, 0.5), pre: num(rv.pre, 0, 200, 10), mix: num(rv.mix, 0, 1, 0.25), cut: num(rv.cut, 10, 2000, 180) },
-    gate: { on: !!gt.on, rate: num(gt.rate, 0.05, 40, 4), depth: num(gt.depth, 0, 1, 1), square: gt.square !== false, note: note(gt.note) }
+    gate: { on: !!gt.on, rate: num(gt.rate, 0.05, 40, 4), depth: num(gt.depth, 0, 1, 1), square: gt.square !== false, note: note(gt.note) },
+    ds: { on: !!ds.on, f: num(ds.f, 1000, 16000, 6000), thr: num(ds.thr, -60, 0, -30), range: num(ds.range, 0, 24, 6) }
   };
 }
 
@@ -3006,7 +3008,8 @@ function rkCfg(m) {
   a.set([RK_MODS.indexOf(sp.mod.mode), sp.mod.rate, sp.mod.depth, sp.mod.fb, sp.mod.mix,
     on(sp.delay.on), sp.delay.ms, sp.delay.fb, sp.delay.mix, on(sp.delay.pp),
     on(sp.rev.on), sp.rev.decay, sp.rev.damp, sp.rev.pre, sp.rev.mix, sp.rev.cut,
-    on(sp.gate.on), sp.gate.rate, sp.gate.depth, on(sp.gate.square)], 60);
+    on(sp.gate.on), sp.gate.rate, sp.gate.depth, on(sp.gate.square),
+    on(sp.ds.on), sp.ds.f, sp.ds.thr, sp.ds.range], 60);
   return a;
 }
 
@@ -3023,9 +3026,10 @@ function rkMeter() {
   const pv = FX.pv;
   if (FX.mode === "off" || FX.kind !== "rk" || !pv || pv.kind !== "rk") return { t: "rkmeter", on: false };
   const v = new Float64Array(pv.x.memory.buffer, pv.x.rk_info(0), 4);
-  const out = { t: "rkmeter", on: true, comp: v[0], lim: v[1], match: v[2] };
+  const out = { t: "rkmeter", on: true, comp: v[0], lim: v[1], match: v[2], ds: v[3] };
   v[0] = 0;
   v[1] = 0;
+  v[3] = 0;
   return out;
 }
 
@@ -3461,7 +3465,76 @@ function pxJob(m, c) {
   return job;
 }
 
+function stMarks(marks, a, b, n) {
+  const d = n - (b - a), k = n / Math.max(1, b - a);
+  const at = p => p <= a ? p : p >= b ? p + d : a + Math.round((p - a) * k);
+  return marks.map(m => m.kind === "view" ? m : Object.assign({}, m, { a: at(m.a), b: m.kind === "range" ? at(m.b) : m.b }));
+}
+
+async function stApply(m) {
+  const c = cur;
+  const x = await dspExports();
+  if (cur !== c) throw new Error("stale");
+  const ch = c.meta.channels, sr = c.meta.sampleRate, F = c.len;
+  let a = 0, b = F;
+  if (m.rb > m.ra) { a = clampI(m.ra, 0, F); b = clampI(m.rb, 0, F); }
+  const speed = Math.max(0.25, Math.min(4, Number(m.speed) || 1)), semis = Math.max(-24, Math.min(24, Number(m.semis) || 0)) + Math.max(-100, Math.min(100, Number(m.cents) || 0)) / 100;
+  const pitch = Math.pow(2, semis / 12);
+  if (b - a < sr * 0.05) throw new Error("nosel");
+  if (Math.abs(speed - 1) < 1e-6 && Math.abs(semis) < 1e-6) throw new Error("st-none");
+  const total = Math.max(1, Math.round((b - a) / speed));
+  const job = pxJob(m, c);
+  const lists = c.lists, cums = c.cum;
+  const rd = (src, cc, f, n, out, off) => readSrcOf(c, src, cc, f, n, out, off);
+  const snap = { allocs: c.allocs.length, heapEnd: c.heapEnd, pkEnd: c.pkEnd, ver: c.ver };
+  const CH = Math.min(1 << 20, total), FEED = 16384;
+  const bufs = Array.from({ length: ch }, () => new Float32Array(CH)), segs = Array.from({ length: ch }, () => []);
+  let fill = 0;
+  const flush = () => { if (!fill) return; for (let k = 0; k < ch; k++) segs[k].push([allocData(bufs[k].subarray(0, fill)), 0, 0, fill]); fill = 0; };
+  try {
+    if (x.st_open(ch, a, speed, pitch) !== 0) throw new Error(dspError(x));
+    let fed = x.st_first(), made = 0;
+    while (made < total) {
+      if (x.st_need() > x.st_have()) {
+        const inb = wasmF32(x, x.st_in(FEED), FEED * ch);
+        for (let k = 0; k < ch; k++) readList(lists[k], cums[k], fed, FEED, inb, k * FEED, rd);
+        x.st_push(FEED);
+        fed += FEED;
+        continue;
+      }
+      const want = Math.min(65536, total - made, CH - fill);
+      const got = x.st_run(want);
+      if (got < 0) throw new Error(dspError(x));
+      const out = wasmF32(x, x.st_out(), got * ch);
+      for (let k = 0; k < ch; k++) bufs[k].set(out.subarray(k * got, (k + 1) * got), fill);
+      fill += got;
+      made += got;
+      if (fill === CH) flush();
+      await job.tick(made / total);
+    }
+    flush();
+  } catch (e) {
+    x.st_close();
+    job.done();
+    nrRollback(c, snap);
+    throw e;
+  }
+  x.st_close();
+  job.done();
+  return enqueue(() => {
+    if (cur !== c || c.lists !== lists) { nrRollback(c, snap); throw new Error("changed"); }
+    const X = Math.max(0, Math.round((Number(m.xfade) || 0) * sr / 1000));
+    const next = opReplace(c.lists, a, b, segs, X, c.io);
+    const before = { a: clampI(m.a, 0, F), b: clampI(m.b, 0, F), cursor: clampI(m.cursor, 0, F) };
+    const after = { a, b: a + total, cursor: a };
+    pushHist({ op: "stretch", a, b, n: total, ch: null }, next, before, after, stMarks(c.hist[c.idx].marks, a, b, total));
+    persist();
+    return statePayload(m.have, { t: "state", sel: after });
+  });
+}
+
 async function pxApply(m) {
+  if (m.op === "stretch") return stApply(m);
   const c = cur;
   if (!c || c.meta.id !== m.id) throw new Error("stale");
   const op = m.op, ref = PX_REF[op] || null;

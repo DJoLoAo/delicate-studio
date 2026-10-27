@@ -1119,5 +1119,20 @@
  "DJ deck delay": "Delay de platine DJ",
  "DJ deck reverb": "Réverbération de platine DJ",
  "DJ deck flanger": "Flanger de platine DJ",
- "DJ deck phaser": "Phaser de platine DJ"
+ "DJ deck phaser": "Phaser de platine DJ",
+ "Stretch and pitch": "Étirement et hauteur",
+ "Stretch and pitch…": "Étirement et hauteur…",
+ "Speed": "Vitesse",
+ "Tempo from": "Tempo de",
+ "to": "à",
+ "Pitch": "Hauteur",
+ "Fine": "Fin",
+ "semitones": "demi-tons",
+ "cents": "cents",
+ "Speed changes the length and keeps the pitch; Pitch changes the pitch and keeps the length. The same time-stretch as on the DJ decks.": "La vitesse change la durée et garde la hauteur ; la hauteur change la hauteur et garde la durée. Le même étirement temporel que sur les platines DJ.",
+ "Speed goes from 25 % to 400 %.": "La vitesse va de 25 % à 400 %.",
+ "Speed and pitch are unchanged, so there is nothing to do.": "Vitesse et hauteur sont inchangées, il n'y a rien à faire.",
+ "De-esser": "Dé-esseur",
+ "Frequency": "Fréquence",
+ "Vocal de-esser": "Dé-esseur voix"
 }

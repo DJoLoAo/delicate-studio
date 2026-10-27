@@ -1,4 +1,4 @@
-const PX_NAMES = { fadein: "Fade in", fadeout: "Fade out", dc: "Remove DC offset", reverse: "Reverse", invert: "Invert", swap: "Swap channels", lr: "Copy left channel to right", rl: "Copy right channel to left", mono: "Mix to mono", msenc: "Mid/Side encode", msdec: "Mid/Side decode" };
+const PX_NAMES = { fadein: "Fade in", fadeout: "Fade out", dc: "Remove DC offset", reverse: "Reverse", invert: "Invert", swap: "Swap channels", lr: "Copy left channel to right", rl: "Copy right channel to left", mono: "Mix to mono", msenc: "Mid/Side encode", msdec: "Mid/Side decode", stretch: "Stretch and pitch" };
 const PX_CURVES = { lin: { shape: "lin", k: 0 }, log: { shape: "lin", k: 0.5 }, exp: { shape: "lin", k: -0.5 }, cos: { shape: "cos", k: 0 } };
 const PX_BOX = 9, PX_TOP = 3, PX_DEAD = 6, PX_SPAN = 120;
 
@@ -71,6 +71,7 @@ async function pxRun(op, extra) {
 function pxErr(m) {
   if (m === "dc-none") { flash(t("There is no DC offset to remove.")); return true; }
   if (m === "px-stereo") { tell(t("This works on stereo files.")); return true; }
+  if (m === "st-none") { flash(t("Speed and pitch are unchanged, so there is nothing to do.")); return true; }
   return false;
 }
 
@@ -248,4 +249,41 @@ function pxKeys(e) {
 function wirePx() {
   document.addEventListener("keydown", pxKeys, true);
   document.addEventListener("keyup", pxKeys, true);
+}
+
+function stLoad() {
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem("studioStretch") || "null"); } catch {}
+  const o = v && typeof v === "object" ? v : {};
+  return { speed: Number(o.speed) || 100, semis: Number(o.semis) || 0, cents: Number(o.cents) || 0, from: Number(o.from) || 0, to: Number(o.to) || 0 };
+}
+
+async function stDialog() {
+  if (!ed.doc || ed.editing) return;
+  const v = stLoad(), sel = selOn(), a = sel ? ed.sel.a : 0, b = sel ? ed.sel.b : ed.doc.frames;
+  const num = (name, val, unit, label) => `<label class="dfield stf"><span>${esc(t(label))}</span><input name="${name}" value="${esc(String(val || ""))}" inputmode="decimal" spellcheck="false" autocomplete="off"><em>${esc(unit)}</em></label>`;
+  const html = `<div class="stgrid">${num("speed", v.speed, "%", "Speed")}<div class="stbpm">${num("from", v.from || "", "BPM", "Tempo from")}${num("to", v.to || "", "BPM", "to")}</div>${num("semis", v.semis, t("semitones"), "Pitch")}${num("cents", v.cents, t("cents"), "Fine")}</div><div class="dnote" id="stInfo"></div><div class="dnote">${esc(t("Speed changes the length and keeps the pitch; Pitch changes the pitch and keeps the length. The same time-stretch as on the DJ decks."))}</div>`;
+  const read = f => {
+    const g = n => Number(String(f.querySelector(`[name=${n}]`).value).replace(",", ".").replace("−", "-"));
+    const speed = g("speed"), from = g("from"), to = g("to");
+    return { speed, semis: g("semis") || 0, cents: g("cents") || 0, from: from > 0 ? from : 0, to: to > 0 ? to : 0 };
+  };
+  const sync = (f, e) => {
+    const name = e && e.target && e.target.name;
+    if (name === "speed") { f.querySelector("[name=from]").value = ""; f.querySelector("[name=to]").value = ""; }
+    if (name === "from" || name === "to") { const r = read(f); if (r.from > 0 && r.to > 0) f.querySelector("[name=speed]").value = (Math.round(r.to / r.from * 10000) / 100).toString(); }
+    show(f);
+  };
+  const show = f => {
+    const r = read(f), ok = r.speed >= 25 && r.speed <= 400;
+    f.querySelector("[name=speed]").classList.toggle("bad", !ok);
+    const n = ok ? Math.round((b - a) * 100 / r.speed) : 0;
+    $("stInfo").textContent = (sel ? t("Selection") : t("Whole file")) + " · " + fmtTime(b - a) + (ok ? " → " + fmtTime(n) : "") + (r.semis || r.cents ? " · " + (r.semis + r.cents / 100 > 0 ? "+" : "") + (Math.round((r.semis + r.cents / 100) * 100) / 100) + " " + t("semitones") : "");
+  };
+  const res = await askForm(t("Stretch and pitch"), html, { ok: t("apply"), setup: f => { f.addEventListener("input", e => sync(f, e)); requestAnimationFrame(() => show(f)); }, read: () => read(document.querySelector("#dlg .dform")) });
+  if (!res) return;
+  const r = { speed: Number(res.speed), semis: Number(res.semis) || 0, cents: Number(res.cents) || 0, from: res.from, to: res.to };
+  if (!(r.speed >= 25 && r.speed <= 400)) { tell(t("Speed goes from 25 % to 400 %.")); return; }
+  try { localStorage.setItem("studioStretch", JSON.stringify(r)); } catch {}
+  return pxRun("stretch", { ra: a, rb: b, speed: r.speed / 100, semis: r.semis, cents: r.cents });
 }

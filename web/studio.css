@@ -467,6 +467,14 @@ canvas.ru{height:calc(34px*var(--fs))}
 #diag .fxhead{border-top:1px solid var(--border);padding-top:calc(8px*var(--fs))}
 #diag .fxoff{opacity:.45}
 #diag .fxnote{min-width:calc(104px*var(--fs))}
+#dlg .stgrid{display:flex;flex-direction:column;gap:calc(8px*var(--fs))}
+#dlg .stbpm{display:flex;gap:calc(8px*var(--fs))}
+#dlg .stbpm .dfield{flex:1}
+#dlg .stf{display:flex;align-items:center;gap:calc(8px*var(--fs))}
+#dlg .stf span{min-width:calc(78px*var(--fs))}
+#dlg .stf input{width:calc(80px*var(--fs))}
+#dlg .stf em{font-style:normal;color:var(--dim);font-size:calc(10px*var(--fs))}
+#dlg .stf input.bad{border-color:#ff6b5e}
 #diag .nin:disabled{opacity:.5}
 .fxgr{flex:1;max-width:calc(120px*var(--fs));height:calc(5px*var(--fs));background:var(--bg4);overflow:hidden;direction:rtl}
 .fxgr i{display:block;height:100%;width:0;background:var(--gold)}

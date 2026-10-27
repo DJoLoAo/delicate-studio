@@ -3,7 +3,8 @@ use crate::space::{Space, SP_AT, SP_LEN};
 use std::f64::consts::{PI, TAU};
 
 pub const MAX_BANDS: usize = 8;
-pub const CFG_LEN: usize = SP_AT + SP_LEN;
+pub const DS_AT: usize = SP_AT + SP_LEN;
+pub const CFG_LEN: usize = DS_AT + 4;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Kind {
@@ -105,6 +106,14 @@ pub struct Rack {
     gs: f64,
     drive: f32,
     space: Space,
+    ds: bool,
+    ds_thr: f64,
+    ds_range: f64,
+    ds_hp: Vec<Bq>,
+    ds_env: f64,
+    ds_att: f64,
+    ds_rel: f64,
+    ds_hi: Vec<f32>,
     lim_cfg: LimCfg,
     lim: Limiter,
     matching: bool,
@@ -140,6 +149,14 @@ impl Rack {
             gs: 0.0,
             drive: 1.0,
             space: Space::new(ch, sr),
+            ds: false,
+            ds_thr: -30.0,
+            ds_range: 6.0,
+            ds_hp: vec![Bq::default(); 2 * ch],
+            ds_env: 0.0,
+            ds_att: 0.0,
+            ds_rel: 0.0,
+            ds_hi: Vec::new(),
             lim_cfg: LimCfg { on: false, ceil: -1.0, look: 2.0, rel: 100.0 },
             lim,
             matching: false,
@@ -212,6 +229,18 @@ impl Rack {
         }
         self.drive = 10f64.powf(c[17].clamp(-24.0, 24.0) / 20.0) as f32;
         self.space.configure(c);
+        self.ds = c[DS_AT] != 0.0;
+        let qs = butter_qs(4);
+        let fc = c[DS_AT + 1].clamp(1000.0, 16000.0);
+        for (k, q) in self.ds_hp.iter_mut().enumerate() {
+            let (b, a) = coefs(Kind::LowPass, sr, fc, 0.0, qs[k % 2]);
+            q.b = b;
+            q.a = a;
+        }
+        self.ds_thr = c[DS_AT + 2].clamp(-60.0, 0.0);
+        self.ds_range = c[DS_AT + 3].clamp(0.0, 24.0);
+        self.ds_att = (-1.0 / (0.0005 * sr)).exp();
+        self.ds_rel = (-1.0 / (0.06 * sr)).exp();
         let m = c[18] != 0.0;
         if m != self.matching {
             self.matching = m;
@@ -246,6 +275,8 @@ impl Rack {
         }
         self.gs = 0.0;
         self.space.reset();
+        self.ds_hp.iter_mut().for_each(|q| q.z = [0.0; 2]);
+        self.ds_env = 0.0;
         self.lim.reset();
         self.match_reset();
         self.info = [0.0; 4];
@@ -292,6 +323,36 @@ impl Rack {
                 }
                 self.mid[c * m + i] = y as f32;
             }
+        }
+        if self.ds && self.ds_range > 0.0 {
+            self.ds_hi.resize(ch * m, 0.0);
+            for c in 0..ch {
+                for i in 0..m {
+                    let x = self.mid[c * m + i] as f64;
+                    let y = self.ds_hp[2 * c].run(x);
+                    let lo = self.ds_hp[2 * c + 1].run(y);
+                    self.ds_hi[c * m + i] = (x - lo) as f32;
+                }
+            }
+            let mut dsg = 0.0f64;
+            for i in 0..m {
+                let mut pk = 0.0f64;
+                for c in 0..ch {
+                    pk = pk.max(self.ds_hi[c * m + i].abs() as f64);
+                }
+                let a = if pk > self.ds_env { self.ds_att } else { self.ds_rel };
+                self.ds_env = a * self.ds_env + (1.0 - a) * pk;
+                let over = 20.0 * self.ds_env.max(1e-9).log10() - self.ds_thr;
+                let cut = over.clamp(0.0, self.ds_range);
+                if cut > 0.0 {
+                    dsg = dsg.max(cut);
+                    let g = 1.0 - 10f64.powf(-cut / 20.0) as f32;
+                    for c in 0..ch {
+                        self.mid[c * m + i] -= g * self.ds_hi[c * m + i];
+                    }
+                }
+            }
+            self.info[3] = self.info[3].max(dsg);
         }
         let mut gr = 0.0f64;
         if self.comp {
@@ -524,6 +585,44 @@ mod tests {
         assert!(r.info[1] > 5.0);
         let i = sr / 2;
         assert!((y[i + 100] as f64 / (x[i + 100] as f64 * 3.981)).abs() <= 1.0001);
+    }
+
+    #[test]
+    fn the_de_esser_turns_down_only_the_loud_highs() {
+        let sr = 48000;
+        let n = sr * 2;
+        let lo = sine(n, 300.0, sr as f64, 0.5);
+        let hi = sine(n, 10000.0, sr as f64, 0.3);
+        let x: Vec<f32> = lo.iter().zip(&hi).map(|(a, b)| a + b).collect();
+        let mut c = cfg();
+        c[DS_AT] = 1.0;
+        c[DS_AT + 1] = 5000.0;
+        c[DS_AT + 2] = -30.0;
+        c[DS_AT + 3] = 9.0;
+        let mut r = Rack::new(1, sr);
+        r.configure(&c).unwrap();
+        let y = process(&mut r, &x, n);
+        let band = |v: &[f32], f: f64| {
+            let (mut re, mut im) = (0.0f64, 0.0f64);
+            for (i, s) in v.iter().enumerate() {
+                let p = TAU * f * i as f64 / sr as f64;
+                re += *s as f64 * p.cos();
+                im += *s as f64 * p.sin();
+            }
+            (re * re + im * im).sqrt() * 2.0 / v.len() as f64
+        };
+        let tail = &y[sr..];
+        let h = 20.0 * (band(tail, 10000.0) / 0.3).log10();
+        let l = 20.0 * (band(tail, 300.0) / 0.5).log10();
+        assert!((h + 9.0).abs() < 1.0, "highs {h}");
+        assert!(l.abs() < 0.3, "lows {l}");
+        assert!((r.info[3] - 9.0).abs() < 0.01);
+        c[DS_AT + 2] = 0.0;
+        r.configure(&c).unwrap();
+        r.reset();
+        let quiet: Vec<f32> = lo.iter().map(|v| v * 0.5).collect();
+        let y = process(&mut r, &quiet, n);
+        assert!(y == quiet);
     }
 
     #[test]
