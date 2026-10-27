@@ -107,6 +107,7 @@ const CMDS = [
   { id: "ldLoud", g: "Edit", label: "Match loudness…", run: () => ldOpen("loud"), doc: true, kw: "lufs loudness target limiter louder master streaming ebu r128" },
   { id: "ldNorm", g: "Edit", label: "Normalize…", run: () => ldOpen("norm"), doc: true, kw: "normalise peak level maximize" },
   { id: "ldReport", g: "Edit", label: "Loudness report…", run: () => repOpen(), doc: true, kw: "loudness report lufs true peak lra spotify apple youtube ebu r128 podcast streaming clip dc offset bit depth analysis statistics" },
+  { id: "nullTest", g: "Edit", label: "Null test…", run: () => nlOpen(), doc: true, kw: "null test compare difference subtract invert phase identical bit exact two files versions a b" },
   { id: "ldAmp", g: "Edit", label: "Amplify…", run: () => ldOpen("amp"), doc: true, kw: "gain volume louder quieter level" },
   { id: "fadeIn", g: "Process", label: "Fade in…", run: () => pxFadeDlg("in"), doc: true, when: () => selOn(), kw: "fade in ramp curve envelope volume rise" },
   { id: "fadeOut", g: "Process", label: "Fade out…", run: () => pxFadeDlg("out"), doc: true, when: () => selOn(), kw: "fade out ramp curve envelope volume fall" },

@@ -4024,6 +4024,154 @@ async function ldMeasure(m) {
   } finally { job.end(); }
 }
 
+const NL = { job: null, MAXLAG: 2, WIN: 1 << 17 };
+
+function nlLag(x, y, M) {
+  const L = x.length;
+  let N = 1;
+  while (N < L + y.length) N <<= 1;
+  const xr = new Float64Array(N), xi = new Float64Array(N), yr = new Float64Array(N), yi = new Float64Array(N);
+  xr.set(x);
+  yr.set(y);
+  djFft(xr, xi, false);
+  djFft(yr, yi, false);
+  for (let i = 0; i < N; i++) {
+    const r = xr[i] * yr[i] + xi[i] * yi[i], q = xr[i] * yi[i] - xi[i] * yr[i], a = Math.hypot(r, q);
+    xr[i] = a > 1e-20 ? r / a : 0;
+    xi[i] = a > 1e-20 ? q / a : 0;
+  }
+  djFft(xr, xi, true);
+  let best = 0, bv = -Infinity, s2 = 0;
+  for (let j = 0; j <= 2 * M; j++) { const v = xr[j]; s2 += v * v; if (v > bv) { bv = v; best = j; } }
+  const rms = Math.sqrt(s2 / (2 * M + 1));
+  return { lag: best - M, score: rms > 0 && bv > 0 ? bv / rms : 0 };
+}
+
+async function nullTest(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  if (m.other === m.id) throw new Error("null-self");
+  let o = lingering.get(m.other) || null, fresh = false;
+  if (!o) {
+    let dd, meta;
+    try { dd = await (await docsDir()).getDirectoryHandle(String(m.other)); meta = await readJson(dd, "meta.json"); } catch { throw new Error("null-gone"); }
+    if (meta.recording) throw new Error("recording");
+    o = await loadDoc(dd, meta);
+    fresh = true;
+  }
+  if (NL.job) NL.job.cancel = true;
+  const job = { id: m.jobId, cancel: false, last: 0 };
+  NL.job = job;
+  job.tick = async frac => {
+    const now = performance.now();
+    if (now - job.last > 120) { job.last = now; postMessage({ t: "lprog", id: job.id, frac: Math.min(1, frac) }); await new Promise(r => setTimeout(r, 0)); }
+    if (job.cancel || cur !== c) throw new Error("cancelled");
+  };
+  try {
+    const sr = c.meta.sampleRate, ch = c.meta.channels, F = c.len, G = o.len;
+    if (o.meta.sampleRate !== sr) throw new Error("null-rate");
+    if (o.meta.channels !== ch) throw new Error("null-ch");
+    const a = clampI(m.a, 0, F), b = m.b > m.a ? clampI(m.b, 0, F) : F;
+    if (b <= a) throw new Error("nothing");
+    const lists = c.lists, olists = o.lists;
+    const rdA = (k, s, n, out, off) => readList(lists[k], c.cum[k], s, n, out, off, (src, cc, f, q, ob, oo) => readSrcOf(c, src, cc, f, q, ob, oo));
+    const rdB = (k, s, n, out, off) => {
+      out.fill(0, off, off + n);
+      const s0 = Math.max(s, 0), s1 = Math.min(s + n, G);
+      if (s1 > s0) readList(olists[k], o.cum[k], s0, s1 - s0, out, off + s0 - s, (src, cc, f, q, ob, oo) => readSrcOf(o, src, cc, f, q, ob, oo));
+    };
+    const mono = (rd, s, n) => {
+      const out = new Float32Array(n), tmp = new Float32Array(n);
+      for (let k = 0; k < ch; k++) { rd(k, s, n, tmp, 0); for (let i = 0; i < n; i++) out[i] += tmp[i]; }
+      return out;
+    };
+    let lag = 0, score = null, aligned = false;
+    if (m.align) {
+      const M = Math.min(Math.round(sr * NL.MAXLAG), Math.max(F, G));
+      let L = 1024;
+      while (L * 2 <= Math.min(b - a, NL.WIN)) L <<= 1;
+      if (b - a >= 1024) {
+        let w0 = a, best = -1;
+        const span = b - a - L;
+        for (let q = 0; q < 9; q++) {
+          const s = a + Math.round(span * q / 8), x = mono(rdA, s, Math.min(L, 4096));
+          let e = 0;
+          for (let i = 0; i < x.length; i++) e += x[i] * x[i];
+          if (e > best) { best = e; w0 = s; }
+        }
+        await job.tick(0.02);
+        const x = mono(rdA, w0, L), y = mono(rdB, w0 - M, L + 2 * M);
+        const r = nlLag(x, y, M);
+        await job.tick(0.08);
+        score = r.score;
+        if (r.score >= 8) {
+          let bl = r.lag, be = Infinity;
+          for (let d = -2; d <= 2; d++) {
+            let e = 0, sab = 0, sbb = 0;
+            for (let i = 0; i < L; i++) { const yv = y[i + M + r.lag + d] || 0; sab += x[i] * yv; sbb += yv * yv; }
+            const g = sbb > 0 ? sab / sbb : 1;
+            for (let i = 0; i < L; i++) { const dv = x[i] - g * (y[i + M + r.lag + d] || 0); e += dv * dv; }
+            if (e < be) { be = e; bl = r.lag + d; }
+          }
+          lag = bl;
+          aligned = true;
+        }
+      }
+    }
+    const B = 65536, A1 = new Float32Array(B), B1 = new Float32Array(B);
+    let g = 1;
+    if (m.gain) {
+      let sab = 0, sbb = 0;
+      for (let s = a; s < b; s += B) {
+        const n = Math.min(B, b - s);
+        for (let k = 0; k < ch; k++) {
+          rdA(k, s, n, A1, 0);
+          rdB(k, s + lag, n, B1, 0);
+          for (let i = 0; i < n; i++) { sab += A1[i] * B1[i]; sbb += B1[i] * B1[i]; }
+        }
+        await job.tick(0.1 + 0.4 * (s + n - a) / (b - a));
+      }
+      if (sbb > 0 && sab > 0) g = sab / sbb;
+    }
+    const st = Array.from({ length: ch }, () => ({ peak: 0, peakAt: -1, d2: 0, a2: 0, first: -1 }));
+    const w0 = m.gain ? 0.5 : 0.1;
+    const pass = async push => {
+      const D = new Float32Array(B * ch);
+      for (let s = a; s < b; s += B) {
+        const n = Math.min(B, b - s);
+        for (let k = 0; k < ch; k++) {
+          rdA(k, s, n, A1, 0);
+          rdB(k, s + lag, n, B1, 0);
+          const q = st[k], off = k * n;
+          for (let i = 0; i < n; i++) {
+            const v = A1[i] - g * B1[i];
+            D[off + i] = v;
+            const av = v < 0 ? -v : v;
+            q.d2 += v * v;
+            q.a2 += A1[i] * A1[i];
+            if (av > q.peak) { q.peak = av; q.peakAt = s + i; }
+            if (v !== 0 && q.first < 0) q.first = s + i;
+          }
+        }
+        if (push) push(D.subarray(0, n * ch), n);
+        await job.tick(w0 + (1 - w0) * (s + n - a) / (b - a));
+      }
+    };
+    let made = null;
+    if (m.make) {
+      const base = String(c.meta.name || "").replace(/\.[^.]+$/, "") + " − " + String(o.meta.name || "").replace(/\.[^.]+$/, "");
+      made = (await sesNewDoc(String(m.name || base).slice(0, 150), sr, ch, b - a, pass, job, { source: { kind: "derived", from: c.meta.id } })).meta;
+    } else await pass(null);
+    const n = b - a, db = v => v > 0 ? 20 * Math.log10(v) : null;
+    const overlap = Math.max(0, Math.min(b, G - lag) - Math.max(a, -lag));
+    return { t: "nullres", a, b, sr, lag, score, aligned, gain: 20 * Math.log10(g), lenA: F, lenB: G, overlap, other: { id: o.meta.id, name: o.meta.name }, made,
+      chans: st.map(q => ({ peak: db(q.peak), peakAt: q.peakAt, rms: db(Math.sqrt(q.d2 / n)), rel: q.a2 > 0 && q.d2 > 0 ? 10 * Math.log10(q.d2 / q.a2) : null, first: q.first, zero: q.d2 === 0 })) };
+  } finally {
+    if (NL.job === job) NL.job = null;
+    if (fresh) closeHandles(o);
+  }
+}
+
 async function ldReport(m) {
   const c = cur;
   if (!c || c.meta.id !== m.id) throw new Error("stale");
@@ -4246,6 +4394,12 @@ async function handle(m) {
   }
   if (m.t === "ldcancel") { if (LD.job) LD.job.cancel = true; return; }
   if (m.t === "repcancel") { if (LD.rep) LD.rep.cancel = true; return; }
+  if (m.t === "nulltest") {
+    try { postMessage(Object.assign({ req: m.req }, await nullTest(m))); }
+    catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
+    return;
+  }
+  if (m.t === "nullcancel") { if (NL.job) NL.job.cancel = true; return; }
   if (m.t === "midiscan") {
     try { postMessage(Object.assign({ req: m.req }, await mdScan(m))); }
     catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }

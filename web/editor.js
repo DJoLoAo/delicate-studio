@@ -62,7 +62,7 @@ ed.worker.onmessage = e => {
   if (m.t === "xjob") { xpJob(m); return; }
   if (m.t === "dprog") { dgProg(m); return; }
   if (m.t === "nprog") { nrProg(m); humProg(m); ldProg(m); fxProg(m); return; }
-  if (m.t === "lprog") { if (!repProg(m)) ldProg(m); return; }
+  if (m.t === "lprog") { if (!repProg(m) && !nlProg(m)) ldProg(m); return; }
   if (m.t === "mprog") { mdProg(m); return; }
   if (m.t === "tprog") { trProg(m); return; }
   if (m.t === "pprog") { pxProg(m); return; }
@@ -757,6 +757,7 @@ function showDoc(meta, peaks, bands, state) {
   humDoc();
   ldDoc();
   repDocChanged();
+  nlDocChanged();
   fxDoc();
   mdDoc();
   trDoc();
@@ -1805,6 +1806,7 @@ function wireUi() {
   wireScope();
   wireBatch();
   wireReport();
+  wireNull();
   wireLoud();
   wireMidi();
   wireTracks();

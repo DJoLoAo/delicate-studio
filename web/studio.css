@@ -679,6 +679,23 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 .bst.work{color:var(--gold)}
 body.mcrec #palBtn{color:#ff6b5e}
 #batch>*{flex-shrink:0}
+#nullw{position:fixed;left:50%;top:calc(90px*var(--fs));transform:translateX(-50%);width:min(calc(560px*var(--fs)),calc(100vw - 32px));max-height:calc(100vh - 120px);overflow-y:auto;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:45;padding:calc(10px*var(--fs)) calc(12px*var(--fs));display:flex;flex-direction:column;gap:calc(8px*var(--fs));font-size:calc(11px*var(--fs))}
+#nullw[style*="left"]{transform:none}
+#nullw.hidden{display:none}
+#nullw>*{flex-shrink:0}
+#nullw .qhead{display:flex;align-items:center;gap:8px;cursor:move}
+#nullw .qhead b{font-weight:500;color:var(--white);letter-spacing:.06em;text-transform:uppercase;font-size:calc(10px*var(--fs))}
+#nullw .brow{display:flex;align-items:center;gap:calc(8px*var(--fs));flex-wrap:wrap}
+#nullw .brow>label{color:var(--gray);min-width:calc(90px*var(--fs))}
+#nullw .snote{font-size:calc(10px*var(--fs));color:var(--dim)}
+#nullw .lrwhat{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#nlOther{min-width:calc(260px*var(--fs));max-width:100%}
+#nlOther .cur{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nlverd{font-size:calc(13px*var(--fs));padding:calc(8px*var(--fs)) calc(10px*var(--fs));border:1px solid var(--border)}
+.nlverd.ok{color:var(--green);border-color:var(--green)}
+.nlverd.warn{color:var(--gold);border-color:var(--gold)}
+.nlverd.bad{color:#ff6b5e;border-color:#ff6b5e}
+@media (max-width:760px){#nullw{left:8px!important;right:8px;top:60px!important;transform:none;width:auto}#nlOther{min-width:0;width:100%}}
 #lrep{position:fixed;left:50%;top:calc(70px*var(--fs));transform:translateX(-50%);width:min(calc(640px*var(--fs)),calc(100vw - 32px));max-height:calc(100vh - 100px);overflow-y:auto;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:45;padding:calc(10px*var(--fs)) calc(12px*var(--fs));display:flex;flex-direction:column;gap:calc(8px*var(--fs));font-size:calc(11px*var(--fs))}
 #lrep[style*="left"]{transform:none}
 #lrep.hidden{display:none}

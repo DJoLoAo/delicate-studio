@@ -53,6 +53,16 @@
   <div class="bbar lrbar hidden" id="lrBar"><i></i></div>
   <div class="lrbody" id="lrBody"></div>
 </div>
+<div id="nullw" class="hidden" role="dialog" aria-label="Null test">
+  <div class="qhead"><b>Null test</b><span class="grow"></span><button class="x" id="nlX" title="Close" aria-label="Close">×</button></div>
+  <div class="snote lrwhat" id="nlWhat"></div>
+  <div class="brow"><label>Compare with</label><div class="dd down" id="nlOther"><div class="cur"></div><div class="list"></div></div></div>
+  <div class="brow"><label>Line up</label><div class="seg" id="nlAlign"><button class="segbtn" data-v="on">automatically</button><button class="segbtn" data-v="off">as they are</button></div></div>
+  <div class="brow"><label>Level</label><div class="seg" id="nlGain"><button class="segbtn" data-v="off">as it is</button><button class="segbtn" data-v="on">match the gain</button></div></div>
+  <div class="brow"><button class="primary" id="nlGo">Compare</button><button class="outbtn" id="nlMake" title="Opens what is left after the subtraction as a new Studio file">open the difference</button></div>
+  <div class="bbar lrbar hidden" id="nlBar"><i></i></div>
+  <div class="lrbody" id="nlBody"></div>
+</div>
 <div id="scope" class="hidden" role="dialog" aria-label="Meters">
   <div class="qhead"><b>Meters</b><span class="grow"></span><span class="snote hidden" id="scMono">mono</span><button class="x" id="scX" title="Close" aria-label="Close">×</button></div>
   <canvas id="scSpec" title="Spectrum: blue now, gold the peaks of the last seconds"></canvas>
@@ -495,6 +505,7 @@
 <script src="/scope.js"></script>
 <script src="/batch.js"></script>
 <script src="/report.js"></script>
+<script src="/nulltest.js"></script>
 <script src="/md.js"></script>
 <script src="/trcore.js"></script>
 <script src="/tr.js"></script>
