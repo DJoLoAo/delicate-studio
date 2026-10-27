@@ -1,7 +1,7 @@
 const loginEl = document.getElementById("login");
 const appEl = document.getElementById("app");
 const setEl = document.getElementById("settings");
-const studio = { me: null, version: null, verDismissed: false };
+const studio = { me: null, version: null, verDismissed: null, verSeen: null };
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
 
@@ -117,12 +117,12 @@ async function checkVersion() {
     if (!r.ok) return;
     const v = (await r.json()).version;
     if (studio.version === null) { studio.version = v; document.getElementById("stVer").textContent = "v" + v; return; }
-    if (v !== studio.version && !studio.verDismissed) document.getElementById("newver").classList.remove("hidden");
+    if (v !== studio.version && v !== studio.verDismissed) { studio.verSeen = v; document.getElementById("newver").classList.remove("hidden"); }
   } catch {}
 }
 
 document.getElementById("newverBtn").addEventListener("click", () => location.reload());
-document.getElementById("newverX").addEventListener("click", () => { studio.verDismissed = true; document.getElementById("newver").classList.add("hidden"); });
+document.getElementById("newverX").addEventListener("click", () => { studio.verDismissed = studio.verSeen; document.getElementById("newver").classList.add("hidden"); });
 
 function netState() {
   const el = document.getElementById("stNet");
@@ -133,7 +133,10 @@ window.addEventListener("online", netState);
 window.addEventListener("offline", netState);
 
 async function boot() {
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).then(reg => { reg.addEventListener("updatefound", () => checkVersion()); }).catch(() => {});
+    navigator.serviceWorker.addEventListener("controllerchange", () => checkVersion());
+  }
   await i18nInit();
   netState();
   const r = await fetchMe();
@@ -142,6 +145,7 @@ async function boot() {
   checkVersion();
   setInterval(checkVersion, 60000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) checkVersion(); });
+  window.addEventListener("focus", checkVersion);
 }
 
 boot();
