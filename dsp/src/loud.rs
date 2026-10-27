@@ -2,14 +2,14 @@ use std::collections::VecDeque;
 use std::f64::consts::PI;
 
 #[derive(Clone, Copy, Default)]
-struct Bq {
-    b: [f64; 3],
-    a: [f64; 2],
-    z: [f64; 2],
+pub(crate) struct Bq {
+    pub(crate) b: [f64; 3],
+    pub(crate) a: [f64; 2],
+    pub(crate) z: [f64; 2],
 }
 
 impl Bq {
-    fn run(&mut self, x: f64) -> f64 {
+    pub(crate) fn run(&mut self, x: f64) -> f64 {
         let y = self.b[0] * x + self.z[0];
         self.z[0] = self.b[1] * x - self.a[0] * y + self.z[1];
         self.z[1] = self.b[2] * x - self.a[1] * y;
@@ -17,7 +17,7 @@ impl Bq {
     }
 }
 
-fn kweight(sr: f64) -> (Bq, Bq) {
+pub(crate) fn kweight(sr: f64) -> (Bq, Bq) {
     let f0 = 1681.974450955533;
     let g = 3.999843853973347;
     let q = 0.7071752369554196;

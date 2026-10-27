@@ -92,6 +92,7 @@ impl Decoder {
 }
 
 pub mod enc;
+pub mod fx;
 pub mod hum;
 pub mod loud;
 pub mod meta;
@@ -793,6 +794,67 @@ mod wasm {
     #[unsafe(no_mangle)]
     pub extern "C" fn lim_gr(slot: u32) -> f32 {
         limm(slot).map(|l| l.gr).unwrap_or(0.0)
+    }
+
+    static mut RK: [Option<crate::fx::Rack>; 3] = [None, None, None];
+    static mut RK_CFG: [f64; crate::fx::CFG_LEN] = [0.0; crate::fx::CFG_LEN];
+
+    fn rkm(slot: u32) -> Option<&'static mut crate::fx::Rack> {
+        unsafe { (*std::ptr::addr_of_mut!(RK)).get_mut(slot as usize).and_then(|s| s.as_mut()) }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rk_open(slot: u32, ch: u32, sr: u32) -> i32 {
+        if slot > 2 || ch == 0 || ch > 8 || sr == 0 {
+            return fail("effects settings out of range".into());
+        }
+        unsafe { (*std::ptr::addr_of_mut!(RK))[slot as usize] = Some(crate::fx::Rack::new(ch as usize, sr as usize)); }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rk_cfg() -> *mut f64 {
+        unsafe { (*std::ptr::addr_of_mut!(RK_CFG)).as_mut_ptr() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rk_set(slot: u32) -> i32 {
+        let Some(r) = rkm(slot) else { return fail("effects rack is not open".into()) };
+        let c = unsafe { &*std::ptr::addr_of!(RK_CFG) };
+        match r.configure(c) {
+            Ok(lat) => lat as i32,
+            Err(e) => fail(e),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rk_reset(slot: u32) {
+        if let Some(r) = rkm(slot) {
+            r.reset();
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rk_in(slot: u32, m: u32) -> *mut f32 {
+        rkm(slot).map(|r| r.stage(m as usize)).unwrap_or(std::ptr::null_mut())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rk_run(slot: u32, m: u32) -> i32 {
+        match rkm(slot) {
+            Some(r) => r.run(m as usize) as i32,
+            None => fail("effects rack is not open".into()),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rk_out(slot: u32) -> *const f32 {
+        rkm(slot).map(|r| r.out.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rk_info(slot: u32) -> *mut f64 {
+        rkm(slot).map(|r| r.info.as_mut_ptr()).unwrap_or(std::ptr::null_mut())
     }
 
     static mut MD: Option<crate::midi::Melody> = None;

@@ -61,7 +61,7 @@ ed.worker.onmessage = e => {
   if (m.t === "playerror") { stopPlay(); tell(t("Playback stopped") + ": " + m.msg); return; }
   if (m.t === "xjob") { xpJob(m); return; }
   if (m.t === "dprog") { dgProg(m); return; }
-  if (m.t === "nprog") { nrProg(m); humProg(m); ldProg(m); return; }
+  if (m.t === "nprog") { nrProg(m); humProg(m); ldProg(m); fxProg(m); return; }
   if (m.t === "lprog") { ldProg(m); return; }
   if (m.t === "mprog") { mdProg(m); return; }
   if (m.t === "tprog") { trProg(m); return; }
@@ -704,6 +704,7 @@ function applyState(st) {
   dgAfterEdit();
   spAfterEdit();
   ldAfterEdit();
+  fxAfterEdit();
   mdAfterEdit();
   trAfterEdit();
   tnAfterEdit(prevIdx);
@@ -755,6 +756,7 @@ function showDoc(meta, peaks, bands, state) {
   nrDoc();
   humDoc();
   ldDoc();
+  fxDoc();
   mdDoc();
   trDoc();
   tourDoc();
@@ -1146,7 +1148,7 @@ function drawMeters() {
   if (active || on) ed.meterRaf = requestAnimationFrame(drawMeters);
 }
 
-const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", pencil: "Pencil", repair: "Repair", nr: "Noise Reduction", hum: "DeHummer", declip: "DeClipper", spot: "Spot Healing", spheal: "Spectral heal", spdel: "Remove frequencies", loud: "Match loudness", norm: "Normalize", amp: "Amplify" };
+const EDIT_LABELS = { open: "Original", delete: "Delete", cut: "Cut", paste: "Paste", silence: "Silence", crop: "Crop", insert: "Insert silence", heal: "Heal", pencil: "Pencil", repair: "Repair", nr: "Noise Reduction", hum: "DeHummer", declip: "DeClipper", spot: "Spot Healing", spheal: "Spectral heal", spdel: "Remove frequencies", loud: "Match loudness", norm: "Normalize", amp: "Amplify", fx: "Effects" };
 
 function selOn() { return ed.sel.b > ed.sel.a; }
 
@@ -1797,6 +1799,7 @@ function wireUi() {
   wireDiag();
   wireNr();
   wireHum();
+  wireFx();
   wireLoud();
   wireMidi();
   wireTracks();

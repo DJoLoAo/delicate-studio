@@ -409,7 +409,7 @@ canvas.ru{height:calc(34px*var(--fs))}
 .xjob .bbar i{display:block;height:100%;background:var(--pink);transition:width .15s}
 .xjob.done .bbar i{background:var(--green)}
 #expBtn{height:calc(26px*var(--fs))}
-#diag{position:absolute;top:calc(8px*var(--fs));right:calc(8px*var(--fs));bottom:calc(8px*var(--fs));width:min(calc(488px*var(--fs)),calc(100% - 16px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:30;padding:calc(10px*var(--fs)) calc(12px*var(--fs));font-size:calc(11px*var(--fs))}
+#diag{position:absolute;top:calc(8px*var(--fs));right:calc(8px*var(--fs));bottom:calc(8px*var(--fs));width:min(calc(536px*var(--fs)),calc(100% - 16px));display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:30;padding:calc(10px*var(--fs)) calc(12px*var(--fs));font-size:calc(11px*var(--fs))}
 #diag.hidden{display:none}
 #diag .dgfx{margin-left:calc(8px*var(--fs));color:var(--gold);font-size:calc(10px*var(--fs));letter-spacing:.08em;text-transform:uppercase}
 .dgbody{display:flex;flex-direction:column;gap:calc(9px*var(--fs));min-height:0;flex:1;overflow-y:auto}
@@ -455,6 +455,21 @@ canvas.ru{height:calc(34px*var(--fs))}
 #humBar i{display:block;height:100%;width:0;background:var(--pink);transition:width .12s}
 #humBar.hidden{display:none}
 .humgraph{height:calc(120px*var(--fs))}
+.fxgraph{height:calc(170px*var(--fs))}
+.fxgraph canvas{cursor:default}
+#fxBar{flex:1;max-width:calc(140px*var(--fs));height:calc(4px*var(--fs));background:var(--bg4);overflow:hidden}
+#fxBar i{display:block;height:100%;width:0;background:var(--pink);transition:width .12s}
+#fxBar.hidden{display:none}
+#diag .fxchips .segbtn{min-width:calc(24px*var(--fs));padding:calc(3px*var(--fs)) calc(6px*var(--fs))}
+#diag .fxchips .segbtn.off{opacity:.45}
+#diag .nin.fxsm{width:calc(46px*var(--fs))}
+#diag .fxtype{min-width:calc(96px*var(--fs))}
+#diag .fxhead{border-top:1px solid var(--border);padding-top:calc(8px*var(--fs))}
+#diag .fxoff{opacity:.45}
+.fxgr{flex:1;max-width:calc(120px*var(--fs));height:calc(5px*var(--fs));background:var(--bg4);overflow:hidden;direction:rtl}
+.fxgr i{display:block;height:100%;width:0;background:var(--gold)}
+#diag .nrbody .row>.snote.fxgrv{min-width:calc(56px*var(--fs));text-align:left;color:var(--gold)}
+#fxMatchV{color:var(--gray);min-height:calc(13px*var(--fs))}
 .nin{width:calc(64px*var(--fs));background:var(--bg);border:1px solid var(--border);color:var(--white);font:inherit;font-size:calc(11px*var(--fs));padding:calc(4px*var(--fs)) calc(6px*var(--fs));font-variant-numeric:tabular-nums}
 .nin:focus{outline:0;border-color:var(--gold)}
 #diag .unit{font-size:calc(10px*var(--fs));color:var(--dim);margin-left:-4px}

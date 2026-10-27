@@ -2852,14 +2852,55 @@ function humTune(x, slot, raw, only) {
   return h;
 }
 
+const RK_BANDS = 8, RK_LEN = 20 + 5 * RK_BANDS, RK_TYPES = ["bell", "lowshelf", "highshelf", "notch"];
+
+function rkCfg(m) {
+  const o = m && typeof m === "object" ? m : {};
+  const num = (v, lo, hi, d) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
+  const on = v => v ? 1 : 0;
+  const ord = v => [2, 4, 8].includes(Number(v)) ? Number(v) : 4;
+  const hp = o.hp || {}, lp = o.lp || {}, cp = o.comp || {}, lm = o.lim || {};
+  const a = new Float64Array(RK_LEN);
+  a.set([on(hp.on), num(hp.f, 10, 2000, 30), ord(hp.ord), on(lp.on), num(lp.f, 1000, 24000, 18000), ord(lp.ord),
+    on(cp.on), num(cp.thr, -80, 0, -18), num(cp.ratio, 1, 100, 3), num(cp.knee, 0, 40, 6), num(cp.att, 0.1, 500, 5), num(cp.rel, 5, 5000, 150), num(cp.makeup, -24, 40, 0),
+    on(lm.on), num(lm.ceil, -12, 0, -1), num(lm.look, 0.5, 20, 2), num(lm.rel, 1, 2000, 100), num(o.out, -24, 24, 0), on(o.match)]);
+  const bands = (Array.isArray(o.bands) ? o.bands : []).slice(0, RK_BANDS);
+  a[19] = bands.length;
+  bands.forEach((b, k) => {
+    const t = Math.max(0, RK_TYPES.indexOf(b && b.type));
+    a.set([on(b && b.on !== false), t, num(b && b.f, 20, 22000, 1000), num(b && b.g, -30, 30, 0), num(b && b.q, 0.1, 40, 0.71)], 20 + 5 * k);
+  });
+  return a;
+}
+
+function rkTune(x, slot, raw, preview) {
+  const a = rkCfg(raw);
+  if (!preview) a[18] = 0;
+  new Float64Array(x.memory.buffer, x.rk_cfg(), RK_LEN).set(a);
+  const lat = x.rk_set(slot);
+  if (lat < 0) throw new Error(dspError(x));
+  return lat;
+}
+
+function rkMeter() {
+  const pv = FX.pv;
+  if (FX.mode === "off" || FX.kind !== "rk" || !pv || pv.kind !== "rk") return { t: "rkmeter", on: false };
+  const v = new Float64Array(pv.x.memory.buffer, pv.x.rk_info(0), 4);
+  const out = { t: "rkmeter", on: true, comp: v[0], lim: v[1], match: v[2] };
+  v[0] = 0;
+  v[1] = 0;
+  return out;
+}
+
 function fxApi(x, kind, slot) {
+  if (kind === "rk") return { reset: () => x.rk_reset(slot), inp: m => x.rk_in(slot, m), run: m => x.rk_run(slot, m), out: () => x.rk_out(slot) };
   if (kind === "ld") return { reset: () => x.lim_reset(slot), inp: m => x.lim_in(slot, m), run: m => x.lim_run(slot, m), out: () => x.lim_out(slot) };
   return kind === "hum"
     ? { reset: () => x.dh_reset(slot), inp: m => x.dh_in(slot, m), run: m => x.dh_run(slot, m), out: () => x.dh_out(slot) }
     : { reset: () => x.nr_reset(slot), inp: m => x.nr_in(slot, m), run: m => x.nr_run(slot, m), out: () => x.nr_out(slot) };
 }
 
-function fxKind(k) { return k === "hum" || k === "ld" ? k : "nr"; }
+function fxKind(k) { return k === "hum" || k === "ld" || k === "rk" ? k : "nr"; }
 
 function ldCfg(m, ch) {
   const o = m && typeof m === "object" ? m : {};
@@ -2878,6 +2919,11 @@ function ldTune(x, slot, raw, ch) {
 
 function fxSetup(x, kind, slot, raw, c, only) {
   const sr = c.meta.sampleRate, ch = c.meta.channels;
+  if (kind === "rk") {
+    if (x.rk_open(slot, ch, sr) !== 0) throw new Error(dspError(x));
+    const lat = rkTune(x, slot, raw, slot === 0);
+    return { warm: lat + Math.round(sr * 0.5), key: "rk" };
+  }
   if (kind === "ld") {
     if (x.lim_open(slot, ch, sr) !== 0) throw new Error(dspError(x));
     const lat = ldTune(x, slot, raw, ch);
@@ -2904,7 +2950,8 @@ function fxPreview(x, c) {
     pv = FX.pv = { doc: c, kind, x, key, ref, autoKey: NR.auto ? NR.auto.key : "", auto: s.auto || null, warm: s.warm, bins: s.bins, n: s.n, curveKey: s.curveKey, api: fxApi(x, kind, 0), ch: c.meta.channels, q: null, qStart: 0, qOff: 0, qLen: 0, drop: 0, inPos: 0, ver: -1 };
     return;
   }
-  if (kind === "hum") pv.warm = humWarm(humTune(x, 0, FX.raw, only), c.meta.sampleRate);
+  if (kind === "rk") pv.warm = rkTune(x, 0, FX.raw, true) + Math.round(c.meta.sampleRate * 0.5);
+  else if (kind === "hum") pv.warm = humWarm(humTune(x, 0, FX.raw, only), c.meta.sampleRate);
   else if (kind === "ld") pv.warm = ldTune(x, 0, FX.raw, c.meta.channels) + Math.round(c.meta.sampleRate * 0.3);
   else {
     const curveKey = JSON.stringify(cfg.curve);
@@ -3236,7 +3283,7 @@ async function fxApply(m) {
     if (cur !== c || c.lists !== lists) { nrRollback(c, snap); throw new Error("changed"); }
     const next = opPatch(c.lists, segs.map((l, k) => chans[k] ? [[a, b, l]] : null));
     const before = { a: clampI(m.a, 0, c.len), b: clampI(m.b, 0, c.len), cursor: clampI(m.cursor, 0, c.len) };
-    const op = kind === "ld" ? (["loud", "norm", "amp"].includes(m.op) ? m.op : "amp") : kind;
+    const op = kind === "ld" ? (["loud", "norm", "amp"].includes(m.op) ? m.op : "amp") : kind === "rk" ? "fx" : kind;
     pushHist({ op, a, b, n: kind === "ld" ? Math.round(ldCfg(m.cfg, ch).gain * 10) / 10 : 0, ch: chans.every(Boolean) ? null : chanLabel(chans) }, next, before, before);
     persist();
     return statePayload(m.have, { t: "state", sel: null });
@@ -3954,6 +4001,7 @@ async function handle(m) {
   }
   if (m.t === "tncancel") { if (TN.job) TN.job.cancel = true; return; }
   if (m.t === "mdlisten") { MDL.mode = ["midi", "both"].includes(m.mode) ? m.mode : "off"; MDL.notes = MDL.mode === "off" ? [] : mdClean(m.notes); ringFlush(); return; }
+  if (m.t === "rkmeter") { postMessage(Object.assign({ req: m.req }, rkMeter())); return; }
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
   if (m.t === "proc") { postMessage(Object.assign({ req: m.req }, await pxApply(m))); return; }
   if (m.t === "seslist") { postMessage(Object.assign({ req: m.req }, await sesList())); return; }

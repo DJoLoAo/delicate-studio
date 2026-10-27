@@ -28,14 +28,15 @@ function openRepair(tab) {
   closePopovers();
   const prev = rp.open ? rp.tab : null;
   rp.open = true;
-  rp.tab = ["nr", "hum", "ld", "md", "tr"].includes(tab) ? tab : "diag";
-  if (rp.tab !== "ld" && rp.tab !== "md" && rp.tab !== "tr") rp.last = rp.tab;
+  rp.tab = ["nr", "hum", "ld", "fx", "md", "tr"].includes(tab) ? tab : "diag";
+  if (rp.tab !== "ld" && rp.tab !== "fx" && rp.tab !== "md" && rp.tab !== "tr") rp.last = rp.tab;
   dg.open = rp.tab === "diag";
   $("diag").classList.remove("hidden");
   $("dgBody").classList.toggle("hidden", rp.tab !== "diag");
   $("nrBody").classList.toggle("hidden", rp.tab !== "nr");
   $("humBody").classList.toggle("hidden", rp.tab !== "hum");
   $("ldBody").classList.toggle("hidden", rp.tab !== "ld");
+  $("fxBody").classList.toggle("hidden", rp.tab !== "fx");
   $("mdBody").classList.toggle("hidden", rp.tab !== "md");
   $("trBody").classList.toggle("hidden", rp.tab !== "tr");
   document.querySelectorAll("#rpTabs button").forEach(b => b.classList.toggle("on", b.dataset.v === rp.tab));
@@ -45,12 +46,14 @@ function openRepair(tab) {
   if (prev === "nr" && rp.tab !== "nr") nrHide();
   if (prev === "hum" && rp.tab !== "hum") humHide();
   if (prev === "ld" && rp.tab !== "ld") ldHide();
+  if (prev === "fx" && rp.tab !== "fx") fxHide();
   if (prev === "md" && rp.tab !== "md") mdHide();
   if (prev === "tr" && rp.tab !== "tr") trHide();
   if (rp.tab === "diag") dgRender();
   else if (rp.tab === "nr" && prev !== "nr") nrShow();
   else if (rp.tab === "hum" && prev !== "hum") humShow();
   else if (rp.tab === "ld" && prev !== "ld") ldShow();
+  else if (rp.tab === "fx" && prev !== "fx") fxShow();
   else if (rp.tab === "md" && prev !== "md") mdShow();
   else if (rp.tab === "tr" && prev !== "tr") trShow();
   redraw();
@@ -70,6 +73,7 @@ function closeDiag() {
   if (was === "nr") nrHide();
   if (was === "hum") humHide();
   if (was === "ld") ldHide();
+  if (was === "fx") fxHide();
   if (was === "md") mdHide();
   if (was === "tr") trHide();
   redraw();
@@ -77,7 +81,7 @@ function closeDiag() {
 
 function toggleDiag(kind) { if (rp.open && rp.tab === "diag" && (!kind || kind === dg.cfg.kind)) closeDiag(); else openDiag(kind); }
 function toggleNr() { if (rp.open && rp.tab === "nr") closeDiag(); else openRepair("nr"); }
-function toggleRepair() { const other = rp.tab === "ld" || rp.tab === "md" || rp.tab === "tr"; if (rp.open && !other) closeDiag(); else openRepair(other ? rp.last || "diag" : rp.tab); }
+function toggleRepair() { const other = rp.tab === "ld" || rp.tab === "fx" || rp.tab === "md" || rp.tab === "tr"; if (rp.open && !other) closeDiag(); else openRepair(other ? rp.last || "diag" : rp.tab); }
 function toggleHum() { if (rp.open && rp.tab === "hum") closeDiag(); else openRepair("hum"); }
 
 function rpTick() {
@@ -85,7 +89,7 @@ function rpTick() {
   const key = ed.sel.a + ":" + ed.sel.b;
   if (key === rp.selKey) return;
   rp.selKey = key;
-  if (rp.tab === "nr") nrRender(); else if (rp.tab === "hum") humRender(); else if (rp.tab === "ld") { ldRender(); ldAuto(); } else if (rp.tab === "md") mdRender(); else if (rp.tab === "tr") trRender(); else dgRender();
+  if (rp.tab === "nr") nrRender(); else if (rp.tab === "hum") humRender(); else if (rp.tab === "ld") { ldRender(); ldAuto(); } else if (rp.tab === "fx") fxRender(); else if (rp.tab === "md") mdRender(); else if (rp.tab === "tr") trRender(); else dgRender();
 }
 
 function dgListen(mode) {
