@@ -59,6 +59,7 @@ const CMDS = [
   { id: "nextTransient", g: "Transport", label: "Next transient", run: () => tnStep(1, false), doc: true, when: () => tn.on, kw: "tab onset beat hit attack drum jump forward" },
   { id: "prevTransient", g: "Transport", label: "Previous transient", run: () => tnStep(-1, false), doc: true, when: () => tn.on, kw: "tab onset beat hit attack drum jump back" },
   { id: "nextEdge", g: "Transport", label: "Cursor to the next marker or selection edge", run: () => stepTo(1, true), doc: true },
+  { id: "scope", g: "View", label: "Meters: spectrum, vectorscope, correlation", run: () => scToggle(), ss: () => scToggle(), kw: "meter metering spectrum analyser analyzer fft vectorscope goniometer lissajous phase correlation stereo width mono" },
   { id: "zoomIn", g: "View", label: "Zoom in", run: () => zoomAt(0.5), doc: true, ss: () => ssZoomAt(0.5) },
   { id: "zoomOut", g: "View", label: "Zoom out", run: () => zoomAt(2), doc: true, ss: () => ssZoomAt(2) },
   { id: "zoomFull", g: "View", label: "Zoom to the whole file", run: () => zoomFit(), doc: true, ss: () => ssZoomFit() },

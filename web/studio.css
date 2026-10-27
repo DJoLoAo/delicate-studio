@@ -633,3 +633,20 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 #dlg textarea{background:var(--bg3);color:var(--white);border:1px solid var(--border);font:inherit;padding:calc(6px*var(--fs));resize:vertical;min-height:calc(40px*var(--fs))}
 #dlg .pbinfo a{color:var(--pink)}
 .xfoot #xPub{margin-right:calc(8px*var(--fs))}
+#scope{position:fixed;right:calc(16px*var(--fs));bottom:calc(120px*var(--fs));width:min(calc(520px*var(--fs)),calc(100vw - 32px));background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:44;padding:calc(8px*var(--fs)) calc(10px*var(--fs));display:flex;flex-direction:column;gap:calc(8px*var(--fs));font-size:calc(11px*var(--fs))}
+#scope.hidden{display:none}
+#scope .qhead{display:flex;align-items:center;gap:calc(8px*var(--fs));cursor:move}
+#scope .qhead b{font-weight:500;color:var(--white);letter-spacing:.06em;text-transform:uppercase;font-size:calc(10px*var(--fs))}
+#scope .snote{font-size:calc(10px*var(--fs));color:var(--dim)}
+#scope .snote.hidden{display:none}
+#scSpec{display:block;width:100%;height:calc(150px*var(--fs));border:1px solid var(--border)}
+#scope .scrow{display:flex;gap:calc(10px*var(--fs));align-items:stretch}
+#scVec{flex:none;width:calc(170px*var(--fs));height:calc(170px*var(--fs));border:1px solid var(--border)}
+#scope .sccol{flex:1;min-width:0;display:flex;flex-direction:column;gap:calc(6px*var(--fs))}
+#scope .sclbl{color:var(--gray)}
+#scCorr{display:block;width:100%;height:calc(14px*var(--fs))}
+#scope .scnums{display:flex;justify-content:space-between;align-items:baseline;color:var(--dim);font-size:calc(10px*var(--fs))}
+#scope .scnums b{color:var(--white);font-weight:500;font-size:calc(14px*var(--fs));font-variant-numeric:tabular-nums}
+#scope .scnums b.bad{color:#ff6b5e}
+.scbtn.on{color:var(--gold)}
+@media (max-width:760px){#scope{left:8px;right:8px;width:auto;bottom:calc(96px*var(--fs))}#scVec{width:calc(130px*var(--fs));height:calc(130px*var(--fs))}}

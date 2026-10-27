@@ -1134,5 +1134,11 @@
  "Speed and pitch are unchanged, so there is nothing to do.": "Tempo und Tonhöhe sind unverändert, es gibt nichts zu tun.",
  "De-esser": "De-Esser",
  "Frequency": "Frequenz",
- "Vocal de-esser": "Stimm-De-Esser"
+ "Vocal de-esser": "Stimm-De-Esser",
+ "Meters": "Messgeräte",
+ "Meters: spectrum, vectorscope, correlation": "Messgeräte: Spektrum, Vektorskop, Korrelation",
+ "Correlation": "Korrelation",
+ "Near +1 the two sides agree and mono is safe. Below 0 they cancel when summed to mono.": "Nahe +1 stimmen beide Seiten überein und Mono ist sicher. Unter 0 löschen sie sich in Mono aus.",
+ "Spectrum: blue now, gold the peaks of the last seconds": "Spektrum: blau jetzt, gold die Spitzen der letzten Sekunden",
+ "Vectorscope: up is mono, sideways is out of phase": "Vektorskop: nach oben ist Mono, seitlich ist gegenphasig"
 }

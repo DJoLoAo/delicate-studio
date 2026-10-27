@@ -1035,6 +1035,7 @@ async function ensureAudioFor(sr, ch) {
   const node = new AudioWorkletNode(ctx, "studio-player", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [doc.channels], processorOptions: { data, ctrl, size: RING, channels: doc.channels } });
   node.port.onmessage = e => meterIn(e.data);
   node.connect(ctx.destination);
+  scWire(ctx, node, doc.channels);
   ed.ctx = ctx;
   ed.ctxRate = sr;
   ed.node = node;
@@ -1800,6 +1801,7 @@ function wireUi() {
   wireNr();
   wireHum();
   wireFx();
+  wireScope();
   wireLoud();
   wireMidi();
   wireTracks();
