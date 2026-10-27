@@ -1075,5 +1075,15 @@
  "Your presets are kept in this browser for your account.": "Vos préréglages sont gardés dans ce navigateur, pour votre compte.",
  "Delete preset?": "Supprimer le préréglage ?",
  "Processed turned by {d} to match": "Traité ajusté de {d} pour égaliser",
- "Switch between Original and Processed while it plays. With Match levels on, Processed is turned to the loudness of the original, so you hear the change in sound and not just in level. Apply never matches levels.": "Basculez entre Original et Traité pendant la lecture. Avec Égaliser les niveaux, le traité est ramené à la sonie de l'original : vous entendez le changement de son, pas seulement de niveau. Appliquer n'égalise jamais."
+ "Switch between Original and Processed while it plays. With Match levels on, Processed is turned to the loudness of the original, so you hear the change in sound and not just in level. Apply never matches levels.": "Basculez entre Original et Traité pendant la lecture. Avec Égaliser les niveaux, le traité est ramené à la sonie de l'original : vous entendez le changement de son, pas seulement de niveau. Appliquer n'égalise jamais.",
+ "Master effects": "Effets du master",
+ "Effects on {n}": "Effets sur {n}",
+ "Master": "Master",
+ "Bypassed": "Contourné",
+ "remove all": "tout retirer",
+ "Take the effects off and start from flat": "Retirer les effets et repartir de zéro",
+ "The effects run live on playback and mixdown, before the fader and pan. Nothing is written to the files.": "Les effets s'appliquent en direct à la lecture et au mixage, avant le fader et le panoramique. Rien n'est écrit dans les fichiers.",
+ "Effects on this track — click to edit": "Effets sur cette piste — cliquez pour modifier",
+ "Effects bypassed — click to edit": "Effets contournés — cliquez pour modifier",
+ "Add effects to this track": "Ajouter des effets à cette piste"
 }

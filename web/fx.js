@@ -10,7 +10,7 @@ const FX_FACTORY = [
   { v: "rumble", label: "Vinyl rumble cut", cfg: { hp: { on: true, f: 25, ord: 4 } } },
   { v: "glue", label: "Mastering glue", cfg: { hp: { on: true, f: 20, ord: 2 }, comp: { on: true, thr: -14, ratio: 2, knee: 6, att: 30, rel: 200, makeup: 2 }, lim: { on: true, ceil: -1, look: 2, rel: 100 } } }
 ];
-const fx = { cfg: null, preset: "flat", match: true, listen: "off", band: 0, job: null, seq: 0, busy: false, again: false, done: null, err: null, meter: { comp: 0, lim: 0, match: 0 }, poll: 0, drag: null, user: [] };
+const fx = { target: null, edCfg: null, commitT: 0, cfg: null, preset: "flat", match: true, listen: "off", band: 0, job: null, seq: 0, busy: false, again: false, done: null, err: null, meter: { comp: 0, lim: 0, match: 0 }, poll: 0, drag: null, user: [] };
 
 function fxClone(v) { return JSON.parse(JSON.stringify(v)); }
 
@@ -37,6 +37,7 @@ function fxLoad() {
 }
 
 function fxSave() {
+  if (fx.target) return;
   try { localStorage.setItem("studioFx", JSON.stringify({ cfg: fx.cfg, preset: fx.preset, match: fx.match })); } catch {}
 }
 
@@ -88,10 +89,10 @@ function fxListen(mode) {
 }
 
 async function fxPoll() {
-  if (!rp.open || rp.tab !== "fx" || fx.listen !== "proc") { clearInterval(fx.poll); return; }
-  if (!ed.play.on) { fx.meter.comp *= 0.7; fx.meter.lim *= 0.7; fxMeters(); return; }
+  if (!rp.open || rp.tab !== "fx" || (!fx.target && fx.listen !== "proc")) { clearInterval(fx.poll); return; }
+  if (!(fx.target ? ses.play.on : ed.play.on)) { fx.meter.comp *= 0.7; fx.meter.lim *= 0.7; fxMeters(); return; }
   try {
-    const r = await call({ t: "rkmeter" });
+    const r = await call(fx.target ? { t: "rkmeter", ses: fxSesKey() } : { t: "rkmeter" });
     if (!r.on) return;
     fx.meter.comp = Math.max(r.comp, fx.meter.comp * 0.8);
     fx.meter.lim = Math.max(r.lim, fx.meter.lim * 0.8);
@@ -102,6 +103,7 @@ async function fxPoll() {
 
 function fxChanged(keepPreset) {
   if (!keepPreset) fx.preset = "";
+  if (fx.target) { fxSesWrite(keepPreset); fxRender(); return; }
   fxSave();
   fxRender();
   if (fx.listen !== "off") fxSend();
@@ -146,7 +148,7 @@ function fxResp(sec, sr, f) {
 }
 
 function fxGeom() {
-  const cv = $("fxGraph"), W = cv.clientWidth, H = cv.clientHeight, sr = ed.doc ? ed.doc.sampleRate : 48000;
+  const cv = $("fxGraph"), W = cv.clientWidth, H = cv.clientHeight, sr = fx.target ? ssRate() : ed.doc ? ed.doc.sampleRate : 48000;
   const g = { W, H, L: 30, R: 8, T: 8, B: 15, lo: 20, hi: Math.min(20000, sr * 0.49), sr };
   g.iw = Math.max(10, W - g.L - g.R);
   g.ih = Math.max(10, H - g.T - g.B);
@@ -365,7 +367,13 @@ function fxMeters() {
 function fxRender() {
   const c = fx.cfg;
   if (!c || !$("fxBody")) return;
-  const r = fxRange(), busy = !!fx.job;
+  const r = fx.target ? { a: 0, b: 0, sel: false } : fxRange(), busy = !!fx.job;
+  $("diag").classList.toggle("sesfx", !!fx.target);
+  if (fx.target) {
+    const h = fxSesHolder();
+    $("fxTitle").textContent = fx.target.kind === "master" ? t("Master effects") : t("Effects on {n}").replace("{n}", h ? h.name : "");
+    document.querySelectorAll("#fxByp button").forEach(x => x.classList.toggle("on", x.dataset.v === (h && h.fx && !h.fx.on ? "off" : "on")));
+  }
   const pd = $("fxPreset"), items = [{ v: "", label: "Custom" }].concat(fxPresetItems()), it = items.find(i => i.v === fx.preset) || items[0];
   pd.querySelector(".cur").textContent = t(it.label);
   pd.dataset.v = it.v;
@@ -406,7 +414,7 @@ function fxRender() {
   sl("fxOut", c.out, fxDb(c.out));
   document.querySelectorAll("#fxBody .fxcp").forEach(el => el.classList.toggle("fxoff", !c.comp.on));
   document.querySelectorAll("#fxBody .fxlm").forEach(el => el.classList.toggle("fxoff", !c.lim.on));
-  $("fxRange").textContent = (r.sel ? t("Selection") : t("Whole file")) + " · " + fmtTime(r.a) + "–" + fmtTime(r.b);
+  if (!fx.target) $("fxRange").textContent = (r.sel ? t("Selection") : t("Whole file")) + " · " + fmtTime(r.a) + "–" + fmtTime(r.b);
   document.querySelectorAll("#fxListen button").forEach(x => { x.disabled = x.dataset.v !== "off" && busy; x.classList.toggle("on", x.dataset.v === fx.listen); });
   document.querySelectorAll("#fxMatch button").forEach(x => x.classList.toggle("on", x.dataset.v === (fx.match ? "on" : "off")));
   $("fxApply").disabled = busy || !ed.doc || r.b <= r.a;
@@ -461,7 +469,96 @@ function fxTypePick(v) {
   fxChanged();
 }
 
-function toggleFx() { if (rp.open && rp.tab === "fx") closeDiag(); else openRepair("fx"); }
+function fxSesKey() { return fx.target.kind === "master" ? "master" : fx.target.id; }
+
+function fxSesHolder() {
+  if (!fx.target || !ses.s) return null;
+  if (fx.target.kind === "master") { if (!ses.s.master) ses.s.master = { fx: null }; return Object.assign(ses.s.master, { name: t("Master") }); }
+  return ses.s.tracks.find(x => x.id === fx.target.id) || null;
+}
+
+function fxSesWrite(now) {
+  const h = fxSesHolder();
+  if (!h) return;
+  h.fx = { on: h.fx ? h.fx.on !== false : true, cfg: fxClone(fx.cfg) };
+  fxSesPush(now);
+}
+
+function fxSesPush(now) {
+  clearTimeout(fx.commitT);
+  fx.commitT = 0;
+  if (now) { ssCommit(); ed.worker.postMessage({ t: "sesmix", s: ses.s, flush: true }); return; }
+  clearTimeout(ses.mixT);
+  ses.mixT = setTimeout(() => { if (ses.s) ed.worker.postMessage({ t: "sesmix", s: ses.s, flush: true }); }, 30);
+  fx.commitT = setTimeout(() => { fx.commitT = 0; if (ses.s && fx.target) ssCommit(); }, 500);
+}
+
+function fxSesOpen(target) {
+  if (!ses.open) return;
+  if (fx.target) fxSesClose();
+  if (rp.open) closeDiag();
+  fx.edCfg = { cfg: fx.cfg, preset: fx.preset, band: fx.band };
+  fx.target = target;
+  const h = fxSesHolder();
+  if (!h) { fx.target = null; return; }
+  fx.cfg = fxMake(h.fx ? h.fx.cfg : {});
+  fx.preset = h.fx ? "" : "flat";
+  fx.band = 0;
+  const d = $("diag");
+  $("ses").appendChild(d);
+  fxSesPlace();
+  rp.open = true;
+  rp.tab = "fx";
+  ["dgBody", "nrBody", "humBody", "ldBody", "mdBody", "trBody"].forEach(id => $(id).classList.add("hidden"));
+  $("fxBody").classList.remove("hidden");
+  d.classList.remove("hidden");
+  fx.meter = { comp: 0, lim: 0, match: 0 };
+  clearInterval(fx.poll);
+  fx.poll = setInterval(fxPoll, 100);
+  fxPresetsUi();
+  fxRender();
+  ssHeads();
+}
+
+function fxSesPlace() {
+  const d = $("diag"), b = $("ses").getBoundingClientRect(), body = $("sesBody").getBoundingClientRect(), hd = $("ses").querySelector(".edhead").getBoundingClientRect();
+  if (matchMedia("(max-width:760px)").matches) { d.style.top = ""; d.style.bottom = ""; return; }
+  d.style.top = Math.round(hd.bottom - b.top) + 8 + "px";
+  d.style.bottom = Math.round(b.bottom - body.bottom) + 8 + "px";
+}
+
+function fxSesSync() {
+  if (!fx.target) return;
+  const h = fxSesHolder();
+  if (!h) { fxSesClose(); return; }
+  fx.cfg = fxMake(h.fx ? h.fx.cfg : {});
+  fx.band = Math.min(fx.band, Math.max(0, fx.cfg.bands.length - 1));
+  fxRender();
+}
+
+function fxSesClose() {
+  if (!fx.target) return;
+  if (fx.commitT) { clearTimeout(fx.commitT); fx.commitT = 0; if (ses.s) ssCommit(); }
+  fx.target = null;
+  clearInterval(fx.poll);
+  const d = $("diag");
+  d.classList.add("hidden");
+  d.classList.remove("sesfx");
+  d.style.top = "";
+  d.style.bottom = "";
+  document.querySelector("#ed .wvwrap").appendChild(d);
+  rp.open = false;
+  if (fx.edCfg) { fx.cfg = fx.edCfg.cfg; fx.preset = fx.edCfg.preset; fx.band = fx.edCfg.band; fx.edCfg = null; }
+  fxPresetsUi();
+  if (ses.open) ssHeads();
+}
+
+function fxSesToggle(target) {
+  if (fx.target && fx.target.kind === target.kind && fx.target.id === target.id) fxSesClose(); else fxSesOpen(target);
+}
+
+function toggleFx() {
+  if (ses.open && !ed.doc) { fxSesToggle({ kind: "master" }); return; } if (rp.open && rp.tab === "fx") closeDiag(); else openRepair("fx"); }
 
 function wireFx() {
   fxLoad();
@@ -513,8 +610,10 @@ function wireFx() {
   $("fxSave").addEventListener("click", fxPresetSave);
   $("fxDel").addEventListener("click", fxPresetDel);
   $("fxApply").addEventListener("click", fxApply);
+  $("fxByp").addEventListener("click", e => { const b = e.target.closest("button"); const h = fxSesHolder(); if (!b || !h) return; h.fx = { on: b.dataset.v === "on", cfg: fxClone(fx.cfg) }; fxSesPush(true); fxRender(); });
+  $("fxRemove").addEventListener("click", () => { const h = fxSesHolder(); if (!h) return; h.fx = null; fx.cfg = fxMake({}); fx.preset = "flat"; fx.band = 0; fxSesPush(true); fxRender(); });
   $("fxCancel").addEventListener("click", () => ed.worker.postMessage({ t: "fxcancel" }));
   $("fxDefaults").addEventListener("click", () => { fx.cfg = fxMake({}); fx.preset = "flat"; fx.band = 0; fxChanged(true); });
-  window.addEventListener("resize", () => { if (rp.open && rp.tab === "fx") fxDraw(); });
+  window.addEventListener("resize", () => { if (fx.target) fxSesPlace(); if (rp.open && rp.tab === "fx") fxDraw(); });
   document.addEventListener("i18n", () => { fxPresetsUi(); fxDd($("fxType"), FX_TYPES, fxTypePick); if (rp.open && rp.tab === "fx") fxRender(); });
 }

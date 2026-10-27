@@ -1075,5 +1075,15 @@
  "Your presets are kept in this browser for your account.": "I tuoi preset restano in questo browser, per il tuo account.",
  "Delete preset?": "Eliminare il preset?",
  "Processed turned by {d} to match": "Processato regolato di {d} per allineare",
- "Switch between Original and Processed while it plays. With Match levels on, Processed is turned to the loudness of the original, so you hear the change in sound and not just in level. Apply never matches levels.": "Passa tra Originale e Processato durante l'ascolto. Con Allinea i livelli, il processato viene portato alla loudness dell'originale, così senti il cambio di suono e non solo di livello. Applica non allinea mai."
+ "Switch between Original and Processed while it plays. With Match levels on, Processed is turned to the loudness of the original, so you hear the change in sound and not just in level. Apply never matches levels.": "Passa tra Originale e Processato durante l'ascolto. Con Allinea i livelli, il processato viene portato alla loudness dell'originale, così senti il cambio di suono e non solo di livello. Applica non allinea mai.",
+ "Master effects": "Effetti del master",
+ "Effects on {n}": "Effetti su {n}",
+ "Master": "Master",
+ "Bypassed": "Escluso",
+ "remove all": "rimuovi tutto",
+ "Take the effects off and start from flat": "Togli gli effetti e riparti da piatto",
+ "The effects run live on playback and mixdown, before the fader and pan. Nothing is written to the files.": "Gli effetti agiscono dal vivo in riproduzione e nel mixdown, prima del fader e del pan. Nei file non viene scritto nulla.",
+ "Effects on this track — click to edit": "Effetti su questa traccia — fai clic per modificare",
+ "Effects bypassed — click to edit": "Effetti esclusi — fai clic per modificare",
+ "Add effects to this track": "Aggiungi effetti a questa traccia"
 }

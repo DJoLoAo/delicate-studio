@@ -98,7 +98,7 @@ const CMDS = [
   { id: "insert", g: "Edit", label: "Insert silence…", run: () => insertSilenceDlg(), doc: true },
   { id: "hist", g: "Edit", label: "History", run: () => toggleHist(), doc: true, kw: "undo list steps" },
   { id: "loud", g: "Edit", label: "Loudness panel", run: () => toggleLoud(), doc: true, kw: "lufs loudness level loud louder volume gain master" },
-  { id: "effects", g: "Edit", label: "Effects…", run: () => toggleFx(), doc: true, kw: "effects rack eq equalizer equaliser filter low cut high cut highpass lowpass shelf bell notch compressor compression dynamics limiter master preset" },
+  { id: "effects", g: "Edit", label: "Effects…", run: () => toggleFx(), doc: true, ss: () => fxSesToggle({ kind: "master" }), kw: "effects rack eq equalizer equaliser filter low cut high cut highpass lowpass shelf bell notch compressor compression dynamics limiter master preset" },
   { id: "midi", g: "Edit", label: "Convert to MIDI…", run: () => toggleMidi(), doc: true, kw: "midi melody notes transcribe pitch audio to midi convert piano roll tune" },
   { id: "tracks", g: "Locations", label: "Split into tracks…", run: () => toggleTracks(), doc: true, kw: "split tracks side vinyl gaps auto split auto mark discogs tracklist cue ranges rip" },
   { id: "ldLoud", g: "Edit", label: "Match loudness…", run: () => ldOpen("loud"), doc: true, kw: "lufs loudness target limiter louder master streaming ebu r128" },

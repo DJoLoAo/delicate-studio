@@ -94,6 +94,7 @@ function ssRestore(i) {
   ssHeads();
   ssButtons();
   ssDraw();
+  fxSesSync();
 }
 
 function ssDeselect() { ses.sel = { a: 0, b: 0 }; ses.clip = null; ssButtons(); ssDraw(); }
@@ -178,6 +179,7 @@ async function ssOpen(id) {
 
 async function ssClose(quiet) {
   if (!ses.open) return;
+  fxSesClose();
   ssStop();
   await ssSave();
   ses.open = false;
@@ -867,7 +869,7 @@ function ssHeads() {
     el.className = "sestrack" + (tr.id === ses.track ? " cur" : "");
     el.style.height = ssLane() + "px";
     el.dataset.id = tr.id;
-    el.innerHTML = `<div class="st1"><i class="sdot" style="background:${tc(SS_COLORS[r % SS_COLORS.length])}"></i><button class="stn"></button><button class="stm" title="${esc(t("Mute"))}">M</button><button class="sts" title="${esc(t("Solo"))}">S</button><button class="sta"></button><button class="x std" title="${esc(t("Remove the track"))}" aria-label="${esc(t("Remove the track"))}">×</button></div>`
+    el.innerHTML = `<div class="st1"><i class="sdot" style="background:${tc(SS_COLORS[r % SS_COLORS.length])}"></i><button class="stn"></button><button class="stm" title="${esc(t("Mute"))}">M</button><button class="sts" title="${esc(t("Solo"))}">S</button><button class="sta"></button><button class="stf">FX</button><button class="x std" title="${esc(t("Remove the track"))}" aria-label="${esc(t("Remove the track"))}">×</button></div>`
       + `<label class="st2"><span>${esc(t("Vol"))}</span><input type="range" class="stg" min="-48" max="12" step="0.5"><b class="stgv"></b></label>`
       + `<label class="st2"><span>${esc(t("Pan"))}</span><input type="range" class="stp" min="-100" max="100" step="1"><b class="stpv"></b></label>`;
     el.querySelector(".stn").textContent = tr.name;
@@ -880,6 +882,13 @@ function ssHeads() {
     sta.classList.toggle("has", !!(au.vol.length || au.pan.length));
     sta.title = tr.view === "vol" ? t("Volume automation shown — click for pan") : tr.view === "pan" ? t("Pan automation shown — click to hide") : t("Show the automation");
     sta.setAttribute("aria-label", sta.title);
+    const stf = el.querySelector(".stf"), fxOpen = typeof fx !== "undefined" && fx.target && fx.target.kind === "track" && fx.target.id === tr.id;
+    stf.classList.toggle("has", !!tr.fx);
+    stf.classList.toggle("byp", !!tr.fx && !tr.fx.on);
+    stf.classList.toggle("on", !!fxOpen);
+    stf.title = tr.fx ? (tr.fx.on ? t("Effects on this track — click to edit") : t("Effects bypassed — click to edit")) : t("Add effects to this track");
+    stf.setAttribute("aria-label", stf.title);
+    stf.addEventListener("click", () => fxSesToggle({ kind: "track", id: tr.id }));
     el.querySelector(".st2:nth-of-type(1)").classList.toggle("auto", au.vol.length > 0);
     el.querySelector(".st2:nth-of-type(2)").classList.toggle("auto", au.pan.length > 0);
     ssHeadVals(el, tr, ses.play.on ? ssPlayhead() : ses.cursor);
@@ -986,6 +995,7 @@ async function ssRemoveTrack(id) {
   if (ses.track === id) ses.track = ses.s.tracks[0] ? ses.s.tracks[0].id : null;
   if (ses.clip && !ssTrackOf(ses.clip)) ses.clip = null;
   ssCommit();
+  fxSesSync();
 }
 
 async function ssRename() {

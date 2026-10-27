@@ -1075,5 +1075,15 @@
  "Your presets are kept in this browser for your account.": "Tus preajustes se guardan en este navegador, para tu cuenta.",
  "Delete preset?": "¿Borrar el preajuste?",
  "Processed turned by {d} to match": "Procesado ajustado {d} para igualar",
- "Switch between Original and Processed while it plays. With Match levels on, Processed is turned to the loudness of the original, so you hear the change in sound and not just in level. Apply never matches levels.": "Cambia entre Original y Procesado mientras suena. Con Igualar niveles, lo procesado se lleva a la sonoridad del original, así oyes el cambio de sonido y no solo de nivel. Aplicar nunca iguala niveles."
+ "Switch between Original and Processed while it plays. With Match levels on, Processed is turned to the loudness of the original, so you hear the change in sound and not just in level. Apply never matches levels.": "Cambia entre Original y Procesado mientras suena. Con Igualar niveles, lo procesado se lleva a la sonoridad del original, así oyes el cambio de sonido y no solo de nivel. Aplicar nunca iguala niveles.",
+ "Master effects": "Efectos del máster",
+ "Effects on {n}": "Efectos en {n}",
+ "Master": "Máster",
+ "Bypassed": "Omitido",
+ "remove all": "quitar todo",
+ "Take the effects off and start from flat": "Quitar los efectos y empezar desde plano",
+ "The effects run live on playback and mixdown, before the fader and pan. Nothing is written to the files.": "Los efectos funcionan en directo al reproducir y al mezclar, antes del fader y el panorama. No se escribe nada en los archivos.",
+ "Effects on this track — click to edit": "Efectos en esta pista — haz clic para editar",
+ "Effects bypassed — click to edit": "Efectos omitidos — haz clic para editar",
+ "Add effects to this track": "Añadir efectos a esta pista"
 }

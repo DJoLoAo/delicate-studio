@@ -25,6 +25,7 @@ function dgRange() {
 
 function openRepair(tab) {
   if (!ed.doc) return;
+  if (fx.target) fxSesClose();
   closePopovers();
   const prev = rp.open ? rp.tab : null;
   rp.open = true;
@@ -65,6 +66,7 @@ function openDiag(kind) {
 }
 
 function closeDiag() {
+  if (fx.target) { fxSesClose(); return; }
   const was = rp.open ? rp.tab : null;
   rp.open = false;
   dg.open = false;

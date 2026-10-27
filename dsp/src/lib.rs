@@ -796,20 +796,33 @@ mod wasm {
         limm(slot).map(|l| l.gr).unwrap_or(0.0)
     }
 
-    static mut RK: [Option<crate::fx::Rack>; 3] = [None, None, None];
+    static mut RK: Vec<Option<crate::fx::Rack>> = Vec::new();
     static mut RK_CFG: [f64; crate::fx::CFG_LEN] = [0.0; crate::fx::CFG_LEN];
 
     fn rkm(slot: u32) -> Option<&'static mut crate::fx::Rack> {
-        unsafe { (*std::ptr::addr_of_mut!(RK)).get_mut(slot as usize).and_then(|s| s.as_mut()) }
+        let v = unsafe { &mut *std::ptr::addr_of_mut!(RK) };
+        v.get_mut(slot as usize).and_then(|s| s.as_mut())
     }
 
     #[unsafe(no_mangle)]
     pub extern "C" fn rk_open(slot: u32, ch: u32, sr: u32) -> i32 {
-        if slot > 2 || ch == 0 || ch > 8 || sr == 0 {
+        if slot > 255 || ch == 0 || ch > 8 || sr == 0 {
             return fail("effects settings out of range".into());
         }
-        unsafe { (*std::ptr::addr_of_mut!(RK))[slot as usize] = Some(crate::fx::Rack::new(ch as usize, sr as usize)); }
+        let v = unsafe { &mut *std::ptr::addr_of_mut!(RK) };
+        if v.len() <= slot as usize {
+            v.resize_with(slot as usize + 1, || None);
+        }
+        v[slot as usize] = Some(crate::fx::Rack::new(ch as usize, sr as usize));
         0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rk_close(slot: u32) {
+        let v = unsafe { &mut *std::ptr::addr_of_mut!(RK) };
+        if let Some(s) = v.get_mut(slot as usize) {
+            *s = None;
+        }
     }
 
     #[unsafe(no_mangle)]

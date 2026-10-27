@@ -1075,5 +1075,15 @@
  "Your presets are kept in this browser for your account.": "आपके प्रीसेट इस ब्राउज़र में आपके खाते के लिए रखे जाते हैं।",
  "Delete preset?": "प्रीसेट हटाएँ?",
  "Processed turned by {d} to match": "मिलाने के लिए प्रोसेस्ड को {d} बदला गया",
- "Switch between Original and Processed while it plays. With Match levels on, Processed is turned to the loudness of the original, so you hear the change in sound and not just in level. Apply never matches levels.": "चलते समय मूल और प्रोसेस्ड के बीच बदलें। लेवल मिलाएँ चालू हो तो प्रोसेस्ड को मूल की लाउडनेस पर लाया जाता है, ताकि आप सिर्फ़ लेवल नहीं, आवाज़ का बदलाव सुनें। लागू करने पर लेवल कभी नहीं मिलाया जाता।"
+ "Switch between Original and Processed while it plays. With Match levels on, Processed is turned to the loudness of the original, so you hear the change in sound and not just in level. Apply never matches levels.": "चलते समय मूल और प्रोसेस्ड के बीच बदलें। लेवल मिलाएँ चालू हो तो प्रोसेस्ड को मूल की लाउडनेस पर लाया जाता है, ताकि आप सिर्फ़ लेवल नहीं, आवाज़ का बदलाव सुनें। लागू करने पर लेवल कभी नहीं मिलाया जाता।",
+ "Master effects": "मास्टर इफ़ेक्ट्स",
+ "Effects on {n}": "{n} पर इफ़ेक्ट्स",
+ "Master": "मास्टर",
+ "Bypassed": "बायपास",
+ "remove all": "सब हटाएँ",
+ "Take the effects off and start from flat": "इफ़ेक्ट्स हटाकर फ़्लैट से शुरू करें",
+ "The effects run live on playback and mixdown, before the fader and pan. Nothing is written to the files.": "इफ़ेक्ट्स प्लेबैक और मिक्सडाउन पर लाइव चलते हैं, फ़ेडर और पैन से पहले। फ़ाइलों में कुछ नहीं लिखा जाता।",
+ "Effects on this track — click to edit": "इस ट्रैक पर इफ़ेक्ट्स — बदलने के लिए क्लिक करें",
+ "Effects bypassed — click to edit": "इफ़ेक्ट्स बायपास — बदलने के लिए क्लिक करें",
+ "Add effects to this track": "इस ट्रैक में इफ़ेक्ट्स जोड़ें"
 }

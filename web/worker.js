@@ -1181,7 +1181,7 @@ function fillRing() {
   const len = play.end - play.start;
   for (let guard = 0; guard < 64; guard++) {
     const w = Atomics.load(ctrl, 1), r = Atomics.load(ctrl, 2);
-    const lim = !play.mix && FX.mode !== "off" ? Math.min(R, Math.max(4 * CHUNK, Math.round(cur.meta.sampleRate * 0.5))) : R;
+    const lim = !play.mix && FX.mode !== "off" ? Math.min(R, Math.max(4 * CHUNK, Math.round(cur.meta.sampleRate * 0.5))) : play.mix && SES.anyFx && SES.s ? Math.min(R, Math.max(4 * CHUNK, Math.round(SES.s.sr * 0.25))) : R;
     const free = lim - (w - r);
     if (free < CHUNK) return;
     if (!play.loop && w >= len) return;
@@ -1263,13 +1263,13 @@ function sesClean(v) {
     const au = tr.auto && typeof tr.auto === "object" ? tr.auto : {};
     const auto = { vol: env(au.vol, SM_FLOOR, SM_TOP), pan: env(au.pan, -1, 1) };
     const touch = tr.touch === "vol" || tr.touch === "pan" ? tr.touch : "";
-    tracks.push({ id: str(tr.id, 40) || crypto.randomUUID().slice(0, 12), name: str(tr.name, 80), gain: num(tr.gain, -96, 12, 0), pan: num(tr.pan, -1, 1, 0), mute: !!tr.mute, solo: !!tr.solo, clips, auto, touch, view: ["vol", "pan"].includes(tr.view) ? tr.view : "" });
+    tracks.push({ id: str(tr.id, 40) || crypto.randomUUID().slice(0, 12), name: str(tr.name, 80), gain: num(tr.gain, -96, 12, 0), pan: num(tr.pan, -1, 1, 0), mute: !!tr.mute, solo: !!tr.solo, clips, auto, touch, view: ["vol", "pan"].includes(tr.view) ? tr.view : "", fx: rkObj(tr.fx) });
   }
   const marks = [];
   for (const k of Array.isArray(s.marks) ? s.marks.slice(0, 999) : []) if (k && typeof k === "object") marks.push({ id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), at: int(k.at, 0, 2 ** 40), name: str(k.name, 160) });
   marks.sort((a, b) => a.at - b.at);
   const src = s.src && typeof s.src === "object" ? { kind: str(s.src.kind, 20), rec: str(s.src.rec, 80) } : null;
-  return { v: 1, id: str(s.id, 60) || crypto.randomUUID(), name: str(s.name, 160) || "Session", sr: sr >= 8000 ? sr : 0, created: Number(s.created) || Date.now(), modified: Date.now(), tracks, marks, src };
+  return { v: 1, id: str(s.id, 60) || crypto.randomUUID(), name: str(s.name, 160) || "Session", sr: sr >= 8000 ? sr : 0, created: Number(s.created) || Date.now(), modified: Date.now(), tracks, marks, src, master: { fx: rkObj(s.master && s.master.fx) } };
 }
 
 function sesLen(s) {
@@ -1317,6 +1317,8 @@ async function sesUse(id) {
 function sesRelease() {
   for (const c of SES.docs.values()) releaseDoc(c);
   SES.docs.clear();
+  sesRackClear(null);
+  SES.anyFx = false;
 }
 
 function sesEdge(c, seg) {
@@ -1349,54 +1351,168 @@ async function sesOpen(m) {
   const ids = [...new Set(s.tracks.flatMap(tr => tr.clips.map(k => k.doc)))];
   const docs = [];
   for (const id of ids) docs.push(await sesPayload(id));
+  await dspExports();
   SES.mix = sesMixer(s);
   return { t: "sesopen", s, docs };
 }
 
+function rkObj(v) {
+  if (!v || typeof v !== "object" || !v.cfg || typeof v.cfg !== "object") return null;
+  const o = v.cfg, num = (x, lo, hi, d) => { const n = Number(x); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
+  const ord = x => [2, 4, 8].includes(Number(x)) ? Number(x) : 4;
+  const hp = o.hp || {}, lp = o.lp || {}, cp = o.comp || {}, lm = o.lim || {};
+  return { on: v.on !== false, cfg: {
+    hp: { on: !!hp.on, f: num(hp.f, 10, 2000, 30), ord: ord(hp.ord) }, lp: { on: !!lp.on, f: num(lp.f, 1000, 24000, 18000), ord: ord(lp.ord) },
+    bands: (Array.isArray(o.bands) ? o.bands : []).slice(0, RK_BANDS).map(b => ({ on: !!b && b.on !== false, type: RK_TYPES.includes(b && b.type) ? b.type : "bell", f: num(b && b.f, 20, 22000, 1000), g: num(b && b.g, -30, 30, 0), q: num(b && b.q, 0.1, 40, 0.7071068) })),
+    comp: { on: !!cp.on, thr: num(cp.thr, -80, 0, -18), ratio: num(cp.ratio, 1, 100, 3), knee: num(cp.knee, 0, 40, 6), att: num(cp.att, 0.1, 500, 5), rel: num(cp.rel, 5, 5000, 150), makeup: num(cp.makeup, -24, 40, 0) },
+    lim: { on: !!lm.on, ceil: num(lm.ceil, -12, 0, -1), look: num(lm.look, 0.5, 20, 2), rel: num(lm.rel, 1, 2000, 100) }, out: num(o.out, -24, 24, 0) } };
+}
+
+const SES_RK = { racks: new Map(), next: 8, free: [] };
+
+function sesRack(key, fx, sr) {
+  const x = XP.dsp;
+  let R = SES_RK.racks.get(key);
+  if (!fx || !fx.on || !x || !sr) {
+    if (R) { x && x.rk_close(R.slot); SES_RK.free.push(R.slot); SES_RK.racks.delete(key); }
+    return null;
+  }
+  const ck = JSON.stringify(fx.cfg);
+  if (R && R.sr !== sr) { x.rk_close(R.slot); SES_RK.free.push(R.slot); SES_RK.racks.delete(key); R = null; }
+  if (!R) {
+    const slot = SES_RK.free.length ? SES_RK.free.pop() : SES_RK.next++;
+    if (x.rk_open(slot, 2, sr) !== 0) throw new Error(dspError(x));
+    R = { key, slot, sr, ck: "", lat: 0, warm: 0, x, q: [new Float32Array(1 << 16), new Float32Array(1 << 16)], qOff: 0, qLen: 0, qStart: -1, inPos: 0, drop: 0, inb: new Float32Array(NR_FEED * 2) };
+    SES_RK.racks.set(key, R);
+  }
+  if (R.ck !== ck) {
+    const lat = rkTune(x, R.slot, fx.cfg, false);
+    if (lat !== R.lat) R.qStart = -1;
+    R.lat = lat;
+    R.warm = lat + Math.round(sr * 0.5);
+    R.ck = ck;
+  }
+  return R;
+}
+
+function sesRackClear(keep) {
+  for (const [k, R] of [...SES_RK.racks]) if (!keep || !keep.has(k)) { if (R.x) R.x.rk_close(R.slot); SES_RK.free.push(R.slot); SES_RK.racks.delete(k); }
+}
+
+function sesRackRun(R, src, p, n, out, stride) {
+  const x = R.x, m = NR_FEED;
+  if (R.qStart !== p || p < 0) {
+    x.rk_reset(R.slot);
+    const o = p - R.warm;
+    R.inPos = o;
+    R.qStart = p;
+    R.qOff = 0;
+    R.qLen = 0;
+    R.drop = R.warm;
+  }
+  while (R.qLen < n) {
+    src(R.inPos, m, R.inb, m);
+    wasmF32(x, x.rk_in(R.slot, m), m * 2).set(R.inb);
+    R.inPos += m;
+    const made = x.rk_run(R.slot, m);
+    if (made < 0) throw new Error(dspError(x));
+    const o = wasmF32(x, x.rk_out(R.slot), made * 2), from = Math.min(made, R.drop);
+    R.drop -= from;
+    const add = made - from;
+    if (!add) continue;
+    if (R.qOff + R.qLen + add > R.q[0].length) {
+      if (R.qLen + add > R.q[0].length) for (let k = 0; k < 2; k++) { const big = new Float32Array(Math.max(R.q[k].length * 2, R.qLen + add)); big.set(R.q[k].subarray(R.qOff, R.qOff + R.qLen)); R.q[k] = big; }
+      else for (const q of R.q) q.copyWithin(0, R.qOff, R.qOff + R.qLen);
+      R.qOff = 0;
+    }
+    for (let k = 0; k < 2; k++) R.q[k].set(o.subarray(k * made + from, (k + 1) * made), R.qOff + R.qLen);
+    R.qLen += add;
+  }
+  out.set(R.q[0].subarray(R.qOff, R.qOff + n), 0);
+  out.set(R.q[1].subarray(R.qOff, R.qOff + n), stride);
+  R.qOff += n;
+  R.qLen -= n;
+  R.qStart = p + n;
+}
+
 function sesMixer(s) {
-  const solo = s.tracks.some(tr => tr.solo);
-  const act = s.tracks.filter(tr => !tr.mute && (!solo || tr.solo)).map(tr => ({
-    g: tr.gain <= -96 ? 0 : Math.pow(10, tr.gain / 20), pan: tr.pan, clips: tr.clips, xf: smXfades(tr.clips),
-    vol: tr.touch === "vol" || !tr.auto.vol.length ? null : tr.auto.vol, pn: tr.touch === "pan" || !tr.auto.pan.length ? null : tr.auto.pan
-  }));
-  let buf = new Float32Array(0), gv = new Float32Array(0), pv = new Float32Array(0);
-  return (p, n, out, stride) => {
+  const solo = s.tracks.some(tr => tr.solo), keep = new Set();
+  const act = s.tracks.filter(tr => !tr.mute && (!solo || tr.solo)).map(tr => {
+    const rack = sesRack(tr.id, tr.fx, s.sr);
+    if (rack) keep.add(tr.id);
+    const mono = tr.clips.every(k => { const c = SES.docs.get(k.doc); return !c || c.meta.channels === 1; });
+    return {
+      g: tr.gain <= -96 ? 0 : Math.pow(10, tr.gain / 20), pan: tr.pan, clips: tr.clips, xf: smXfades(tr.clips), rack, mono,
+      vol: tr.touch === "vol" || !tr.auto.vol.length ? null : tr.auto.vol, pn: tr.touch === "pan" || !tr.auto.pan.length ? null : tr.auto.pan
+    };
+  });
+  const master = sesRack("master", s.master && s.master.fx, s.sr);
+  if (master) keep.add("master");
+  for (const tr of s.tracks) if (tr.fx && tr.fx.on && (tr.mute || (solo && !tr.solo))) keep.add(tr.id);
+  sesRackClear(keep);
+  SES.anyFx = keep.size > 0;
+  let buf = new Float32Array(0), gv = new Float32Array(0), pv = new Float32Array(0), dry = new Float32Array(0);
+  const clipsInto = (T, p, n, dst, stride, wet) => {
+    for (const k of T.clips) {
+      const a = Math.max(p, k.at), b = Math.min(p + n, k.at + k.len);
+      if (b <= a) continue;
+      const c = SES.docs.get(k.doc);
+      if (!c) continue;
+      const m = b - a, ch = c.meta.channels, s0 = k.from + (a - k.at);
+      if (buf.length < m * 2) buf = new Float32Array(m * 2);
+      const rd = (src, cc, f, q, o, off) => readSrcOf(c, src, cc, f, q, o, off);
+      readList(c.lists[0], c.cum[0], s0, m, buf, 0, rd);
+      if (ch > 1) readList(c.lists[1], c.cum[1], s0, m, buf, m, rd);
+      const kg = k.gain <= -96 ? 0 : Math.pow(10, k.gain / 20), g = wet ? kg : (T.vol ? 1 : T.g) * kg;
+      const [pl, pr] = wet ? [1, 1] : smPanGains(T.pan, ch === 1);
+      const o = a - p, q0 = a - k.at, R = ch > 1 ? m : 0, fi = k.fin, fo = k.fout, len = k.len, x = T.xf.get(k.id) || { xi: 0, xo: 0 };
+      for (let i = 0; i < m; i++) {
+        const q = q0 + i;
+        let f = 1;
+        if (fi > 0 && q < fi) f *= fadeGain(q / Math.max(1, fi - 1), "lin", 0);
+        if (fo > 0 && q >= len - fo) f *= fadeGain((len - 1 - q) / Math.max(1, fo - 1), "lin", 0);
+        if (x.xi) f *= smXin(q, x.xi);
+        if (x.xo) f *= smXout(q, len, x.xo);
+        let gl = pl, gr = pr;
+        if (!wet && T.pn) { const v = pv[o + i]; if (ch === 1) { const th = (v + 1) * Math.PI / 4; gl = Math.cos(th); gr = Math.sin(th); } else { gl = v > 0 ? 1 - v : 1; gr = v < 0 ? 1 + v : 1; } }
+        const gg = g * f * (!wet && T.vol ? gv[o + i] : 1);
+        dst[o + i] += buf[i] * gl * gg;
+        dst[stride + o + i] += buf[R + i] * gr * gg;
+      }
+    }
+  };
+  const tracks = (p, n, out, stride) => {
     out.fill(0, 0, n);
     out.fill(0, stride, stride + n);
     if (gv.length < n) { gv = new Float32Array(n); pv = new Float32Array(n); }
+    if (dry.length < n * 2) dry = new Float32Array(n * 2);
     for (const T of act) {
       if (!T.vol && !T.g) continue;
       if (T.vol) { smBlock(T.vol, p, n, gv); for (let i = 0; i < n; i++) gv[i] = smGain(gv[i]); }
       if (T.pn) smBlock(T.pn, p, n, pv);
-      for (const k of T.clips) {
-        const a = Math.max(p, k.at), b = Math.min(p + n, k.at + k.len);
-        if (b <= a) continue;
-        const c = SES.docs.get(k.doc);
-        if (!c) continue;
-        const m = b - a, ch = c.meta.channels, s0 = k.from + (a - k.at);
-        if (buf.length < m * 2) buf = new Float32Array(m * 2);
-        const rd = (src, cc, f, q, o, off) => readSrcOf(c, src, cc, f, q, o, off);
-        readList(c.lists[0], c.cum[0], s0, m, buf, 0, rd);
-        if (ch > 1) readList(c.lists[1], c.cum[1], s0, m, buf, m, rd);
-        const kg = k.gain <= -96 ? 0 : Math.pow(10, k.gain / 20), g = (T.vol ? 1 : T.g) * kg;
-        const [pl, pr] = smPanGains(T.pan, ch === 1);
-        const o = a - p, q0 = a - k.at, R = ch > 1 ? m : 0, fi = k.fin, fo = k.fout, len = k.len, x = T.xf.get(k.id) || { xi: 0, xo: 0 };
-        for (let i = 0; i < m; i++) {
-          const q = q0 + i;
-          let f = 1;
-          if (fi > 0 && q < fi) f *= fadeGain(q / Math.max(1, fi - 1), "lin", 0);
-          if (fo > 0 && q >= len - fo) f *= fadeGain((len - 1 - q) / Math.max(1, fo - 1), "lin", 0);
-          if (x.xi) f *= smXin(q, x.xi);
-          if (x.xo) f *= smXout(q, len, x.xo);
-          let gl = pl, gr = pr;
-          if (T.pn) { const v = pv[o + i]; if (ch === 1) { const th = (v + 1) * Math.PI / 4; gl = Math.cos(th); gr = Math.sin(th); } else { gl = v > 0 ? 1 - v : 1; gr = v < 0 ? 1 + v : 1; } }
-          const gg = g * f * (T.vol ? gv[o + i] : 1);
-          out[o + i] += buf[i] * gl * gg;
-          out[stride + o + i] += buf[R + i] * gr * gg;
-        }
+      if (!T.rack) { clipsInto(T, p, n, out, stride, false); continue; }
+      sesRackRun(T.rack, (q, m, d, st) => { d.fill(0, 0, m); d.fill(0, st, st + m); clipsInto(T, q, m, d, st, true); }, p, n, dry, n);
+      for (let i = 0; i < n; i++) {
+        const g = T.vol ? gv[i] : T.g, v = T.pn ? pv[i] : T.pan;
+        let gl, gr;
+        if (T.mono) { const th = (v + 1) * Math.PI / 4; gl = Math.cos(th); gr = Math.sin(th); } else { gl = v > 0 ? 1 - v : 1; gr = v < 0 ? 1 + v : 1; }
+        out[i] += dry[i] * gl * g;
+        out[stride + i] += dry[n + i] * gr * g;
       }
     }
   };
+  if (!master) return tracks;
+  return (p, n, out, stride) => sesRackRun(master, tracks, p, n, out, stride);
+}
+
+function sesRackMeter(key) {
+  const R = SES_RK.racks.get(key);
+  if (!R) return { t: "rkmeter", on: false };
+  const v = new Float64Array(R.x.memory.buffer, R.x.rk_info(R.slot), 4);
+  const out = { t: "rkmeter", on: true, comp: v[0], lim: v[1], match: 0 };
+  v[0] = 0;
+  v[1] = 0;
+  return out;
 }
 
 function sesSetMix(m) {
@@ -1405,6 +1521,7 @@ function sesSetMix(m) {
   if (s.id !== SES.s.id) return;
   SES.s = s;
   SES.mix = sesMixer(s);
+  if (m.flush) sesFlush();
 }
 
 async function sesPut(m) {
@@ -3027,6 +3144,16 @@ function fxView(p0, run, tmp, stride) {
   }
 }
 
+function sesFlush() {
+  if (!play || !play.mix || !ring || !SES.s) return;
+  const ctrl = ring.ctrl, w = Atomics.load(ctrl, 1), r = Atomics.load(ctrl, 2);
+  const keep = Math.max(2048, Math.round(SES.s.sr * 0.06));
+  if (w - r <= keep) return;
+  Atomics.store(ctrl, 1, r + keep);
+  if (Atomics.load(ctrl, 2) > r + keep - 256) { Atomics.store(ctrl, 1, w); return; }
+  try { fillRing(); } catch (e) { stopPlay(); postMessage({ t: "playerror", msg: errText(e) }); }
+}
+
 function ringFlush() {
   if (!play || !ring || !cur) return;
   const ctrl = ring.ctrl, w = Atomics.load(ctrl, 1), r = Atomics.load(ctrl, 2);
@@ -4001,7 +4128,7 @@ async function handle(m) {
   }
   if (m.t === "tncancel") { if (TN.job) TN.job.cancel = true; return; }
   if (m.t === "mdlisten") { MDL.mode = ["midi", "both"].includes(m.mode) ? m.mode : "off"; MDL.notes = MDL.mode === "off" ? [] : mdClean(m.notes); ringFlush(); return; }
-  if (m.t === "rkmeter") { postMessage(Object.assign({ req: m.req }, rkMeter())); return; }
+  if (m.t === "rkmeter") { postMessage(Object.assign({ req: m.req }, m.ses ? sesRackMeter(String(m.ses)) : rkMeter())); return; }
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
   if (m.t === "proc") { postMessage(Object.assign({ req: m.req }, await pxApply(m))); return; }
   if (m.t === "seslist") { postMessage(Object.assign({ req: m.req }, await sesList())); return; }

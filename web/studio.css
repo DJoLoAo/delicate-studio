@@ -470,6 +470,16 @@ canvas.ru{height:calc(34px*var(--fs))}
 .fxgr i{display:block;height:100%;width:0;background:var(--gold)}
 #diag .nrbody .row>.snote.fxgrv{min-width:calc(56px*var(--fs));text-align:left;color:var(--gold)}
 #fxMatchV{color:var(--gray);min-height:calc(13px*var(--fs))}
+#ses{position:relative}
+#diag .fxtitle{display:none;color:var(--white);font-weight:500}
+#diag.sesfx .fxtitle{display:block}
+#diag.sesfx #rpTabs{display:none}
+#diag.sesfx .fxed{display:none}
+#diag:not(.sesfx) .fxses{display:none}
+.sestrack .stf{width:calc(24px*var(--fs));letter-spacing:.02em}
+.sestrack .stf.has{color:var(--gold);border-color:var(--gold)}
+.sestrack .stf.byp{color:var(--dim);text-decoration:line-through}
+.sestrack .stf.on{color:var(--bg);background:var(--gold);border-color:var(--gold)}
 .nin{width:calc(64px*var(--fs));background:var(--bg);border:1px solid var(--border);color:var(--white);font:inherit;font-size:calc(11px*var(--fs));padding:calc(4px*var(--fs)) calc(6px*var(--fs));font-variant-numeric:tabular-nums}
 .nin:focus{outline:0;border-color:var(--gold)}
 #diag .unit{font-size:calc(10px*var(--fs));color:var(--dim);margin-left:-4px}
@@ -569,10 +579,10 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 #dlg .eye.on{color:var(--pink)}
 #ses{flex:1;min-height:0;display:flex;flex-direction:column}
 .sesrow{flex:none;display:flex;border-bottom:1px solid var(--border)}
-.seshd{flex:none;width:calc(190px*var(--fs));background:var(--bg2);border-right:1px solid var(--border)}
+.seshd{flex:none;width:calc(216px*var(--fs));background:var(--bg2);border-right:1px solid var(--border)}
 .sesrow canvas.ru{flex:1;min-width:0;width:auto}
 .sesbody{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;align-items:flex-start;background:var(--bg)}
-.sesheads{flex:none;width:calc(190px*var(--fs));background:var(--bg2);border-right:1px solid var(--border)}
+.sesheads{flex:none;width:calc(216px*var(--fs));background:var(--bg2);border-right:1px solid var(--border)}
 .seslanes{flex:1;min-width:0}
 #sesCv{display:block;width:100%;touch-action:none;cursor:text;user-select:none;-webkit-user-select:none}
 .sestrack{box-sizing:border-box;border-bottom:1px solid var(--border);padding:calc(6px*var(--fs)) calc(8px*var(--fs));display:flex;flex-direction:column;justify-content:center;gap:calc(5px*var(--fs))}
@@ -581,7 +591,7 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 .sdot{width:calc(8px*var(--fs));height:calc(8px*var(--fs));border-radius:50%;flex:none}
 .stn{flex:1;min-width:0;text-align:left;background:none;border:0;color:var(--white);font:inherit;font-size:calc(11px*var(--fs));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;padding:0}
 .stn:hover{color:var(--gold)}
-.stm,.sts,.sta{flex:none;background:var(--bg3);border:1px solid var(--border);color:var(--gray);font:inherit;font-size:calc(9px*var(--fs));width:calc(20px*var(--fs));height:calc(18px*var(--fs));cursor:pointer;padding:0}
+.stm,.sts,.sta,.stf{flex:none;background:var(--bg3);border:1px solid var(--border);color:var(--gray);font:inherit;font-size:calc(9px*var(--fs));width:calc(20px*var(--fs));height:calc(18px*var(--fs));cursor:pointer;padding:0}
 .stm.on{color:var(--bg);background:var(--gold);border-color:var(--gold)}
 .sts.on{color:var(--bg);background:var(--blue);border-color:var(--blue)}
 .sta.has{color:var(--pink);border-color:var(--pink)}
@@ -604,7 +614,7 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 #dlg .djother{align-self:flex-start}
 .sesdoc .sdn{flex:1;min-width:0;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sesdoc .sdi{flex:none;color:var(--dim);font-size:calc(10px*var(--fs))}
-@media (max-width:760px){.seshd,.sesheads{width:calc(172px*var(--fs))}.st2 b{display:none}#ses .docmeta{flex:1 1 0}#sesClose{order:1}#sesTools{order:2;flex-basis:100%}}
+@media (max-width:760px){.seshd,.sesheads{width:calc(198px*var(--fs))}.st2 b{display:none}#ses .docmeta{flex:1 1 0}#sesClose{order:1}#sesTools{order:2;flex-basis:100%}}
 
 #dlg .pbto{align-self:flex-start;margin-bottom:calc(4px*var(--fs))}
 #dlg .pbrow{display:flex;align-items:center;gap:calc(8px*var(--fs))}
