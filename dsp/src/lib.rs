@@ -102,6 +102,7 @@ pub mod onset;
 pub mod restore;
 pub mod rs;
 pub mod sheal;
+pub mod space;
 pub mod spec;
 
 #[cfg(target_arch = "wasm32")]
@@ -838,6 +839,11 @@ mod wasm {
             Ok(lat) => lat as i32,
             Err(e) => fail(e),
         }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rk_tail(slot: u32) -> u32 {
+        rkm(slot).map(|r| r.tail() as u32).unwrap_or(0)
     }
 
     #[unsafe(no_mangle)]

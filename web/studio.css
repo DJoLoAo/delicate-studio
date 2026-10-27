@@ -466,6 +466,8 @@ canvas.ru{height:calc(34px*var(--fs))}
 #diag .fxtype{min-width:calc(96px*var(--fs))}
 #diag .fxhead{border-top:1px solid var(--border);padding-top:calc(8px*var(--fs))}
 #diag .fxoff{opacity:.45}
+#diag .fxnote{min-width:calc(104px*var(--fs))}
+#diag .nin:disabled{opacity:.5}
 .fxgr{flex:1;max-width:calc(120px*var(--fs));height:calc(5px*var(--fs));background:var(--bg4);overflow:hidden;direction:rtl}
 .fxgr i{display:block;height:100%;width:0;background:var(--gold)}
 #diag .nrbody .row>.snote.fxgrv{min-width:calc(56px*var(--fs));text-align:left;color:var(--gold)}

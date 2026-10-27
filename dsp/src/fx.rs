@@ -1,8 +1,9 @@
 use crate::loud::{kweight, Bq, Limiter};
+use crate::space::{Space, SP_AT, SP_LEN};
 use std::f64::consts::{PI, TAU};
 
 pub const MAX_BANDS: usize = 8;
-pub const CFG_LEN: usize = 20 + 5 * MAX_BANDS;
+pub const CFG_LEN: usize = SP_AT + SP_LEN;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Kind {
@@ -103,6 +104,7 @@ pub struct Rack {
     makeup: f32,
     gs: f64,
     drive: f32,
+    space: Space,
     lim_cfg: LimCfg,
     lim: Limiter,
     matching: bool,
@@ -137,6 +139,7 @@ impl Rack {
             makeup: 1.0,
             gs: 0.0,
             drive: 1.0,
+            space: Space::new(ch, sr),
             lim_cfg: LimCfg { on: false, ceil: -1.0, look: 2.0, rel: 100.0 },
             lim,
             matching: false,
@@ -208,6 +211,7 @@ impl Rack {
             self.lim_cfg = lc;
         }
         self.drive = 10f64.powf(c[17].clamp(-24.0, 24.0) / 20.0) as f32;
+        self.space.configure(c);
         let m = c[18] != 0.0;
         if m != self.matching {
             self.matching = m;
@@ -218,6 +222,10 @@ impl Rack {
 
     pub fn latency(&self) -> usize {
         self.lim.latency()
+    }
+
+    pub fn tail(&self) -> usize {
+        self.space.tail()
     }
 
     fn match_reset(&mut self) {
@@ -237,6 +245,7 @@ impl Rack {
             }
         }
         self.gs = 0.0;
+        self.space.reset();
         self.lim.reset();
         self.match_reset();
         self.info = [0.0; 4];
@@ -296,12 +305,14 @@ impl Rack {
                 let a = if gc < self.gs { self.att } else { self.rel };
                 self.gs = a * self.gs + (1.0 - a) * gc;
                 gr = gr.min(self.gs);
-                let g = 10f64.powf(self.gs / 20.0) as f32 * self.makeup * self.drive;
+                let g = 10f64.powf(self.gs / 20.0) as f32 * self.makeup;
                 for c in 0..ch {
                     self.mid[c * m + i] *= g;
                 }
             }
-        } else if self.drive != 1.0 {
+        }
+        self.space.run(&mut self.mid[..ch * m], m);
+        if self.drive != 1.0 {
             for v in self.mid.iter_mut() {
                 *v *= self.drive;
             }

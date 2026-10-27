@@ -1365,7 +1365,7 @@ function rkObj(v) {
     hp: { on: !!hp.on, f: num(hp.f, 10, 2000, 30), ord: ord(hp.ord) }, lp: { on: !!lp.on, f: num(lp.f, 1000, 24000, 18000), ord: ord(lp.ord) },
     bands: (Array.isArray(o.bands) ? o.bands : []).slice(0, RK_BANDS).map(b => ({ on: !!b && b.on !== false, type: RK_TYPES.includes(b && b.type) ? b.type : "bell", f: num(b && b.f, 20, 22000, 1000), g: num(b && b.g, -30, 30, 0), q: num(b && b.q, 0.1, 40, 0.7071068) })),
     comp: { on: !!cp.on, thr: num(cp.thr, -80, 0, -18), ratio: num(cp.ratio, 1, 100, 3), knee: num(cp.knee, 0, 40, 6), att: num(cp.att, 0.1, 500, 5), rel: num(cp.rel, 5, 5000, 150), makeup: num(cp.makeup, -24, 40, 0) },
-    lim: { on: !!lm.on, ceil: num(lm.ceil, -12, 0, -1), look: num(lm.look, 0.5, 20, 2), rel: num(lm.rel, 1, 2000, 100) }, out: num(o.out, -24, 24, 0) } };
+    lim: { on: !!lm.on, ceil: num(lm.ceil, -12, 0, -1), look: num(lm.look, 0.5, 20, 2), rel: num(lm.rel, 1, 2000, 100) }, out: num(o.out, -24, 24, 0), ...rkSp(o) } };
 }
 
 const SES_RK = { racks: new Map(), next: 8, free: [] };
@@ -1389,7 +1389,7 @@ function sesRack(key, fx, sr) {
     const lat = rkTune(x, R.slot, fx.cfg, false);
     if (lat !== R.lat) R.qStart = -1;
     R.lat = lat;
-    R.warm = lat + Math.round(sr * 0.5);
+    R.warm = rkWarm(x, R.slot, lat, sr);
     R.ck = ck;
   }
   return R;
@@ -2969,7 +2969,22 @@ function humTune(x, slot, raw, only) {
   return h;
 }
 
-const RK_BANDS = 8, RK_LEN = 20 + 5 * RK_BANDS, RK_TYPES = ["bell", "lowshelf", "highshelf", "notch"];
+const RK_BANDS = 8, RK_LEN = 80, RK_TYPES = ["bell", "lowshelf", "highshelf", "notch"], RK_MODS = ["off", "chorus", "flanger", "phaser"];
+
+function rkSp(o) {
+  const num = (v, lo, hi, d) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
+  const md = o.mod || {}, dl = o.delay || {}, rv = o.rev || {}, gt = o.gate || {};
+  const note = v => typeof v === "string" && /^(free|\d+\/\d+d?)$/.test(v) ? v : "free";
+  return {
+    bpm: num(o.bpm, 40, 240, 120),
+    mod: { mode: RK_MODS.includes(md.mode) ? md.mode : "off", rate: num(md.rate, 0.01, 20, 0.5), depth: num(md.depth, 0, 1, 0.5), fb: num(md.fb, 0, 0.95, 0.5), mix: num(md.mix, 0, 1, 0.5) },
+    delay: { on: !!dl.on, ms: num(dl.ms, 1, 2000, 250), fb: num(dl.fb, 0, 0.95, 0.45), mix: num(dl.mix, 0, 1, 0.35), pp: !!dl.pp, note: note(dl.note) },
+    rev: { on: !!rv.on, decay: num(rv.decay, 0.1, 20, 2), damp: num(rv.damp, 0, 1, 0.5), pre: num(rv.pre, 0, 200, 10), mix: num(rv.mix, 0, 1, 0.25), cut: num(rv.cut, 10, 2000, 180) },
+    gate: { on: !!gt.on, rate: num(gt.rate, 0.05, 40, 4), depth: num(gt.depth, 0, 1, 1), square: gt.square !== false, note: note(gt.note) }
+  };
+}
+
+function rkWarm(x, slot, lat, sr) { return lat + Math.max(Math.round(sr * 0.5), Math.min(x.rk_tail(slot), sr * 8)); }
 
 function rkCfg(m) {
   const o = m && typeof m === "object" ? m : {};
@@ -2987,6 +3002,11 @@ function rkCfg(m) {
     const t = Math.max(0, RK_TYPES.indexOf(b && b.type));
     a.set([on(b && b.on !== false), t, num(b && b.f, 20, 22000, 1000), num(b && b.g, -30, 30, 0), num(b && b.q, 0.1, 40, 0.71)], 20 + 5 * k);
   });
+  const sp = rkSp(o);
+  a.set([RK_MODS.indexOf(sp.mod.mode), sp.mod.rate, sp.mod.depth, sp.mod.fb, sp.mod.mix,
+    on(sp.delay.on), sp.delay.ms, sp.delay.fb, sp.delay.mix, on(sp.delay.pp),
+    on(sp.rev.on), sp.rev.decay, sp.rev.damp, sp.rev.pre, sp.rev.mix, sp.rev.cut,
+    on(sp.gate.on), sp.gate.rate, sp.gate.depth, on(sp.gate.square)], 60);
   return a;
 }
 
@@ -3039,7 +3059,7 @@ function fxSetup(x, kind, slot, raw, c, only) {
   if (kind === "rk") {
     if (x.rk_open(slot, ch, sr) !== 0) throw new Error(dspError(x));
     const lat = rkTune(x, slot, raw, slot === 0);
-    return { warm: lat + Math.round(sr * 0.5), key: "rk" };
+    return { warm: rkWarm(x, slot, lat, sr), key: "rk" };
   }
   if (kind === "ld") {
     if (x.lim_open(slot, ch, sr) !== 0) throw new Error(dspError(x));
@@ -3067,7 +3087,7 @@ function fxPreview(x, c) {
     pv = FX.pv = { doc: c, kind, x, key, ref, autoKey: NR.auto ? NR.auto.key : "", auto: s.auto || null, warm: s.warm, bins: s.bins, n: s.n, curveKey: s.curveKey, api: fxApi(x, kind, 0), ch: c.meta.channels, q: null, qStart: 0, qOff: 0, qLen: 0, drop: 0, inPos: 0, ver: -1 };
     return;
   }
-  if (kind === "rk") pv.warm = rkTune(x, 0, FX.raw, true) + Math.round(c.meta.sampleRate * 0.5);
+  if (kind === "rk") pv.warm = rkWarm(x, 0, rkTune(x, 0, FX.raw, true), c.meta.sampleRate);
   else if (kind === "hum") pv.warm = humWarm(humTune(x, 0, FX.raw, only), c.meta.sampleRate);
   else if (kind === "ld") pv.warm = ldTune(x, 0, FX.raw, c.meta.channels) + Math.round(c.meta.sampleRate * 0.3);
   else {

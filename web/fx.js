@@ -1,6 +1,8 @@
 const FX_MAX_BANDS = 8;
 const FX_TYPES = [{ v: "bell", label: "Bell" }, { v: "lowshelf", label: "Low shelf" }, { v: "highshelf", label: "High shelf" }, { v: "notch", label: "Notch" }];
-const FX_FLAT = { hp: { on: false, f: 30, ord: 4 }, lp: { on: false, f: 18000, ord: 4 }, bands: [], comp: { on: false, thr: -18, ratio: 3, knee: 6, att: 5, rel: 150, makeup: 0 }, lim: { on: false, ceil: -1, look: 2, rel: 100 }, out: 0 };
+const FX_FLAT = { hp: { on: false, f: 30, ord: 4 }, lp: { on: false, f: 18000, ord: 4 }, bands: [], comp: { on: false, thr: -18, ratio: 3, knee: 6, att: 5, rel: 150, makeup: 0 }, lim: { on: false, ceil: -1, look: 2, rel: 100 }, out: 0, bpm: 120, mod: { mode: "off", rate: 0.5, depth: 0.5, fb: 0.5, mix: 0.5 }, delay: { on: false, ms: 250, fb: 0.45, mix: 0.35, pp: false, note: "free" }, rev: { on: false, decay: 2, damp: 0.5, pre: 10, mix: 0.25, cut: 180 }, gate: { on: false, rate: 4, depth: 1, square: true, note: "free" } };
+const FX_MODS = [{ v: "off", label: "Off" }, { v: "chorus", label: "Chorus" }, { v: "flanger", label: "Flanger" }, { v: "phaser", label: "Phaser" }];
+const FX_NOTES = [{ v: "free", label: "free" }, { v: "1/16", label: "1/16" }, { v: "1/8", label: "1/8" }, { v: "3/16", label: "1/8 dotted" }, { v: "1/4", label: "1/4" }, { v: "3/8", label: "1/4 dotted" }, { v: "1/2", label: "1/2" }, { v: "3/4", label: "1/2 dotted" }, { v: "1/1", label: "1 bar" }];
 const FX_FACTORY = [
   { v: "flat", label: "Flat", cfg: {} },
   { v: "deck", label: "DJ deck EQ", cfg: { bands: [{ type: "lowshelf", f: 200, g: 0, q: 0.7071068 }, { type: "bell", f: 1000, g: 0, q: 0.7 }, { type: "highshelf", f: 2500, g: 0, q: 0.7071068 }] } },
@@ -8,6 +10,14 @@ const FX_FACTORY = [
   { v: "atmo", label: "Room mic (atmo)", cfg: { hp: { on: true, f: 200, ord: 2 } } },
   { v: "master", label: "DJ master limiter", cfg: { lim: { on: true, ceil: -1, look: 1, rel: 100 } } },
   { v: "rumble", label: "Vinyl rumble cut", cfg: { hp: { on: true, f: 25, ord: 4 } } },
+  { v: "fecho", label: "Navidrome echo", cfg: { delay: { on: true, ms: 250, fb: 0.5, mix: 0.4 } } },
+  { v: "frev", label: "Navidrome reverb", cfg: { rev: { on: true, decay: 2, damp: 0.3, pre: 0, mix: 0.35, cut: 20 } } },
+  { v: "fchorus", label: "Navidrome chorus", cfg: { mod: { mode: "chorus", rate: 0.8, depth: 1, fb: 0, mix: 0.5 } } },
+  { v: "fgate", label: "Navidrome gater", cfg: { gate: { on: true, rate: 4, depth: 0.8, square: true } } },
+  { v: "ddelay", label: "DJ deck delay", cfg: { bpm: 120, delay: { on: true, ms: 250, fb: 0.45, mix: 0.35, note: "1/8" } } },
+  { v: "drev", label: "DJ deck reverb", cfg: { rev: { on: true, decay: 3, damp: 0.5, pre: 10, mix: 0.3, cut: 180 } } },
+  { v: "dflanger", label: "DJ deck flanger", cfg: { mod: { mode: "flanger", rate: 1.3, depth: 0.7, fb: 0.6, mix: 0.5 } } },
+  { v: "dphaser", label: "DJ deck phaser", cfg: { mod: { mode: "phaser", rate: 1.05, depth: 1, fb: 0.35, mix: 0.5 } } },
   { v: "glue", label: "Mastering glue", cfg: { hp: { on: true, f: 20, ord: 2 }, comp: { on: true, thr: -14, ratio: 2, knee: 6, att: 30, rel: 200, makeup: 2 }, lim: { on: true, ceil: -1, look: 2, rel: 100 } } }
 ];
 const fx = { target: null, edCfg: null, commitT: 0, cfg: null, preset: "flat", match: true, listen: "off", band: 0, job: null, seq: 0, busy: false, again: false, done: null, err: null, meter: { comp: 0, lim: 0, match: 0 }, poll: 0, drag: null, user: [] };
@@ -17,10 +27,20 @@ function fxClone(v) { return JSON.parse(JSON.stringify(v)); }
 function fxMake(part) {
   const p = part || {};
   const c = fxClone(FX_FLAT);
-  for (const k of ["hp", "lp", "comp", "lim"]) if (p[k]) Object.assign(c[k], p[k]);
+  for (const k of ["hp", "lp", "comp", "lim", "mod", "delay", "rev", "gate"]) if (p[k]) Object.assign(c[k], p[k]);
+  if (Number.isFinite(Number(p.bpm))) c.bpm = Math.max(40, Math.min(240, Number(p.bpm)));
+  fxSync(c);
   if (Array.isArray(p.bands)) c.bands = p.bands.slice(0, FX_MAX_BANDS).map(b => ({ on: b.on !== false, type: FX_TYPES.some(t => t.v === b.type) ? b.type : "bell", f: Number(b.f) || 1000, g: Number(b.g) || 0, q: Number(b.q) || 0.7071068 }));
   if (Number.isFinite(Number(p.out))) c.out = Number(p.out);
   return c;
+}
+
+function fxBeats(note) { if (!note || note === "free") return 0; const [a, b] = note.split("/").map(Number); return a / b * 4; }
+
+function fxSync(c) {
+  const d = fxBeats(c.delay.note), g = fxBeats(c.gate.note), beat = 60000 / c.bpm;
+  if (d) c.delay.ms = Math.min(2000, Math.round(beat * d * 10) / 10);
+  if (g) c.gate.rate = Math.round(1000 / (beat * g) * 1000) / 1000;
 }
 
 function fxUserKey() { return "studioFxPresets:" + (studio.me ? studio.me.username : ""); }
@@ -103,6 +123,7 @@ async function fxPoll() {
 
 function fxChanged(keepPreset) {
   if (!keepPreset) fx.preset = "";
+  fxSync(fx.cfg);
   if (fx.target) { fxSesWrite(keepPreset); fxRender(); return; }
   fxSave();
   fxRender();
@@ -412,6 +433,37 @@ function fxRender() {
   sl("fxLmRel", c.lim.rel, fxMs(c.lim.rel));
   sl("fxLook", c.lim.look, fxMs(c.lim.look));
   sl("fxOut", c.out, fxDb(c.out));
+  const pc = v => Math.round(v * 100) + " %";
+  if (document.activeElement !== $("fxBpm")) $("fxBpm").value = String(Math.round(c.bpm * 100) / 100);
+  document.querySelectorAll("#fxMdMode button").forEach(x => x.classList.toggle("on", x.dataset.v === c.mod.mode));
+  sl("fxMdRate", c.mod.rate, c.mod.rate.toFixed(2) + " Hz");
+  sl("fxMdDepth", Math.round(c.mod.depth * 100), pc(c.mod.depth));
+  sl("fxMdFb", Math.round(c.mod.fb * 100), pc(c.mod.fb));
+  sl("fxMdMix", Math.round(c.mod.mix * 100), pc(c.mod.mix));
+  document.querySelectorAll("#fxBody .fxmd").forEach(el => el.classList.toggle("hidden", c.mod.mode === "off"));
+  document.querySelectorAll("#fxBody .fxmdfb").forEach(el => el.classList.toggle("hidden", c.mod.mode === "off" || c.mod.mode === "chorus"));
+  onoff("fxDlOn", c.delay.on);
+  onoff("fxDlPp", c.delay.pp);
+  fxNoteShow("fxDlNote", c.delay.note);
+  if (document.activeElement !== $("fxDlMs")) $("fxDlMs").value = String(c.delay.ms);
+  $("fxDlMs").disabled = c.delay.note !== "free";
+  sl("fxDlFb", Math.round(c.delay.fb * 100), pc(c.delay.fb));
+  sl("fxDlMix", Math.round(c.delay.mix * 100), pc(c.delay.mix));
+  document.querySelectorAll("#fxBody .fxdl").forEach(el => el.classList.toggle("hidden", !c.delay.on));
+  onoff("fxRvOn", c.rev.on);
+  sl("fxRvDecay", c.rev.decay, c.rev.decay.toFixed(1) + " s");
+  sl("fxRvDamp", Math.round(c.rev.damp * 100), pc(c.rev.damp));
+  sl("fxRvPre", c.rev.pre, Math.round(c.rev.pre) + " ms");
+  sl("fxRvCut", c.rev.cut, fxHz(c.rev.cut));
+  sl("fxRvMix", Math.round(c.rev.mix * 100), pc(c.rev.mix));
+  document.querySelectorAll("#fxBody .fxrv").forEach(el => el.classList.toggle("hidden", !c.rev.on));
+  onoff("fxGtOn", c.gate.on);
+  document.querySelectorAll("#fxGtShape button").forEach(x => x.classList.toggle("on", x.dataset.v === (c.gate.square ? "square" : "sine")));
+  fxNoteShow("fxGtNote", c.gate.note);
+  if (document.activeElement !== $("fxGtRate")) $("fxGtRate").value = String(c.gate.rate);
+  $("fxGtRate").disabled = c.gate.note !== "free";
+  sl("fxGtDepth", Math.round(c.gate.depth * 100), pc(c.gate.depth));
+  document.querySelectorAll("#fxBody .fxgt").forEach(el => el.classList.toggle("hidden", !c.gate.on));
   document.querySelectorAll("#fxBody .fxcp").forEach(el => el.classList.toggle("fxoff", !c.comp.on));
   document.querySelectorAll("#fxBody .fxlm").forEach(el => el.classList.toggle("fxoff", !c.lim.on));
   if (!fx.target) $("fxRange").textContent = (r.sel ? t("Selection") : t("Whole file")) + " · " + fmtTime(r.a) + "–" + fmtTime(r.b);
@@ -459,6 +511,12 @@ function fxProg(m) {
 
 function fxAfterEdit() {
   if (rp.open && rp.tab === "fx") fxRender();
+}
+
+function fxNoteShow(id, v) {
+  const el = $(id), it = FX_NOTES.find(n => n.v === v) || FX_NOTES[0];
+  el.querySelector(".cur").textContent = t(it.label);
+  el.dataset.v = it.v;
 }
 
 function fxTypePick(v) {
@@ -604,6 +662,29 @@ function wireFx() {
   slider("fxLmRel", v => { fx.cfg.lim.rel = v; });
   slider("fxLook", v => { fx.cfg.lim.look = v; });
   slider("fxOut", v => { fx.cfg.out = v; });
+  slider("fxMdRate", v => { fx.cfg.mod.rate = v; });
+  slider("fxMdDepth", v => { fx.cfg.mod.depth = v / 100; });
+  slider("fxMdFb", v => { fx.cfg.mod.fb = v / 100; });
+  slider("fxMdMix", v => { fx.cfg.mod.mix = v / 100; });
+  slider("fxDlFb", v => { fx.cfg.delay.fb = v / 100; });
+  slider("fxDlMix", v => { fx.cfg.delay.mix = v / 100; });
+  slider("fxRvDecay", v => { fx.cfg.rev.decay = v; });
+  slider("fxRvDamp", v => { fx.cfg.rev.damp = v / 100; });
+  slider("fxRvPre", v => { fx.cfg.rev.pre = v; });
+  slider("fxRvCut", v => { fx.cfg.rev.cut = v; });
+  slider("fxRvMix", v => { fx.cfg.rev.mix = v / 100; });
+  slider("fxGtDepth", v => { fx.cfg.gate.depth = v / 100; });
+  seg("fxMdMode", v => { fx.cfg.mod.mode = v; });
+  seg("fxDlOn", v => { fx.cfg.delay.on = v === "on"; });
+  seg("fxDlPp", v => { fx.cfg.delay.pp = v === "on"; });
+  seg("fxRvOn", v => { fx.cfg.rev.on = v === "on"; });
+  seg("fxGtOn", v => { fx.cfg.gate.on = v === "on"; });
+  seg("fxGtShape", v => { fx.cfg.gate.square = v === "square"; });
+  num("fxBpm", () => true, v => { fx.cfg.bpm = v; }, 40, 240);
+  num("fxDlMs", () => true, v => { fx.cfg.delay.ms = v; }, 1, 2000);
+  num("fxGtRate", () => true, v => { fx.cfg.gate.rate = v; }, 0.05, 40);
+  fxDd($("fxDlNote"), FX_NOTES, v => { fx.cfg.delay.note = v; fxChanged(); });
+  fxDd($("fxGtNote"), FX_NOTES, v => { fx.cfg.gate.note = v; fxChanged(); });
   $("fxBandChips").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.i === "add") fxBandAdd(1000, 0); else { fx.band = Number(b.dataset.i); fxRender(); } });
   $("fxBandDel").addEventListener("click", fxBandDel);
   $("fxListen").addEventListener("click", e => { const b = e.target.closest("button"); if (!b || b.disabled) return; fxListen(b.dataset.v); });
@@ -615,5 +696,5 @@ function wireFx() {
   $("fxCancel").addEventListener("click", () => ed.worker.postMessage({ t: "fxcancel" }));
   $("fxDefaults").addEventListener("click", () => { fx.cfg = fxMake({}); fx.preset = "flat"; fx.band = 0; fxChanged(true); });
   window.addEventListener("resize", () => { if (fx.target) fxSesPlace(); if (rp.open && rp.tab === "fx") fxDraw(); });
-  document.addEventListener("i18n", () => { fxPresetsUi(); fxDd($("fxType"), FX_TYPES, fxTypePick); if (rp.open && rp.tab === "fx") fxRender(); });
+  document.addEventListener("i18n", () => { fxPresetsUi(); fxDd($("fxType"), FX_TYPES, fxTypePick); fxDd($("fxDlNote"), FX_NOTES, v => { fx.cfg.delay.note = v; fxChanged(); }); fxDd($("fxGtNote"), FX_NOTES, v => { fx.cfg.gate.note = v; fxChanged(); }); if (rp.open && rp.tab === "fx") fxRender(); });
 }
