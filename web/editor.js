@@ -2,7 +2,7 @@ const BUCKET = 256;
 const BPB = 256;
 const RING = 1 << 17;
 const DB_RANGE = 60;
-const AUDIO_ACCEPT = ".flac,.wav,.wave,.bwf,.aif,.aiff,.aifc,.mp3,.mp2,.m4a,.mp4,.aac,.alac,.caf,.ogg,.oga";
+const AUDIO_ACCEPT = ".mid,.midi,.flac,.wav,.wave,.bwf,.aif,.aiff,.aifc,.mp3,.mp2,.m4a,.mp4,.aac,.alac,.caf,.ogg,.oga";
 
 const ed = {
   worker: new Worker("/worker.js"),
@@ -801,6 +801,8 @@ function openError(e, name) {
 }
 
 async function importFiles(files) {
+  const mids = [...files].filter(f => f && /\.midi?$/i.test(f.name));
+  if (mids.length) { await prImportFile(mids[0]); files = [...files].filter(f => !mids.includes(f)); }
   const all = [...files].filter(f => f && f.size > 0), cues = all.filter(f => /\.cue$/i.test(f.name)), list = all.filter(f => !/\.cue$/i.test(f.name));
   if (!list.length) { if (cues.length && ed.doc) ftCueFile(cues[0]); return; }
   for (const f of list) {
@@ -853,6 +855,7 @@ function setTab(tab) {
   if (tab === "locker") { loadLocker(); setTimeout(() => $("lkQ").focus(), 30); }
   if (tab === "albums") alTab();
   if (tab === "sessions") ssFilesTab();
+  if (tab === "midi") prFilesTab();
 }
 
 async function myAccount() {
@@ -938,7 +941,7 @@ function renderLocker() {
   for (const f of hits.slice(0, 300)) {
     const ext = (f.path || "").split(".").pop().toLowerCase();
     const info = [f.artist, f.album, f.duration ? fmtDur(f.duration) : "", f.size ? fmtBytes(f.size) : "", f.folder].filter(Boolean).join(" · ");
-    box.appendChild(rowEl(f.title || f.path, info, () => importRemote({ kind: "locker", id: String(f.id), title: f.title || "", artist: f.artist || "", album: f.album || "", path: f.path || "" }, ext), ext ? ext.toUpperCase() : ""));
+    box.appendChild(rowEl(f.title || f.path, info, () => /^midi?$/i.test(ext || "") ? prImportRemote(f) : importRemote({ kind: "locker", id: String(f.id), title: f.title || "", artist: f.artist || "", album: f.album || "", path: f.path || "" }, ext), ext ? ext.toUpperCase() : ""));
   }
   $("lkInfo").textContent = hits.length > 300 ? t("Showing 300 of") + " " + hits.length + " — " + t("refine the filter") : files.length + " " + t("files in your Locker");
 }
@@ -1810,6 +1813,7 @@ function wireUi() {
   wireReport();
   wireNull();
   wireStream();
+  wirePianoRoll();
   wireLoud();
   wireMidi();
   wireTracks();

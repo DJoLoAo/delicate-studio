@@ -63,6 +63,25 @@
   <div class="bbar lrbar hidden" id="nlBar"><i></i></div>
   <div class="lrbody" id="nlBody"></div>
 </div>
+<div id="pr" class="hidden" role="dialog" aria-label="Piano roll">
+  <div class="prbar">
+    <button class="x" id="prX" title="Close the piano roll" aria-label="Close">×</button>
+    <button class="prname" id="prName" title="Rename"></button>
+    <div class="dd down" id="prTrack" title="Track"><div class="cur"></div><div class="list"></div></div><button class="outbtn" id="prTrackBtn">track…</button><button class="segbtn" id="prMute" title="Mute the track">mute</button>
+    <div class="seg" id="prTool"><button class="segbtn" data-v="select" title="Select, move and stretch notes (V); double-click adds one">select</button><button class="segbtn" data-v="draw" title="Draw notes (B)">draw</button><button class="segbtn" data-v="erase" title="Erase notes (E)">erase</button></div>
+    <span class="prl">Snap</span><div class="dd down" id="prSnap"><div class="cur"></div><div class="list"></div></div><button class="outbtn" id="prQuant" title="Snap the selected notes, or all of the track, to the grid (Q)">quantize</button>
+    <span class="prl">BPM</span><input class="nin fxsm" id="prBpm" inputmode="decimal" aria-label="Tempo">
+    <button class="outbtn" id="prUndo" title="Undo">undo</button><button class="outbtn" id="prRedo" title="Redo">redo</button>
+  </div>
+  <div class="prbar">
+    <button class="primary" id="prPlay">play</button><button class="segbtn" id="prLoop" title="Loop the range dragged on the ruler (L)">loop</button>
+    <span class="prl">Sound</span><div class="dd down" id="prVoice"><div class="cur"></div><div class="list"></div></div><div class="dd down" id="prOut" title="MIDI out"><div class="cur"></div><div class="list"></div></div>
+    <span class="hidden prarow" id="prAudioRow"><button class="segbtn" id="prAudio" title="Play the recording along"></button><input type="range" id="prAudioLvl" min="0" max="100" aria-label="Recording level"></span>
+    <span class="grow"></span><span class="snote" id="prInfo"></span>
+    <button class="outbtn" id="prExport">download .mid</button><button class="outbtn" id="prLocker">save to Locker</button>
+  </div>
+  <canvas id="prCv"></canvas>
+</div>
 <div id="svw" class="hidden" role="dialog" aria-label="Streaming preview">
   <div class="qhead"><b>Streaming preview</b><span class="grow"></span><button class="x" id="svX" title="Close" aria-label="Close">×</button></div>
   <div class="snote lrwhat" id="svWhat"></div>
@@ -84,11 +103,12 @@
     <div class="filesw">
       <button class="outbtn" id="filesBtn" title="Your files in Studio">Files</button>
       <div id="files" class="hidden">
-        <div class="ftabs"><button class="ftab on" data-tab="studio">In Studio</button><button class="ftab" data-tab="library">Library</button><button class="ftab" data-tab="locker">Locker</button><button class="ftab" data-tab="albums">Albums</button><button class="ftab" data-tab="sessions">Sessions</button><span class="grow"></span><button class="outbtn" id="openBtn2">Open…</button></div>
+        <div class="ftabs"><button class="ftab on" data-tab="studio">In Studio</button><button class="ftab" data-tab="library">Library</button><button class="ftab" data-tab="locker">Locker</button><button class="ftab" data-tab="albums">Albums</button><button class="ftab" data-tab="sessions">Sessions</button><button class="ftab" data-tab="midi">MIDI</button><span class="grow"></span><button class="outbtn" id="openBtn2">Open…</button></div>
         <div class="fpane" data-pane="studio"><div id="filesList" class="flist"></div><div class="sinfo" id="storeInfo"></div></div>
         <div class="fpane hidden" data-pane="library"><input id="libQ" class="fsearch" type="search" placeholder="Search your library by title, artist or album" autocomplete="off" spellcheck="false"><div id="libList" class="flist"></div></div>
         <div class="fpane hidden" data-pane="locker"><input id="lkQ" class="fsearch" type="search" placeholder="Filter by title, artist, album or folder" autocomplete="off" spellcheck="false"><div id="lkList" class="flist"></div><div class="sinfo" id="lkInfo"></div></div>
         <div class="fpane hidden" data-pane="albums"><div class="albhead"><span class="sinfo">An album joins the sides of a record: one Discogs release, tracks named on every side, one export.</span><button class="outbtn" id="albNew">New album</button></div><div id="albList" class="flist"></div></div>
+        <div class="fpane hidden" data-pane="midi"><div class="albhead"><span class="sinfo">MIDI files open in the piano roll: edit the notes, play them on the built-in synth or your own gear, save them as .mid.</span><button class="outbtn" id="prImport">Import .mid…</button><button class="outbtn" id="prNew">New MIDI</button><input type="file" id="prFile" accept=".mid,.midi,audio/midi" hidden></div><div id="prList" class="flist"></div></div>
         <div class="fpane hidden" data-pane="sessions"><div class="albhead"><span class="sinfo">A session lays out Studio files on tracks and mixes them: a DJ set with its room microphone, a band, a podcast.</span><button class="outbtn" id="djOpen">DJ recording…</button><button class="outbtn" id="sesNew">New session</button></div><div id="sesList" class="flist"></div></div>
       </div>
     </div>
@@ -253,7 +273,7 @@
             <div class="row"><label>Tempo</label><input class="nin" id="mdBpmN" inputmode="decimal" spellcheck="false" autocomplete="off" aria-label="Tempo in BPM"><span class="unit">BPM</span><div class="seg" id="mdQuant" title="Snap note starts and ends to a grid from the start of the range"><button class="segbtn" data-v="off">Free</button><button class="segbtn" data-v="32">1/32</button><button class="segbtn" data-v="16">1/16</button><button class="segbtn" data-v="8">1/8</button></div></div>
             <div class="snote" id="mdSum"></div>
             <div class="row"><label>Listen</label><div class="seg" id="mdListen"><button class="segbtn" data-v="off">Original</button><button class="segbtn" data-v="midi">MIDI</button><button class="segbtn" data-v="both">Both</button></div></div>
-            <div class="row"><label>Save</label><button class="outbtn" id="mdDl">Download .mid</button><button class="outbtn" id="mdLock">Save to Locker</button></div>
+            <div class="row"><label>Save</label><button class="outbtn" id="mdDl">Download .mid</button><button class="outbtn" id="mdLock">Save to Locker</button><button class="outbtn" id="mdEdit" title="Edit the notes in the piano roll with the recording playing along">edit in the piano roll</button></div>
             <div class="row"><label>Folder</label><input class="xtext" id="mdFolder" placeholder="Folder in the Locker" autocomplete="off" spellcheck="false"></div>
             <div class="row dgfoot"><button class="primary" id="mdConvert">Convert</button><div class="bbar hidden" id="mdBar"><i></i></div><button class="outbtn hidden" id="mdCancel">cancel</button><span class="grow"></span><button class="outbtn" id="mdClear">clear notes</button><button class="outbtn" id="mdDefaults">defaults</button></div>
           </div>
@@ -515,6 +535,7 @@
 <script src="/report.js"></script>
 <script src="/nulltest.js"></script>
 <script src="/streamprev.js"></script>
+<script src="/pianoroll.js"></script>
 <script src="/md.js"></script>
 <script src="/trcore.js"></script>
 <script src="/tr.js"></script>

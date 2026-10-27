@@ -307,6 +307,7 @@ function mdRender() {
   if (document.activeElement !== $("mdFolder")) $("mdFolder").value = c.folder;
   document.querySelectorAll("#mdListen button").forEach(b => { b.disabled = b.dataset.v !== "off" && !live; b.classList.toggle("on", b.dataset.v === md.listen); });
   $("mdDl").disabled = !live || busy;
+  $("mdEdit").disabled = !live || busy;
   $("mdLock").disabled = !live || busy || md.saving;
   $("mdConvert").disabled = busy || r.b <= r.a;
   $("mdClear").disabled = !md.res || busy;
@@ -387,6 +388,7 @@ function wireMidi() {
   $("mdCancel").addEventListener("click", () => ed.worker.postMessage({ t: "mdcancel" }));
   $("mdDl").addEventListener("click", mdDownload);
   $("mdLock").addEventListener("click", mdLocker);
+  $("mdEdit").addEventListener("click", prFromMelody);
   $("mdClear").addEventListener("click", () => { md.res = null; md.saved = null; if (md.listen !== "off") mdListen("off"); md.rev++; mdRender(); redraw(); });
   $("mdDefaults").addEventListener("click", () => { const folder = md.cfg.folder; md.cfg = Object.assign({}, MD_DEF, { folder }); mdChanged(); });
   document.addEventListener("i18n", () => { if (rp.open && rp.tab === "md") mdRender(); });
