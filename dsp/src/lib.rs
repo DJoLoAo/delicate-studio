@@ -100,6 +100,7 @@ pub mod midi;
 pub mod nr;
 pub mod onset;
 pub mod recipe;
+pub mod report;
 pub mod restore;
 pub mod rs;
 pub mod sheal;
@@ -739,6 +740,61 @@ mod wasm {
     #[unsafe(no_mangle)]
     pub extern "C" fn lm_out() -> *const f64 {
         unsafe { (*std::ptr::addr_of!(LM_OUT)).as_ptr() }
+    }
+
+    static mut RP: Option<crate::report::Report> = None;
+
+    fn rpm() -> Option<&'static mut crate::report::Report> {
+        unsafe { (*std::ptr::addr_of_mut!(RP)).as_mut() }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rp_open(ch: u32, sr: u32) -> i32 {
+        if ch == 0 || ch > 8 || sr == 0 {
+            return fail("report settings out of range".into());
+        }
+        unsafe { *std::ptr::addr_of_mut!(RP) = Some(crate::report::Report::new(ch as usize, sr as usize)); }
+        0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rp_in(m: u32, ch: u32) -> *mut f32 {
+        match rpm() {
+            Some(r) => {
+                r.stage.resize((m * ch) as usize, 0.0);
+                r.stage.as_mut_ptr()
+            }
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rp_feed(m: u32) -> i32 {
+        match rpm() {
+            Some(r) => {
+                r.feed_staged(m as usize);
+                0
+            }
+            None => fail("report is not open".into()),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rp_done() -> i32 {
+        match rpm() {
+            Some(r) => r.finish().len() as i32,
+            None => fail("report is not open".into()),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rp_out() -> *const f64 {
+        rpm().map(|r| r.out.as_ptr()).unwrap_or(std::ptr::null())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn rp_close() {
+        unsafe { *std::ptr::addr_of_mut!(RP) = None; }
     }
 
     #[unsafe(no_mangle)]

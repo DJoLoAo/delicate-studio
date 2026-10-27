@@ -47,6 +47,12 @@
     <div class="bwlog" id="bWatchLog"></div>
   </div>
 </div>
+<div id="lrep" class="hidden" role="dialog" aria-label="Loudness report">
+  <div class="qhead"><b>Loudness report</b><span class="grow"></span><button class="x" id="lrX" title="Close" aria-label="Close">×</button></div>
+  <div class="brow"><span class="snote lrwhat" id="lrWhat"></span><span class="grow"></span><button class="outbtn" id="lrAgain" title="Measure the selection, or the whole file without one">measure again</button><button class="outbtn" id="lrCopy">copy</button><button class="outbtn" id="lrSave">save as text</button></div>
+  <div class="bbar lrbar hidden" id="lrBar"><i></i></div>
+  <div class="lrbody" id="lrBody"></div>
+</div>
 <div id="scope" class="hidden" role="dialog" aria-label="Meters">
   <div class="qhead"><b>Meters</b><span class="grow"></span><span class="snote hidden" id="scMono">mono</span><button class="x" id="scX" title="Close" aria-label="Close">×</button></div>
   <canvas id="scSpec" title="Spectrum: blue now, gold the peaks of the last seconds"></canvas>
@@ -149,7 +155,7 @@
             <div class="row dgfoot"><button class="primary" id="humApply">Apply</button><div class="bbar hidden" id="humBar"><i></i></div><button class="outbtn hidden" id="humCancel">cancel</button><span class="grow"></span><button class="outbtn" id="humDefaults">defaults</button></div>
           </div>
           <div class="dgbody nrbody hidden" id="ldBody">
-            <div class="row"><label>Range</label><span class="snote" id="ldRange"></span><span class="grow"></span><button class="outbtn" id="ldMeasure">Measure</button></div>
+            <div class="row"><label>Range</label><span class="snote" id="ldRange"></span><span class="grow"></span><button class="outbtn" id="ldMeasure">Measure</button><button class="outbtn" id="ldReport" title="Loudness report">report…</button></div>
             <div class="ldstats" id="ldStats"></div>
             <div class="row"><label>Process</label><div class="seg" id="ldMode"><button class="segbtn" data-v="loud">Match loudness</button><button class="segbtn" data-v="norm">Normalize</button><button class="segbtn" data-v="amp">Amplify</button></div></div>
             <div class="row ldloud"><label>Target</label><div class="dd down" id="ldTarget"><div class="cur"></div><div class="list"></div></div><input class="nin" id="ldLufs" inputmode="decimal" spellcheck="false" autocomplete="off" aria-label="Target loudness in LUFS"><span class="unit">LUFS</span></div>
@@ -488,6 +494,7 @@
 <script src="/fx.js"></script>
 <script src="/scope.js"></script>
 <script src="/batch.js"></script>
+<script src="/report.js"></script>
 <script src="/md.js"></script>
 <script src="/trcore.js"></script>
 <script src="/tr.js"></script>

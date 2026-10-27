@@ -395,6 +395,7 @@ function wireLoud() {
   $("ldListen").addEventListener("click", e => { const b = e.target.closest("button"); if (!b || b.disabled) return; ldListen(b.dataset.v); });
   $("ldMeasure").addEventListener("click", () => { ld.stats = null; ldMeasure(); });
   $("ldCheck").addEventListener("click", ldCheck);
+  $("ldReport").addEventListener("click", repOpen);
   $("ldRef").addEventListener("click", ldPickRef);
   $("ldApply").addEventListener("click", ldApply);
   $("ldCancel").addEventListener("click", () => { ed.worker.postMessage({ t: "ldcancel" }); ed.worker.postMessage({ t: "fxcancel" }); });

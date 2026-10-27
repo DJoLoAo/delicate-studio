@@ -4024,6 +4024,49 @@ async function ldMeasure(m) {
   } finally { job.end(); }
 }
 
+async function ldReport(m) {
+  const c = cur;
+  if (!c || c.meta.id !== m.id) throw new Error("stale");
+  const x = await dspExports(), ch = c.meta.channels, F = c.len, sr = c.meta.sampleRate;
+  const a = clampI(m.a, 0, F), b = m.b > m.a ? clampI(m.b, 0, F) : F;
+  if (b <= a) throw new Error("nothing");
+  if (LD.rep) LD.rep.cancel = true;
+  const job = { id: m.jobId, cancel: false, last: 0 }, lists = c.lists;
+  LD.rep = job;
+  job.tick = async frac => {
+    const now = performance.now();
+    if (now - job.last > 120) { job.last = now; postMessage({ t: "lprog", id: job.id, frac: Math.min(1, frac) }); await new Promise(r => setTimeout(r, 0)); }
+    if (job.cancel || cur !== c) throw new Error("cancelled");
+  };
+  try {
+    if (x.rp_open(ch, sr) !== 0) throw new Error(dspError(x));
+    const rd = (src, cc, f, k, out, off) => readSrcOf(c, src, cc, f, k, out, off);
+    const B = 65536;
+    for (let s = a; s < b; s += B) {
+      const n = Math.min(B, b - s);
+      const ptr = x.rp_in(n, ch);
+      const inb = new Float32Array(x.memory.buffer, ptr, n * ch);
+      for (let k = 0; k < ch; k++) readList(lists[k], c.cum[k], s, n, inb, k * n, rd);
+      if (x.rp_feed(n) !== 0) throw new Error(dspError(x));
+      await job.tick((s + n - a) / (b - a));
+    }
+    if (c.lists !== lists) throw new Error("stale");
+    const len = x.rp_done();
+    if (len < 0) throw new Error(dspError(x));
+    const op = x.rp_out();
+    const v = Array.from(new Float64Array(x.memory.buffer, op, len));
+    x.rp_close();
+    const db = q => q > 0 ? 20 * Math.log10(q) : null;
+    const fin = q => Number.isFinite(q) ? q : null;
+    const nc = v[7], at = 9 + 9 * ch, chans = [];
+    for (let k = 0; k < ch; k++) {
+      const o = v.slice(9 + 9 * k, 18 + 9 * k);
+      chans.push({ tp: db(o[0]), tpAt: o[1], sp: db(o[2]), spAt: o[3], rms: db(o[4]), dc: o[5], clips: o[6], overs: o[7], bits: o[8] });
+    }
+    return { t: "ldreport", a, b, sr, ch, name: c.meta.name, bits: c.meta.bits || null, integrated: fin(v[0]), lra: fin(v[1]), st: fin(v[2]), stAt: v[3], mom: fin(v[4]), momAt: v[5], secs: v[6], chans, curve: v.slice(at, at + nc).map(q => q < -150 ? null : Math.round(q * 100) / 100) };
+  } finally { if (LD.rep === job) LD.rep = null; }
+}
+
 async function ldRef(m) {
   if (cur && cur.meta.id === m.refId) throw new Error("ld-self");
   const dir = await docsDir();
@@ -4195,13 +4238,14 @@ async function handle(m) {
     return;
   }
   if (m.t === "spec") { await spTiles(m); return; }
-  if (m.t === "ldmeasure" || m.t === "ldref" || m.t === "ldfit") {
-    const f = { ldmeasure: ldMeasure, ldref: ldRef, ldfit: ldFit }[m.t];
+  if (m.t === "ldmeasure" || m.t === "ldref" || m.t === "ldfit" || m.t === "ldreport") {
+    const f = { ldmeasure: ldMeasure, ldref: ldRef, ldfit: ldFit, ldreport: ldReport }[m.t];
     try { postMessage(Object.assign({ req: m.req }, await f(m))); }
     catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
     return;
   }
   if (m.t === "ldcancel") { if (LD.job) LD.job.cancel = true; return; }
+  if (m.t === "repcancel") { if (LD.rep) LD.rep.cancel = true; return; }
   if (m.t === "midiscan") {
     try { postMessage(Object.assign({ req: m.req }, await mdScan(m))); }
     catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); }
