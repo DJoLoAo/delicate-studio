@@ -678,4 +678,21 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 .bst.bad{color:#ff6b5e}
 .bst.work{color:var(--gold)}
 body.mcrec #palBtn{color:#ff6b5e}
+#batch>*{flex-shrink:0}
+.bwatch{display:flex;flex-direction:column;gap:calc(6px*var(--fs));border-top:1px solid var(--border);padding-top:calc(8px*var(--fs))}
+.bwh{font-weight:500;color:var(--white);letter-spacing:.06em;text-transform:uppercase;font-size:calc(10px*var(--fs))}
+.bwlist{display:flex;flex-direction:column;gap:2px}
+.bwrow{display:flex;align-items:center;gap:calc(8px*var(--fs));padding:calc(4px*var(--fs));border:1px solid var(--border)}
+.bwrow.paused .bwn{opacity:.55}
+.bwn{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.bwn b{font-weight:500;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bwn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray)}
+.bwn .bst{color:var(--dim)}
+.bwn .bst.work{color:var(--gold)}
+.bwlog{display:flex;flex-direction:column;gap:1px;max-height:calc(140px*var(--fs));overflow-y:auto;font-size:calc(10px*var(--fs))}
+.bwlog:empty{display:none}
+.bwl{display:flex;gap:calc(6px*var(--fs));color:var(--gray);white-space:nowrap;overflow:hidden}
+.bwl .bwt{color:var(--dim);flex:none}
+.bwl .bst{flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis}
+.bwl .bwm{overflow:hidden;text-overflow:ellipsis}
 @media (max-width:760px){#batch{left:8px!important;right:8px;top:60px!important;transform:none;width:auto}}

@@ -3,7 +3,7 @@ use axum::{
     extract::State,
     http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -12,6 +12,8 @@ use tower_http::{
     services::{ServeDir, ServeFile},
     set_header::SetResponseHeaderLayer,
 };
+
+mod watch;
 
 const BIND: &str = "127.0.0.1:4541";
 const WEB_DIR: &str = "/opt/delicate-studio/web";
@@ -22,6 +24,7 @@ struct AppState {
     http: reqwest::Client,
     dj: String,
     web: PathBuf,
+    watch: watch::Shared,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -88,10 +91,15 @@ async fn main() {
         .timeout(Duration::from_secs(5))
         .build()
         .unwrap();
-    let state = AppState { http, dj, web: web.clone() };
+    let watch = watch::open(dj.clone());
+    tokio::spawn(watch::run(watch.clone()));
+    let state = AppState { http, dj, web: web.clone(), watch };
     let api = Router::new()
         .route("/me", get(me))
         .route("/version", get(version))
+        .route("/watch", get(watch::get_all).post(watch::create))
+        .route("/watch/{id}", axum::routing::patch(watch::patch).delete(watch::remove))
+        .route("/watch/{id}/run", post(watch::run_now))
         .fallback(|| async { StatusCode::NOT_FOUND })
         .with_state(state);
     let app = Router::new()

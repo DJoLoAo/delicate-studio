@@ -99,6 +99,7 @@ pub mod meta;
 pub mod midi;
 pub mod nr;
 pub mod onset;
+pub mod recipe;
 pub mod restore;
 pub mod rs;
 pub mod sheal;

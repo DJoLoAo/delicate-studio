@@ -67,6 +67,7 @@ function btToggle(force) {
   bt.open = typeof force === "boolean" ? force : !bt.open;
   $("batch").classList.toggle("hidden", !bt.open);
   if (bt.open) btRender();
+  bwPoll(bt.open);
 }
 
 async function btDocs() {
@@ -108,6 +109,7 @@ function btRender() {
     return `<label class="bfile"><input type="checkbox" data-id="${esc(d.id)}" ${bt.sel.has(d.id) ? "checked" : ""} ${busy ? "disabled" : ""}><span class="bfn">${esc(d.name)}</span>${st}</label>`;
   }).join("") : `<div class="snote">${esc(t("Open or import the files into Studio first; they show up here."))}</div>`;
   $("bCount").textContent = bt.sel.size ? t("{n} selected").replace("{n}", bt.sel.size) : "";
+  bwRender();
   $("bGo").disabled = busy || !r || !r.steps.length || !bt.sel.size;
   $("bGo").textContent = busy ? t("Running…") : t("Run");
   $("bCancel").classList.toggle("hidden", !busy);
@@ -270,6 +272,105 @@ async function btGo() {
   flash(t("Batch: {n} files processed, the exports are in the queue").replace("{n}", run.done) + (run.failed ? " · " + t("{n} failed").replace("{n}", run.failed) : ""));
 }
 
+const bw = { v: null, timer: 0 };
+
+async function bwFetch(method, path, body) {
+  const r = await fetch("/api/studio/watch" + (path || ""), { method: method || "GET", cache: "no-store", headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || "watch " + r.status);
+  return j;
+}
+
+async function bwLoad() {
+  try { bw.v = await bwFetch(); } catch { if (!bw.v) bw.v = { on: false, err: true, watches: [], log: [] }; }
+  bwRender();
+}
+
+function bwPoll(on) {
+  clearInterval(bw.timer);
+  bw.timer = on ? setInterval(bwLoad, 8000) : 0;
+  if (on) bwLoad();
+}
+
+function bwErr(m) {
+  return ({ "same-folder": t("The results need a Locker folder other than the one watched."), off: t("Watch folders are not set up on this server yet."), "too-many": t("You can watch at most 20 folders."), folder: t("Name the Locker folder to watch.") })[m] || m;
+}
+
+function bwSteps(r) {
+  return r.steps.map(s => {
+    if (s.kind !== "fx") return Object.assign({}, s);
+    const cfg = s.cfg ? fxMake(s.cfg) : btPresetCfg(s.preset);
+    if (!cfg) throw new Error(t("The effects preset is no longer there."));
+    return { kind: "fx", preset: s.preset, name: btPresetLabel(s), cfg: Object.assign(cfg, { match: false }) };
+  });
+}
+
+const BW_MSG = [["unsupported or damaged file", "unsupported or damaged file"], ["already in the Locker as ", "already in the Locker as {p}"], ["loudness ", "loudness {v}"], ["silent, loudness skipped", "silent, loudness skipped"], ["silent, normalize skipped", "silent, normalize skipped"], ["the Locker is full", "the Locker is full"], ["file too large", "the file is too large"], ["file too long", "the file is too long"], ["no audio", "no audio in the file"]];
+
+function bwMsg(m) {
+  return String(m || "").split(" · ").map(part => {
+    const e = BW_MSG.find(x => part.startsWith(x[0]));
+    if (!e) return part;
+    const rest = part.slice(e[0].length);
+    return t(e[1]).replace("{p}", rest).replace("{v}", rest);
+  }).join(" · ");
+}
+
+function bwOutLabel(o) {
+  const f = BT_FMTS.find(x => x.v === o.fmt) || BT_FMTS[0], r = BT_RATES.find(x => Number(x.v) === Number(o.rate));
+  return t(f.label) + (Number(o.rate) && r ? " · " + t(r.label) : "");
+}
+
+function bwTime(s) {
+  const d = new Date(s * 1000), today = new Date().toDateString() === d.toDateString();
+  return today ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString([], { day: "numeric", month: "short" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function bwRender() {
+  if (!bt.open) return;
+  const v = bw.v, on = !!(v && v.on);
+  $("bWatchNew").classList.toggle("hidden", !on);
+  $("bWatchNote").textContent = !v ? "" : v.err ? t("The server's watch folders cannot be reached right now.") : on ? t("Studio's server runs a recipe on every new file in a Locker folder, also while Studio is closed. It checks every minute.") : t("Watch folders are not set up on this server yet.");
+  const ws = on ? v.watches : [];
+  $("bWatchList").innerHTML = ws.map(w => {
+    const st = w.busy ? t("working on {f}").replace("{f}", w.busy.split("/").pop()) : !w.on ? t("paused") : w.last ? t("checked {t}").replace("{t}", bwTime(w.last)) : t("waiting for the first check");
+    const steps = (w.steps || []).map(s => s.kind === "fx" ? s.name || t("Effects preset") : t((BT_KINDS.find(k => k.v === s.kind) || { label: s.kind }).label)).join(" → ");
+    return `<div class="bwrow${w.on ? "" : " paused"}" data-id="${esc(w.id)}"><div class="bwn"><b>${esc(w.name)}</b><span title="${esc(steps)}">${esc(w.folder)} → ${esc(w.out.folder)} · ${esc(bwOutLabel(w.out))}</span><span class="bst${w.busy ? " work" : ""}">${esc(st)} · ${esc(t("{n} done").replace("{n}", w.done))}</span></div><button class="outbtn" data-act="on">${esc(w.on ? t("pause") : t("resume"))}</button><button class="outbtn" data-act="run" ${w.on ? "" : "disabled"}>${esc(t("check now"))}</button><button class="x" data-act="del" title="${esc(t("Stop watching"))}" aria-label="${esc(t("Stop watching"))}">×</button></div>`;
+  }).join("");
+  const names = new Map(ws.map(w => [w.id, w.name]));
+  $("bWatchLog").innerHTML = (on ? v.log : []).slice(0, 30).map(l => `<div class="bwl" title="${esc((names.get(l.watch) || "") + " · " + l.file + " · " + l.msg)}"><span class="bwt">${esc(bwTime(l.t))}</span><span class="bst ${l.ok ? "ok" : "bad"}">${esc(l.file.split("/").pop())}</span><span class="bwm">${esc(bwMsg(l.msg))}</span></div>`).join("");
+}
+
+async function bwNew() {
+  const r = btRecipe();
+  if (!r || !r.steps.length) { await tell(t("Add the steps this recipe runs on every file, in order.")); return; }
+  let steps;
+  try { steps = bwSteps(r); } catch (e) { await tell(e.message); return; }
+  const out = { fmt: r.out.fmt, rate: Number(r.out.rate) || 0, folder: r.out.folder || "Studio/Batch", tpl: r.out.tpl || "$name" };
+  const note = t("New files there go through “{r}” and land in the Locker folder {o} as {f}.").replace("{r}", r.name).replace("{o}", out.folder).replace("{f}", bwOutLabel(out));
+  const v = await askForm(t("Watch a Locker folder"), `<label class="dfield"><span>${esc(t("Folder"))}</span><input name="folder" value="Incoming" spellcheck="false" autocomplete="off"></label><label class="sesdoc"><input type="checkbox" name="existing"><span>${esc(t("also the files already in it"))}</span></label><div class="dnote">${esc(note)}</div>`, { ok: t("watch"), setup: f => requestAnimationFrame(() => { const i = f.querySelector("input"); if (i) i.select(); }) });
+  if (!v) return;
+  const folder = String(v.folder || "").trim();
+  if (!folder) return;
+  try { bw.v = await bwFetch("POST", "", { name: r.name, folder, steps, out, existing: !!v.existing }); }
+  catch (e) { await tell(bwErr(e.message)); }
+  bwRender();
+}
+
+async function bwAct(id, act) {
+  const w = bw.v && (bw.v.watches || []).find(x => x.id === id);
+  if (!w) return;
+  try {
+    if (act === "on") bw.v = await bwFetch("PATCH", "/" + encodeURIComponent(id), { on: !w.on });
+    if (act === "run") { bw.v = await bwFetch("POST", "/" + encodeURIComponent(id) + "/run"); flash(t("Checking {f} now").replace("{f}", w.folder)); }
+    if (act === "del") {
+      if (!(await ask(t("Stop watching the folder?"), w.folder + " → " + w.out.folder, { ok: t("stop") }))) return;
+      bw.v = await bwFetch("DELETE", "/" + encodeURIComponent(id));
+    }
+  } catch (e) { await tell(bwErr(e.message)); }
+  bwRender();
+}
+
 const MC_SKIP = new Set(["macroRec", "macroRun", "palette", "keys", "batch"]);
 const mc = { rec: null, list: [] };
 
@@ -361,5 +462,7 @@ function wireBatch() {
   $("bAll").addEventListener("click", () => { const all = (ed.docs || []).every(d => bt.sel.has(d.id)); bt.sel = all ? new Set() : new Set((ed.docs || []).map(d => d.id)); btRender(); });
   $("bGo").addEventListener("click", btGo);
   $("bCancel").addEventListener("click", () => { if (bt.run) bt.run.cancel = true; });
+  $("bWatchNew").addEventListener("click", bwNew);
+  $("bWatchList").addEventListener("click", e => { const b = e.target.closest("[data-act]"), row = e.target.closest(".bwrow"); if (b && row) bwAct(row.dataset.id, b.dataset.act); });
   document.addEventListener("i18n", () => { if (bt.open) btRender(); });
 }
