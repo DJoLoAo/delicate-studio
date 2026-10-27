@@ -1802,6 +1802,7 @@ function wireUi() {
   wireHum();
   wireFx();
   wireScope();
+  wireBatch();
   wireLoud();
   wireMidi();
   wireTracks();

@@ -27,6 +27,20 @@
 </div>
 
 <div id="app" class="hidden">
+<div id="batch" class="hidden" role="dialog" aria-label="Batch">
+  <div class="qhead"><b>Batch</b><span class="grow"></span><button class="x" id="bX" title="Close" aria-label="Close">×</button></div>
+  <div class="brow"><label>Recipe</label><div class="dd down" id="bRecipe"><div class="cur"></div><div class="list"></div></div><button class="outbtn" id="bNew">new…</button><button class="outbtn" id="bRename">rename…</button><button class="outbtn" id="bDel">delete</button></div>
+  <div class="bsteps" id="bSteps"></div>
+  <div class="brow"><div class="dd down" id="bAdd"><div class="cur">Add a step…</div><div class="list"></div></div></div>
+  <div class="brow"><label>Export as</label><div class="dd down" id="bFmt"><div class="cur"></div><div class="list"></div></div><div class="dd down" id="bRate"><div class="cur"></div><div class="list"></div></div></div>
+  <div class="brow"><label>To</label><div class="seg" id="bDest"><button class="segbtn" data-v="locker">Locker</button><button class="segbtn" data-v="download">Download</button></div></div>
+  <div class="brow" id="bFolderRow"><label for="bFolder">Folder</label><input class="nin bwide" id="bFolder" spellcheck="false" autocomplete="off"></div>
+  <div class="brow"><label for="bTpl">File name</label><input class="nin bwide" id="bTpl" spellcheck="false" autocomplete="off" title="$name is the file's name, $date today's date"></div>
+  <div class="brow"><label>Files</label><button class="outbtn" id="bAll">all / none</button><span class="snote" id="bCount"></span></div>
+  <div class="bfiles" id="bFiles"></div>
+  <div class="snote">Each file is processed in Studio and exported; afterwards the file in Studio is back as it was, with the steps left in its history to redo.</div>
+  <div class="brow"><button class="primary" id="bGo">Run</button><button class="outbtn hidden" id="bCancel">cancel</button></div>
+</div>
 <div id="scope" class="hidden" role="dialog" aria-label="Meters">
   <div class="qhead"><b>Meters</b><span class="grow"></span><span class="snote hidden" id="scMono">mono</span><button class="x" id="scX" title="Close" aria-label="Close">×</button></div>
   <canvas id="scSpec" title="Spectrum: blue now, gold the peaks of the last seconds"></canvas>
@@ -467,6 +481,7 @@
 <script src="/ld.js"></script>
 <script src="/fx.js"></script>
 <script src="/scope.js"></script>
+<script src="/batch.js"></script>
 <script src="/md.js"></script>
 <script src="/trcore.js"></script>
 <script src="/tr.js"></script>

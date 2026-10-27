@@ -59,6 +59,8 @@ const CMDS = [
   { id: "nextTransient", g: "Transport", label: "Next transient", run: () => tnStep(1, false), doc: true, when: () => tn.on, kw: "tab onset beat hit attack drum jump forward" },
   { id: "prevTransient", g: "Transport", label: "Previous transient", run: () => tnStep(-1, false), doc: true, when: () => tn.on, kw: "tab onset beat hit attack drum jump back" },
   { id: "nextEdge", g: "Transport", label: "Cursor to the next marker or selection edge", run: () => stepTo(1, true), doc: true },
+  { id: "batch", g: "File", label: "Batch: run a recipe on many files…", run: () => btOpen(), kw: "batch recipe process many files all at once watch convert render automation" },
+  { id: "macroRec", g: "Edit", label: "Record a macro (again to stop)", run: () => mcToggle(), ss: () => mcToggle(), kw: "macro record actions chain sequence automate" },
   { id: "scope", g: "View", label: "Meters: spectrum, vectorscope, correlation", run: () => scToggle(), ss: () => scToggle(), kw: "meter metering spectrum analyser analyzer fft vectorscope goniometer lissajous phase correlation stereo width mono" },
   { id: "zoomIn", g: "View", label: "Zoom in", run: () => zoomAt(0.5), doc: true, ss: () => ssZoomAt(0.5) },
   { id: "zoomOut", g: "View", label: "Zoom out", run: () => zoomAt(2), doc: true, ss: () => ssZoomAt(2) },
@@ -261,6 +263,7 @@ function cmdEnabled(c) {
 
 function runCmd(c) {
   if (!c || !cmdEnabled(c)) return false;
+  mcNote(c);
   if (ses.open && c.ss) c.ss(); else c.run();
   return true;
 }
@@ -515,6 +518,7 @@ function palEntries(q) {
     const r = pal.recent.indexOf(c.id);
     out.push({ kind: "cmd", c, label, group: t(c.g), score: sc + (r >= 0 ? (q ? 6 : 200) - r : 0), enabled: cmdEnabled(c) });
   }
+  out.push(...mcEntries(q));
   if (ed.doc) for (const m of ed.marks || []) {
     const label = t("Location") + " " + m.n + (m.name ? " · " + m.name : "");
     const sc = fuzzy(q, label + " " + markTime(m) + " marker");
