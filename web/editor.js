@@ -758,6 +758,7 @@ function showDoc(meta, peaks, bands, state) {
   ldDoc();
   repDocChanged();
   nlDocChanged();
+  svDocChanged();
   fxDoc();
   mdDoc();
   trDoc();
@@ -1050,6 +1051,7 @@ async function ensureAudioFor(sr, ch) {
 
 async function startPlay(from) {
   if (!ed.doc) return;
+  if (sv.playing) svStop();
   await ensureAudio();
   const F = ed.doc.frames, selOn = ed.sel.b > ed.sel.a;
   let pos = Math.floor(from !== undefined ? from : (selOn ? ed.sel.a : ed.cursor));
@@ -1807,6 +1809,7 @@ function wireUi() {
   wireBatch();
   wireReport();
   wireNull();
+  wireStream();
   wireLoud();
   wireMidi();
   wireTracks();

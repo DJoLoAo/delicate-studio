@@ -63,6 +63,14 @@
   <div class="bbar lrbar hidden" id="nlBar"><i></i></div>
   <div class="lrbody" id="nlBody"></div>
 </div>
+<div id="svw" class="hidden" role="dialog" aria-label="Streaming preview">
+  <div class="qhead"><b>Streaming preview</b><span class="grow"></span><button class="x" id="svX" title="Close" aria-label="Close">×</button></div>
+  <div class="snote lrwhat" id="svWhat"></div>
+  <div class="brow"><label>Platform</label><div class="dd down" id="svPlat"><div class="cur"></div><div class="list"></div></div><button class="outbtn" id="svAgain" title="Encode the selection again, or 30 s from the cursor without one">encode again</button></div>
+  <div class="brow"><label>Listen to</label><div class="seg" id="svMode"><button class="segbtn" data-v="orig" title="Your file as it is">original</button><button class="segbtn" data-v="origAt" title="Your file at the level the platform plays it">original at its level</button><button class="segbtn" data-v="plat" title="Encoded and at the platform's level">on the platform</button><button class="segbtn" data-v="diff" title="What the encoding takes away">what it takes away</button></div></div>
+  <div class="brow"><button class="primary" id="svPlay">play</button><input type="range" id="svPos" min="0" max="1000" value="0" aria-label="Position"><span class="snote" id="svPosV"></span></div>
+  <div class="lrbody" id="svInfo"></div>
+</div>
 <div id="scope" class="hidden" role="dialog" aria-label="Meters">
   <div class="qhead"><b>Meters</b><span class="grow"></span><span class="snote hidden" id="scMono">mono</span><button class="x" id="scX" title="Close" aria-label="Close">×</button></div>
   <canvas id="scSpec" title="Spectrum: blue now, gold the peaks of the last seconds"></canvas>
@@ -506,6 +514,7 @@
 <script src="/batch.js"></script>
 <script src="/report.js"></script>
 <script src="/nulltest.js"></script>
+<script src="/streamprev.js"></script>
 <script src="/md.js"></script>
 <script src="/trcore.js"></script>
 <script src="/tr.js"></script>

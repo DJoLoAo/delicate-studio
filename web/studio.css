@@ -679,6 +679,22 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 .bst.work{color:var(--gold)}
 body.mcrec #palBtn{color:#ff6b5e}
 #batch>*{flex-shrink:0}
+#svw{position:fixed;left:50%;top:calc(110px*var(--fs));transform:translateX(-50%);width:min(calc(600px*var(--fs)),calc(100vw - 32px));max-height:calc(100vh - 140px);overflow-y:auto;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:45;padding:calc(10px*var(--fs)) calc(12px*var(--fs));display:flex;flex-direction:column;gap:calc(8px*var(--fs));font-size:calc(11px*var(--fs))}
+#svw[style*="left"]{transform:none}
+#svw.hidden{display:none}
+#svw>*{flex-shrink:0}
+#svw .qhead{display:flex;align-items:center;gap:8px;cursor:move}
+#svw .qhead b{font-weight:500;color:var(--white);letter-spacing:.06em;text-transform:uppercase;font-size:calc(10px*var(--fs))}
+#svw .brow{display:flex;align-items:center;gap:calc(8px*var(--fs));flex-wrap:wrap}
+#svw .brow>label{color:var(--gray);min-width:calc(70px*var(--fs))}
+#svw .snote{font-size:calc(10px*var(--fs));color:var(--dim)}
+#svw .lrwhat{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#svPlat{min-width:calc(200px*var(--fs))}
+#svPos{flex:1;min-width:calc(140px*var(--fs));accent-color:var(--pink)}
+.lrt.svt td{white-space:normal;font-family:inherit}
+.lrt.svt th{width:40%}
+#svPosV{font-family:var(--mono);min-width:calc(80px*var(--fs))}
+@media (max-width:760px){#svw{left:8px!important;right:8px;top:60px!important;transform:none;width:auto}#svMode{flex-wrap:wrap}}
 #nullw{position:fixed;left:50%;top:calc(90px*var(--fs));transform:translateX(-50%);width:min(calc(560px*var(--fs)),calc(100vw - 32px));max-height:calc(100vh - 120px);overflow-y:auto;background:var(--bg2);border:1px solid var(--border);box-shadow:0 14px 48px rgba(0,0,0,.65);z-index:45;padding:calc(10px*var(--fs)) calc(12px*var(--fs));display:flex;flex-direction:column;gap:calc(8px*var(--fs));font-size:calc(11px*var(--fs))}
 #nullw[style*="left"]{transform:none}
 #nullw.hidden{display:none}
