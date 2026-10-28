@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Review · Delicate Studio</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0c0a08">
+<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="/studio.css">
+<script src="/themes.js"></script>
+</head>
+<body class="pvbody">
+<main id="pv">
+  <header class="pvtop"><a class="pvlogo" href="https://delicateapps.com" target="_blank" rel="noopener">Delicate Studio</a><span class="grow"></span><div id="langReview" class="langpick dim"></div></header>
+  <div id="pvGone" class="pvgone hidden">This review link has expired or was removed.</div>
+  <section id="pvMain" class="hidden">
+    <h1 id="pvName"></h1>
+    <div class="snote" id="pvExp"></div>
+    <div class="pvwave"><canvas id="pvCv"></canvas></div>
+    <div class="pvctl"><button class="tbtn play" id="pvPlay" aria-label="Play"><svg class="ip" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg><svg class="is hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button><span id="pvTime" class="pvtime">0:00 / 0:00</span></div>
+    <form id="pvForm" class="pvform">
+      <input id="pvWho" class="xtext" placeholder="Your name" maxlength="60" autocomplete="name">
+      <textarea id="pvText" class="xtext" placeholder="Your comment" maxlength="2000" rows="3"></textarea>
+      <div class="pvrow"><button class="primary" id="pvSend" type="submit">Comment</button><span class="snote" id="pvAt"></span></div>
+    </form>
+    <div id="pvList" class="pvlist"></div>
+  </section>
+</main>
+<audio id="pvAudio" preload="metadata"></audio>
+<script src="/i18n.js"></script>
+<script src="/reviewpage.js"></script>
+</body>
+</html>

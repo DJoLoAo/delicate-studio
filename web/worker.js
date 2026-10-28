@@ -2505,7 +2505,7 @@ async function renderJob(job) {
     }
     hd.flush();
     let sha = null;
-    if (job.dest.kind === "locker") {
+    if (job.dest.kind === "locker" || job.dest.kind === "review") {
       job.state = "hashing"; job.frac = 0; xpost(job);
       const CAP = 1 << 22, ptr = x.sha_open(CAP);
       for (let at = 0; at < fileOff;) {

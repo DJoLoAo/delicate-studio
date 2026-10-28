@@ -104,6 +104,7 @@ const CMDS = [
   { id: "effects", g: "Edit", label: "Effects…", run: () => toggleFx(), doc: true, ss: () => fxSesToggle({ kind: "master" }), kw: "effects rack eq equalizer equaliser filter low cut high cut highpass lowpass shelf bell notch compressor compression dynamics limiter master preset" },
   { id: "midi", g: "Edit", label: "Convert to MIDI…", run: () => toggleMidi(), doc: true, kw: "midi melody notes transcribe pitch audio to midi convert piano roll tune" },
   { id: "transcript", g: "Edit", label: "Transcript…", run: () => { if (rp.open && rp.tab === "tx") closeDiag(); else openRepair("tx"); }, doc: true, kw: "transcript speech to text whisper subtitles srt vtt words interview podcast dictation" },
+  { id: "review", g: "File", label: "Share for review…", run: () => { if (rp.open && rp.tab === "rv") closeDiag(); else openRepair("rv"); }, doc: true, kw: "review link share comments feedback client mix approval listen timecode" },
   { id: "tracks", g: "Locations", label: "Split into tracks…", run: () => toggleTracks(), doc: true, kw: "split tracks side vinyl gaps auto split auto mark discogs tracklist cue ranges rip" },
   { id: "ldLoud", g: "Edit", label: "Match loudness…", run: () => ldOpen("loud"), doc: true, kw: "lufs loudness target limiter louder master streaming ebu r128" },
   { id: "ldNorm", g: "Edit", label: "Normalize…", run: () => ldOpen("norm"), doc: true, kw: "normalise peak level maximize" },

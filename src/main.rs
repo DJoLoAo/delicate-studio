@@ -13,6 +13,7 @@ use tower_http::{
     set_header::SetResponseHeaderLayer,
 };
 
+mod review;
 mod transcribe;
 mod watch;
 
@@ -30,6 +31,7 @@ struct AppState {
     slow: reqwest::Client,
     whisper: String,
     tq: transcribe::Shared,
+    reviews: review::Shared,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -105,7 +107,16 @@ async fn main() {
         .build()
         .unwrap();
     let whisper = std::env::var("STUDIO_WHISPER").unwrap_or_else(|_| WHISPER.to_string());
-    let state = AppState { http, dj, web: web.clone(), watch, slow, whisper, tq: transcribe::open() };
+    let base = PathBuf::from(
+        std::env::var("STATE_DIRECTORY")
+            .ok()
+            .and_then(|s| s.split(':').next().map(str::to_string))
+            .or_else(|| std::env::var("STUDIO_STATE").ok())
+            .unwrap_or_else(|| "state".into()),
+    );
+    let reviews = review::open(base);
+    tokio::spawn(review::run(reviews.clone()));
+    let state = AppState { http, dj, web: web.clone(), watch, slow, whisper, tq: transcribe::open(), reviews };
     let api = Router::new()
         .route("/me", get(me))
         .route("/version", get(version))
@@ -113,10 +124,19 @@ async fn main() {
         .route("/watch/{id}", axum::routing::patch(watch::patch).delete(watch::remove))
         .route("/watch/{id}/run", post(watch::run_now))
         .route("/transcribe", post(transcribe::run).layer(axum::extract::DefaultBodyLimit::max(transcribe::MAX_BODY)))
+        .route("/reviews", get(review::list).post(review::create))
+        .route("/reviews/{id}", axum::routing::delete(review::remove))
+        .route("/reviews/{id}/data", axum::routing::put(review::part).layer(axum::extract::DefaultBodyLimit::max(review::PART + 4096)))
+        .route("/reviews/{id}/done", post(review::done))
+        .route("/reviews/{id}/comments/{cid}", post(review::resolve))
+        .route("/pub/{token}", get(review::pub_get))
+        .route("/pub/{token}/audio", get(review::pub_audio))
+        .route("/pub/{token}/comments", post(review::pub_comment))
         .fallback(|| async { StatusCode::NOT_FOUND })
         .with_state(state);
     let app = Router::new()
         .nest("/api/studio", api)
+        .route_service("/r/{token}", ServeFile::new(web.join("review.html")))
         .fallback_service(ServeDir::new(&web).fallback(ServeFile::new(web.join("index.html"))))
         .layer(SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, HeaderValue::from_static("no-cache")))
         .layer(SetResponseHeaderLayer::overriding(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")))

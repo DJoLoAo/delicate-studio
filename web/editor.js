@@ -59,7 +59,7 @@ ed.worker.onmessage = e => {
   const m = e.data;
   if (m.t === "progress") { importProgress(m); return; }
   if (m.t === "playerror") { stopPlay(); tell(t("Playback stopped") + ": " + m.msg); return; }
-  if (m.t === "xjob") { xpJob(m); return; }
+  if (m.t === "xjob") { if (!rvJob(m)) xpJob(m); return; }
   if (m.t === "sclaunched") { snLaunched(m); return; }
   if (m.t === "dprog") { dgProg(m); return; }
   if (m.t === "nprog") { nrProg(m); humProg(m); ldProg(m); fxProg(m); return; }
@@ -1830,6 +1830,7 @@ function wireUi() {
   wireLoud();
   wireMidi();
   txInit();
+  rvInit();
   wireTracks();
   wirePx();
   wirePen();

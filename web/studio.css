@@ -212,6 +212,40 @@ button,a{touch-action:manipulation}
 .txw.low{text-decoration:underline dotted var(--dim)}
 .txw.hit{background:color-mix(in srgb,var(--pink) 35%,transparent)}
 .txw.on{color:var(--gold)}
+.rvlist{display:flex;flex-direction:column;gap:calc(4px*var(--fs));max-height:calc(380px*var(--fs));overflow-y:auto}
+.rvrow{display:flex;align-items:center;gap:calc(6px*var(--fs));border:1px solid var(--border);padding:calc(4px*var(--fs)) calc(6px*var(--fs))}
+.rvrow.on{border-color:var(--gold)}
+.rvhead{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;background:none;border:none;color:var(--white);cursor:pointer;text-align:left;padding:0;font:inherit}
+.rvhead b{font-weight:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.rvacts{display:flex;gap:calc(4px*var(--fs));flex:none}
+.rvcomments{display:flex;flex-direction:column;gap:calc(3px*var(--fs));padding:calc(2px*var(--fs)) 0 calc(6px*var(--fs)) calc(8px*var(--fs))}
+.rvc{display:flex;gap:calc(6px*var(--fs));align-items:baseline;font-size:calc(12px*var(--fs));color:var(--gray)}
+.rvc.done{opacity:.5}
+.rvc.done .rvct{text-decoration:line-through}
+.rvok{background:none;border:none;color:var(--gold);cursor:pointer;padding:0;flex:none;width:calc(16px*var(--fs))}
+.rvct{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.rvct b{color:var(--white);font-weight:normal}
+.pvbody{background:var(--bg);color:var(--white);min-height:100vh;margin:0}
+#pv{max-width:860px;margin:0 auto;padding:calc(14px*var(--fs)) 16px calc(40px*var(--fs));display:flex;flex-direction:column;gap:calc(12px*var(--fs))}
+.pvtop{display:flex;align-items:center;gap:calc(10px*var(--fs))}
+.pvlogo{color:var(--pink);text-decoration:none;font-size:calc(13px*var(--fs));letter-spacing:.12em;text-transform:uppercase}
+#pv h1{font-family:var(--serif);font-weight:normal;font-size:calc(26px*var(--fs));margin:calc(8px*var(--fs)) 0 0;overflow-wrap:anywhere}
+#pvMain{display:flex;flex-direction:column;gap:calc(12px*var(--fs))}
+#pvMain.hidden,.pvgone.hidden{display:none}
+.pvgone{color:var(--gray);padding:calc(40px*var(--fs)) 0;text-align:center}
+.pvwave{height:calc(120px*var(--fs));border:1px solid var(--border);background:var(--bg2)}
+#pvCv{width:100%;height:100%;display:block;cursor:pointer}
+.pvctl{display:flex;align-items:center;gap:calc(12px*var(--fs))}
+.pvtime{font-family:var(--mono);color:var(--gray);font-size:calc(12px*var(--fs))}
+.pvform{display:flex;flex-direction:column;gap:calc(6px*var(--fs))}
+.pvform .xtext{min-width:0;width:100%;box-sizing:border-box;resize:vertical;font:inherit}
+.pvrow{display:flex;align-items:center;gap:calc(10px*var(--fs))}
+.pvrow .err{color:var(--red)}
+.pvlist{display:flex;flex-direction:column;gap:calc(4px*var(--fs))}
+.pvc{display:flex;gap:calc(8px*var(--fs));align-items:baseline;font-size:calc(13px*var(--fs));color:var(--gray);padding:calc(3px*var(--fs)) 0;border-bottom:1px solid var(--border)}
+.pvc.done{opacity:.55}
+.pvct{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.pvct b{color:var(--white);font-weight:normal}
 .vnh{font-size:calc(11px*var(--fs));color:var(--white)}
 .vnspots{display:inline-flex;flex-wrap:wrap;gap:calc(4px*var(--fs));margin-left:calc(6px*var(--fs))}
 .vnt{background:none;border:1px solid var(--border);color:var(--gold);font-family:var(--mono);font-size:calc(10px*var(--fs));padding:0 calc(5px*var(--fs));cursor:pointer}
