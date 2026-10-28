@@ -58,7 +58,7 @@ function ssModel(p) {
   if (!p || p.missing) return null;
   const srcs = [{ levels: poolPyr(p.meta, p.peaks, p.bands) }];
   for (const a of p.allocs) srcs[a.id] = { levels: allocPyr(a) };
-  return { meta: p.meta, len: p.len, srcs, clip: { lists: p.lists, cum: p.lists.map(cumOf), edges: p.edges, len: p.len } };
+  return { meta: p.meta, len: p.len, srcs, clip: { lists: p.lists, cum: p.lists.map(cumOf), edges: p.edges, len: p.len }, marks: p.marks || [] };
 }
 
 function ssUse(p) { ses.docs.set(p.id, ssModel(p) || { missing: true, id: p.id }); }

@@ -1354,7 +1354,7 @@ async function sesPayload(id) {
   const slotPeaks = await readFloat(c.dir, "peaks.f32"), bands = await readFloat(c.dir, "bands.f32");
   const allocs = [];
   for (let i = 1; i < c.allocs.length; i++) { const s = c.sums[i]; allocs.push({ id: i, n: c.allocs[i][1], pk: s.pk, bd: s.bd }); }
-  return { id, meta: c.meta, len: c.len, peaks: timelinePeaks(slotPeaks, c.meta.channels, c.meta.slots), bands, lists: c.lists, edges: c.lists.map(l => l.map(g => sesEdge(c, g))), allocs };
+  return { id, meta: c.meta, len: c.len, peaks: timelinePeaks(slotPeaks, c.meta.channels, c.meta.slots), bands, lists: c.lists, edges: c.lists.map(l => l.map(g => sesEdge(c, g))), allocs, marks: (c.marks || []).filter(m => m && m.kind !== "view").map(m => ({ n: m.n, name: m.name || "", kind: m.kind, a: m.a, b: m.b || m.a })) };
 }
 
 async function sesOpen(m) {

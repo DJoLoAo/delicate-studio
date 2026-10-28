@@ -1496,5 +1496,20 @@
  "{n} scenes from the multitrack": "{n} cenas a partir do multipista",
  "Add a track first: each track is a column.": "Adicione primeiro uma faixa: cada faixa é uma coluna.",
  "Add a file first: it sets the session's sample rate.": "Adicione primeiro um ficheiro: define a taxa da sessão.",
- "Record in the multitrack.": "Grava-se no multipista."
+ "Record in the multitrack.": "Grava-se no multipista.",
+ "Before the first marker": "Antes do primeiro marcador",
+ "Each stem goes into the column of the same name; a column is added where there is none.": "Cada stem vai para a coluna com o mesmo nome; se não existir, é criada.",
+ "Fill from a file's markers": "Preencher a partir dos marcadores de um ficheiro",
+ "Fill from a file's markers…": "Preencher a partir dos marcadores de um ficheiro…",
+ "Fill from the session's markers": "Preencher a partir dos marcadores da sessão",
+ "Fill from the takes": "Preencher a partir dos takes",
+ "Fill this column…": "Preencher esta coluna…",
+ "Fill with stems": "Preencher com stems",
+ "Fill with stems…": "Preencher com stems…",
+ "No sections between the markers in this file.": "Não há secções entre os marcadores deste ficheiro.",
+ "No sections between the markers on this track.": "Não há secções entre os marcadores nesta faixa.",
+ "There are no stems in Studio yet. Make them with the stems button in the Library or the Locker.": "Ainda não há stems no Studio. Crie-os com o botão de stems na biblioteca ou no Locker.",
+ "This file has no markers. Add some with M in the waveform.": "Este ficheiro não tem marcadores. Adicione alguns com M na forma de onda.",
+ "{n} slots filled": "{n} slots preenchidos",
+ "{n} stems in {s}": "{n} stems em {s}"
 }

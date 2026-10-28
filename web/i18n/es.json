@@ -1496,5 +1496,20 @@
  "{n} scenes from the multitrack": "{n} escenas desde el multipista",
  "Add a track first: each track is a column.": "Añade primero una pista: cada pista es una columna.",
  "Add a file first: it sets the session's sample rate.": "Añade primero un archivo: fija la frecuencia de la sesión.",
- "Record in the multitrack.": "Se graba en el multipista."
+ "Record in the multitrack.": "Se graba en el multipista.",
+ "Before the first marker": "Antes del primer marcador",
+ "Each stem goes into the column of the same name; a column is added where there is none.": "Cada stem va a la columna del mismo nombre; si no existe, se añade.",
+ "Fill from a file's markers": "Rellenar desde los marcadores de un archivo",
+ "Fill from a file's markers…": "Rellenar desde los marcadores de un archivo…",
+ "Fill from the session's markers": "Rellenar desde los marcadores de la sesión",
+ "Fill from the takes": "Rellenar desde las tomas",
+ "Fill this column…": "Rellenar esta columna…",
+ "Fill with stems": "Rellenar con stems",
+ "Fill with stems…": "Rellenar con stems…",
+ "No sections between the markers in this file.": "No hay secciones entre los marcadores de este archivo.",
+ "No sections between the markers on this track.": "No hay secciones entre los marcadores en esta pista.",
+ "There are no stems in Studio yet. Make them with the stems button in the Library or the Locker.": "Aún no hay stems en Studio. Créalos con el botón de stems en la biblioteca o el Locker.",
+ "This file has no markers. Add some with M in the waveform.": "Este archivo no tiene marcadores. Añade algunos con M en la forma de onda.",
+ "{n} slots filled": "{n} celdas rellenadas",
+ "{n} stems in {s}": "{n} stems en {s}"
 }

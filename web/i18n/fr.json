@@ -1496,5 +1496,20 @@
  "{n} scenes from the multitrack": "{n} scènes depuis le multipiste",
  "Add a track first: each track is a column.": "Ajoutez d'abord une piste : chaque piste est une colonne.",
  "Add a file first: it sets the session's sample rate.": "Ajoutez d'abord un fichier : il fixe la fréquence de la session.",
- "Record in the multitrack.": "L'enregistrement se fait dans le multipiste."
+ "Record in the multitrack.": "L'enregistrement se fait dans le multipiste.",
+ "Before the first marker": "Avant le premier marqueur",
+ "Each stem goes into the column of the same name; a column is added where there is none.": "Chaque stem va dans la colonne du même nom ; une colonne est ajoutée s'il n'y en a pas.",
+ "Fill from a file's markers": "Remplir depuis les marqueurs d'un fichier",
+ "Fill from a file's markers…": "Remplir depuis les marqueurs d'un fichier…",
+ "Fill from the session's markers": "Remplir depuis les marqueurs de la session",
+ "Fill from the takes": "Remplir depuis les prises",
+ "Fill this column…": "Remplir cette colonne…",
+ "Fill with stems": "Remplir avec des stems",
+ "Fill with stems…": "Remplir avec des stems…",
+ "No sections between the markers in this file.": "Aucune section entre les marqueurs de ce fichier.",
+ "No sections between the markers on this track.": "Aucune section entre les marqueurs sur cette piste.",
+ "There are no stems in Studio yet. Make them with the stems button in the Library or the Locker.": "Il n'y a pas encore de stems dans Studio. Créez-les avec le bouton stems dans la bibliothèque ou le Locker.",
+ "This file has no markers. Add some with M in the waveform.": "Ce fichier n'a pas de marqueurs. Ajoutez-en avec M dans la forme d'onde.",
+ "{n} slots filled": "{n} emplacements remplis",
+ "{n} stems in {s}": "{n} stems dans {s}"
 }

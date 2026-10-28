@@ -153,8 +153,8 @@ button,a{touch-action:manipulation}
 .scvol{width:100%;accent-color:var(--gold);height:calc(14px*var(--fs));margin:0}
 .scnote{color:var(--dim);font-size:calc(11px*var(--fs));justify-content:center}
 .sccorner{justify-content:flex-end}
-.scstop,.scstopall,.scgo{flex:none;background:var(--bg3);border:1px solid var(--border);color:var(--gray);font:inherit;font-size:calc(10px*var(--fs));cursor:pointer;padding:calc(2px*var(--fs)) calc(6px*var(--fs))}
-.scstop:hover,.scstopall:hover,.scgo:hover{color:var(--white);border-color:var(--gray)}
+.scstop,.scstopall,.scgo,.scmore{flex:none;background:var(--bg3);border:1px solid var(--border);color:var(--gray);font:inherit;font-size:calc(10px*var(--fs));cursor:pointer;padding:calc(2px*var(--fs)) calc(6px*var(--fs))}
+.scstop:hover,.scstopall:hover,.scgo:hover,.scmore:hover{color:var(--white);border-color:var(--gray)}
 .scstop.queued{color:var(--bg);background:var(--gold);border-color:var(--gold)}
 .scrow{display:flex;align-items:center;gap:calc(8px*var(--fs));background:var(--bg2);border:1px solid var(--border);padding:0 calc(6px*var(--fs));min-height:calc(46px*var(--fs));min-width:0}
 .scrow.scadd{grid-column:1/-1;background:none;border:0;padding:0;min-height:0}

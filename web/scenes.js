@@ -66,7 +66,7 @@ function snRender() {
   g.style.gridTemplateColumns = "calc(150px*var(--fs)) repeat(" + Math.max(1, T.length) + ", minmax(calc(130px*var(--fs)), 1fr))";
   const h = [`<div class="sch sccorner"><button type="button" class="scstopall" title="${esc(t("Stop all"))}">■ ${esc(t("Stop all"))}</button></div>`];
   T.forEach((tr, i) => {
-    h.push(`<div class="sch" data-tr="${esc(tr.id)}"><div class="sch1"><i class="sdot" style="background:${tc(SS_COLORS[i % SS_COLORS.length])}"></i><span class="schn">${esc(tr.name)}</span><button type="button" class="stm${tr.mute ? " on" : ""}" title="${esc(t("Mute"))}">M</button><button type="button" class="sts${tr.solo ? " on" : ""}" title="${esc(t("Solo"))}">S</button><button type="button" class="scstop" title="${esc(t("Stop this track"))}">■</button></div><input type="range" class="scvol" min="-48" max="12" step="0.5" value="${Math.max(-48, tr.gain)}" title="${esc(t("Vol"))}"></div>`);
+    h.push(`<div class="sch" data-tr="${esc(tr.id)}"><div class="sch1"><i class="sdot" style="background:${tc(SS_COLORS[i % SS_COLORS.length])}"></i><span class="schn">${esc(tr.name)}</span><button type="button" class="stm${tr.mute ? " on" : ""}" title="${esc(t("Mute"))}">M</button><button type="button" class="sts${tr.solo ? " on" : ""}" title="${esc(t("Solo"))}">S</button><button type="button" class="scstop" title="${esc(t("Stop this track"))}">■</button><button type="button" class="scmore" title="${esc(t("Fill this column…"))}" aria-label="${esc(t("Fill this column…"))}">⋯</button></div><input type="range" class="scvol" min="-48" max="12" step="0.5" value="${Math.max(-48, tr.gain)}" title="${esc(t("Vol"))}"></div>`);
   });
   if (!T.length) h.push(`<div class="sch scnote">${esc(t("Add a track first: each track is a column."))}</div>`);
   d.rows.forEach((row, r) => {
@@ -198,15 +198,111 @@ function snFill() {
   flash(t("{n} scenes from the multitrack").replace("{n}", n));
 }
 
-async function snChoose(rowId, tid) {
+function snPut(tid, slots) {
+  const d = snData();
+  let i = 0;
+  d.rows.forEach((r, j) => { if (r.slots[tid]) i = j + 1; });
+  for (const k of slots) {
+    if (!d.rows[i]) d.rows.push(snNewRow());
+    d.rows[i].slots[tid] = k;
+    i++;
+  }
+  d.rows.forEach((r, j) => { if (!r.name) r.name = t("Scene") + " " + (j + 1); });
+  ssCommit();
+  snRender();
+  flash(t("{n} slots filled").replace("{n}", slots.length));
+}
+
+function snSections(marks, len, sr) {
+  const pts = [...new Set(marks.filter(m => m.kind !== "range").map(m => Math.round(m.a)))].filter(a => a >= 0 && a < len).sort((x, y) => x - y);
+  const name = a => { const m = marks.find(x => x.kind !== "range" && Math.round(x.a) === a); return m && m.name ? m.name : t("Marker") + " " + (m ? m.n : ""); };
+  const out = [];
+  if (pts.length && pts[0] > sr) out.push({ a: 0, b: pts[0], name: t("Before the first marker") });
+  pts.forEach((a, i) => { const b = i + 1 < pts.length ? pts[i + 1] : len; if (b - a >= sr * 0.05) out.push({ a, b, name: name(a) }); });
+  for (const m of marks) if (m.kind === "range" && m.b > m.a) out.push({ a: Math.max(0, m.a), b: Math.min(len, m.b), name: m.name || t("Range") + " " + m.n });
+  return out.sort((x, y) => x.a - y.a);
+}
+
+function snFillMarks(tid) {
+  const tr = ses.s.tracks.find(x => x.id === tid);
+  if (!tr) return;
+  const sr = ssRate(), end = Math.max(0, ...tr.clips.map(k => k.at + k.len));
+  const marks = (ses.s.marks || []).map((m, i) => ({ n: i + 1, name: m.name, kind: "point", a: m.at }));
+  const slots = [];
+  for (const s of snSections(marks, end, sr)) {
+    const k = tr.clips.find(q => q.at <= s.a && s.a < q.at + q.len);
+    if (!k) continue;
+    const len = Math.min(s.b, k.at + k.len) - s.a;
+    if (len < sr * 0.05) continue;
+    slots.push({ id: ssNewId(), doc: k.doc, from: k.from + (s.a - k.at), len, name: s.name, loop: true, gain: k.gain || 0 });
+  }
+  if (!slots.length) { flash(t("No sections between the markers on this track.")); return; }
+  snPut(tid, slots);
+}
+
+async function snPickDoc(title, filter) {
   let docs = [];
-  try { docs = (await call({ t: "list" })).docs.filter(d => !d.recording); } catch {}
-  if (!docs.length) { tell(t("There are no files in Studio yet. Open or record one first.")); return; }
+  try { docs = (await call({ t: "list" })).docs.filter(d => !d.recording && (!filter || filter(d))); } catch {}
+  if (!docs.length) { tell(t("There are no files in Studio yet. Open or record one first.")); return null; }
   const rows = docs.slice(0, 200).map(d => `<button type="button" class="vwrow" data-v="${esc(d.id)}"><b>${esc(d.name)}</b><span>${esc(((d.sampleRate || 0) / 1000).toLocaleString() + " kHz · " + fmtDur((d.len || d.frames || 0) / (d.sampleRate || 48000)))}</span></button>`).join("");
   const setup = f => f.querySelectorAll(".vwrow").forEach(b => b.addEventListener("click", () => { f.querySelector("[name=pick]").value = b.dataset.v; document.querySelector("#dlg .dok").click(); }));
-  const v = await askForm(t("Choose a file for the slot"), `<input type="hidden" name="pick" value=""><div class="vwrows">${rows}</div>`, { ok: t("choose"), setup });
+  const v = await askForm(title, `<input type="hidden" name="pick" value=""><div class="vwrows">${rows}</div>`, { ok: t("choose"), setup });
+  return v && v.pick && ses.open ? v.pick : null;
+}
+
+async function snFillFile(tid) {
+  const id = await snPickDoc(t("Fill from a file's markers"));
+  if (!id) return;
+  let src;
+  try { src = (await call({ t: "sesdoc", id })).doc; } catch { return; }
+  const marks = (src && src.marks) || [];
+  if (!marks.length) { tell(t("This file has no markers. Add some with M in the waveform.")); return; }
+  const p = await ssPrepDoc(id);
+  if (!p || !ses.open || !ses.s.tracks.some(x => x.id === tid)) return;
+  const f = p.meta.sampleRate / src.meta.sampleRate, sm = marks.map(m => Object.assign({}, m, { a: Math.round(m.a * f), b: Math.round((m.b || m.a) * f) }));
+  const slots = snSections(sm, p.len, p.meta.sampleRate).map(s => ({ id: ssNewId(), doc: p.id, from: s.a, len: s.b - s.a, name: s.name, loop: true, gain: 0 }));
+  if (!slots.length) { flash(t("No sections between the markers in this file.")); return; }
+  snPut(tid, slots);
+}
+
+function snFillTakes(tid) {
+  const tr = ses.s.tracks.find(x => x.id === tid);
+  if (!tr || !(tr.takes || []).length) return;
+  snPut(tid, tr.takes.map(k => ({ id: ssNewId(), doc: k.doc, from: 0, len: k.len, name: k.name || t("Take") + " " + k.n, loop: true, gain: 0 })));
+}
+
+async function snFillStems(rowId) {
+  let docs = [];
+  try { docs = (await call({ t: "list" })).docs.filter(d => d.source && d.source.kind === "stem"); } catch {}
+  const sets = new Map();
+  for (const d of docs) { const k = String(d.source.id); if (!sets.has(k)) sets.set(k, []); sets.get(k).push(d); }
+  if (!sets.size) { tell(t("There are no stems in Studio yet. Make them with the stems button in the Library or the Locker.")); return; }
+  const order = Object.keys(STM_NAMES);
+  for (const L of sets.values()) L.sort((a, b) => order.indexOf(a.source.stem) - order.indexOf(b.source.stem));
+  const rows = [...sets.entries()].map(([k, L]) => `<button type="button" class="vwrow" data-v="${esc(k)}"><b>${esc(L[0].name.replace(/ – [^–]+$/, ""))}</b><span>${esc(L.map(d => t(STM_NAMES[d.source.stem] || d.source.stem)).join(" · "))}</span></button>`).join("");
+  const setup = f => f.querySelectorAll(".vwrow").forEach(b => b.addEventListener("click", () => { f.querySelector("[name=pick]").value = b.dataset.v; document.querySelector("#dlg .dok").click(); }));
+  const v = await askForm(t("Fill with stems"), `<input type="hidden" name="pick" value=""><div class="vwrows">${rows}</div><div class="dnote">${esc(t("Each stem goes into the column of the same name; a column is added where there is none."))}</div>`, { ok: t("choose"), setup });
   if (!v || !v.pick || !ses.open) return;
-  const p = await ssPrepDoc(v.pick);
+  const L = sets.get(v.pick);
+  const got = [];
+  for (const d of L) { const p = await ssPrepDoc(d.id); if (!p || !ses.open) return; got.push({ d, p }); }
+  const row = snData().rows.find(r => r.id === rowId);
+  if (!row) return;
+  for (const { d, p } of got) {
+    const label = t(STM_NAMES[d.source.stem] || d.source.stem);
+    let tr = ses.s.tracks.find(x => x.name.toLowerCase() === label.toLowerCase() || x.name.toLowerCase() === String(d.source.stem).toLowerCase());
+    if (!tr) { tr = { id: ssNewId(), name: label, gain: 0, pan: 0, mute: false, solo: false, clips: [], takes: [] }; ses.s.tracks.push(tr); }
+    row.slots[tr.id] = { id: ssNewId(), doc: p.id, from: 0, len: p.len, name: label, loop: true, gain: 0 };
+  }
+  ssCommit();
+  snRender();
+  flash(t("{n} stems in {s}").replace("{n}", got.length).replace("{s}", row.name));
+}
+
+async function snChoose(rowId, tid) {
+  const id = await snPickDoc(t("Choose a file for the slot"));
+  if (!id) return;
+  const p = await ssPrepDoc(id);
   if (!p || !ses.open) return;
   const row = snData().rows.find(r => r.id === rowId);
   if (!row || !ses.s.tracks.some(tr => tr.id === tid)) return;
@@ -227,14 +323,26 @@ async function snRename(kind, id) {
   snRender();
 }
 
+function snColItems(tid) {
+  const tr = ses.s.tracks.find(x => x.id === tid);
+  if (!tr) return [];
+  return [
+    { label: t("Fill from the session's markers"), enabled: (ses.s.marks || []).length > 0 && tr.clips.length > 0, run: () => snFillMarks(tid) },
+    { label: t("Fill from a file's markers…"), enabled: true, run: () => snFillFile(tid) },
+    { label: t("Fill from the takes"), enabled: (tr.takes || []).length > 0, run: () => snFillTakes(tid) }
+  ];
+}
+
 function snMenu(e) {
+  const head = e.target.closest(".sch[data-tr]");
+  if (head) { e.preventDefault(); ctxOpen(e.clientX, e.clientY, snColItems(head.dataset.tr), false); return; }
   const el = e.target.closest(".scs, .scrow[data-row]");
   if (!el) return;
   e.preventDefault();
   const items = [];
   if (el.classList.contains("scrow")) {
     const id = el.dataset.row;
-    items.push({ label: t("Launch the scene"), enabled: true, run: () => snRowLaunch(id) }, { label: t("Rename the scene"), enabled: true, run: () => snRename("row", id) }, { label: t("Remove the scene"), enabled: true, run: () => { const d = snData(); d.rows = d.rows.filter(r => r.id !== id); ssCommit(); snRender(); } });
+    items.push({ label: t("Launch the scene"), enabled: true, run: () => snRowLaunch(id) }, { label: t("Fill with stems…"), enabled: true, run: () => snFillStems(id) }, { label: t("Rename the scene"), enabled: true, run: () => snRename("row", id) }, { label: t("Remove the scene"), enabled: true, run: () => { const d = snData(); d.rows = d.rows.filter(r => r.id !== id); ssCommit(); snRender(); } });
   } else if (el.dataset.slot) {
     const f = snFind(el.dataset.slot);
     if (!f) return;
@@ -257,6 +365,7 @@ function snClick(e) {
   if (b.classList.contains("scstopall")) { ssStop(); return; }
   if (b.classList.contains("scnew")) { snData().rows.push(snNewRow()); ssCommit(); snRender(); return; }
   if (b.classList.contains("scgo")) { snRowLaunch(b.closest(".scrow").dataset.row); return; }
+  if (tr && b.classList.contains("scmore")) { const q = b.getBoundingClientRect(); ctxOpen(q.left, q.bottom, snColItems(tr.id), false); return; }
   if (tr && b.classList.contains("scstop")) { if (ses.play.on) snLaunch([{ tr: tr.id, k: null }]); return; }
   if (tr && b.classList.contains("stm")) { tr.mute = !tr.mute; ssCommit(); snRender(); return; }
   if (tr && b.classList.contains("sts")) { tr.solo = !tr.solo; ssCommit(); snRender(); return; }
