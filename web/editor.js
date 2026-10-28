@@ -1090,7 +1090,8 @@ function togglePlay() { if (ed.play.on) stopPlay(); else startPlay(); }
 function tick() {
   if (!ed.play.on) { redraw(); return; }
   const st = Atomics.load(ed.ring.ctrl, 0);
-  if (st === 2) { stopPlay(); return; }
+  if (st === 1) ed.play.seen = true;
+  if (st === 2 || (st === 0 && ed.play.seen)) { stopPlay(); return; }
   if (st === 0 && performance.now() - ed.play.t0 > 2000) { stopPlay(); tell(t("Playback did not start.")); return; }
   const ph = playhead(), W = viewWidth(), vis = W * ed.view.spp;
   if (!ed.dragging && (ph > ed.view.start + vis * 0.98 || ph < ed.view.start)) { ed.view.start = ph - vis * 0.02; clampView(); }
@@ -1826,6 +1827,7 @@ function wireUi() {
   wirePen();
   wireTn();
   wireSes();
+  wirePunch();
   wireTags();
   wireAlbum();
   wireRec();

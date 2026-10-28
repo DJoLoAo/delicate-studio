@@ -181,6 +181,7 @@ async function ssClose(quiet) {
   if (!ses.open) return;
   fxSesClose();
   ssStop();
+  pcDisarm();
   await ssSave();
   ses.open = false;
   ses.s = null;
@@ -209,6 +210,8 @@ function ssButtons() {
   set("sesBounce", ssLen() > 0);
   set("sesExport", ssLen() > 0);
   $("sesPlay").classList.toggle("on", ses.play.on);
+  $("sesRec").classList.toggle("on", !!pc.rec);
+  $("sesRec").classList.toggle("armed", !!pc.arm);
   $("sesLoop").classList.toggle("on", ses.loop);
   ssInfo();
 }
@@ -221,7 +224,7 @@ function ssPlayhead() {
 }
 
 async function ssPlay(from) {
-  if (!ses.open || !ses.s.sr) return;
+  if (!ses.open || !ses.s.sr || pc.rec || pc.busy) return;
   const L = ssLen();
   if (!L) return;
   await ensureAudioFor(ses.s.sr, 2);
@@ -241,6 +244,7 @@ async function ssPlay(from) {
 function ssStop(keep) {
   if (!ses.play.on) return;
   const pos = ssPlayhead();
+  pcEnd(pos);
   ses.play.on = false;
   if (ed.ring) Atomics.store(ed.ring.ctrl, 0, 0);
   ed.worker.postMessage({ t: "stop" });
@@ -254,9 +258,11 @@ function ssToggle() { if (ses.play.on) ssStop(); else ssPlay(); }
 function ssTick() {
   if (!ses.play.on || !ses.open) { ses.ticking = false; ssDraw(); return; }
   const st = Atomics.load(ed.ring.ctrl, 0);
-  if (st === 2) { ses.ticking = false; ssStop(); return; }
+  if (st === 1) ses.play.seen = true;
+  if (st === 2 || (st === 0 && ses.play.seen)) { ses.ticking = false; ssStop(); return; }
   if (st === 0 && performance.now() - ses.play.t0 > 2000) { ses.ticking = false; ssStop(); tell(t("Playback did not start.")); return; }
   const ph = ssPlayhead(), W = ssWidth(), vis = W * ses.view.spp;
+  pcTick(ph);
   if (!ses.drag && (ph > ses.view.start + vis * 0.98 || ph < ses.view.start)) { ses.view.start = ph - vis * 0.02; ssClamp(); }
   ssDraw();
   ssFollow(ph);
@@ -455,6 +461,7 @@ function ssLanes() {
   }
   g.fillStyle = tc("blue", 0.4);
   for (const b of ssMarks()) { const x = Math.round(ssX(b.at) * dpr); if (x >= 0 && x <= W) g.fillRect(x, 0, Math.max(1, dpr), H); }
+  pcDraw(g, dpr, W, H);
   const cx = Math.round(ssX(ses.cursor) * dpr);
   if (cx >= 0 && cx <= W) { g.fillStyle = TH.gold; g.fillRect(cx, 0, Math.max(1, dpr), H); }
   if (ses.play.on) {
@@ -869,10 +876,13 @@ function ssHeads() {
     el.className = "sestrack" + (tr.id === ses.track ? " cur" : "");
     el.style.height = ssLane() + "px";
     el.dataset.id = tr.id;
-    el.innerHTML = `<div class="st1"><i class="sdot" style="background:${tc(SS_COLORS[r % SS_COLORS.length])}"></i><button class="stn"></button><button class="stm" title="${esc(t("Mute"))}">M</button><button class="sts" title="${esc(t("Solo"))}">S</button><button class="sta"></button><button class="stf">FX</button><button class="x std" title="${esc(t("Remove the track"))}" aria-label="${esc(t("Remove the track"))}">×</button></div>`
+    el.innerHTML = `<div class="st1"><i class="sdot" style="background:${tc(SS_COLORS[r % SS_COLORS.length])}"></i><button class="stn"></button><button class="str" title="${esc(t("Arm for recording"))}" aria-label="${esc(t("Arm for recording"))}">R</button><button class="stm" title="${esc(t("Mute"))}">M</button><button class="sts" title="${esc(t("Solo"))}">S</button><button class="sta"></button><button class="stf">FX</button><button class="x std" title="${esc(t("Remove the track"))}" aria-label="${esc(t("Remove the track"))}">×</button></div>`
       + `<label class="st2"><span>${esc(t("Vol"))}</span><input type="range" class="stg" min="-48" max="12" step="0.5"><b class="stgv"></b></label>`
       + `<label class="st2"><span>${esc(t("Pan"))}</span><input type="range" class="stp" min="-100" max="100" step="1"><b class="stpv"></b></label>`;
     el.querySelector(".stn").textContent = tr.name;
+    el.querySelector(".str").classList.toggle("on", pc.arm === tr.id);
+    el.querySelector(".str").addEventListener("click", () => pcArm(tr.id));
+    if (pc.arm === tr.id) { const m = document.createElement("i"); m.className = "stin"; m.appendChild(document.createElement("b")); el.appendChild(m); }
     el.querySelector(".stn").title = t("Rename the track");
     el.querySelector(".stm").classList.toggle("on", tr.mute);
     el.querySelector(".sts").classList.toggle("on", tr.solo);
@@ -991,6 +1001,8 @@ async function ssRemoveTrack(id) {
   const tr = ses.s.tracks.find(x => x.id === id);
   if (!tr) return;
   if (tr.clips.length && !(await ask(t("Remove this track?"), t("Its clips leave the session. The files stay in Studio, and Undo brings the track back."), { ok: t("remove") }))) return;
+  if (pc.rec && pc.rec.tr === id) ssStop();
+  if (pc.arm === id) pcDisarm();
   ses.s.tracks = ses.s.tracks.filter(x => x.id !== id);
   if (ses.track === id) ses.track = ses.s.tracks[0] ? ses.s.tracks[0].id : null;
   if (ses.clip && !ssTrackOf(ses.clip)) ses.clip = null;
@@ -1032,6 +1044,7 @@ function ssMenu(e) {
       { label: t("Remove the clip"), key: cmdKeyText("delete"), enabled: true, run: () => ssDelete() },
       { label: t("Open the file"), enabled: !!(ses.docs.get(h.k.doc) && !ses.docs.get(h.k.doc).missing), run: () => ssOpenFile(h.k.doc) }, "-");
   }
+  items.push({ label: t("New track"), enabled: true, run: () => pcNewTrack() }, { label: atr && pc.arm === atr.id ? t("Disarm the track") : t("Arm the track for recording"), enabled: !!atr && !pc.rec, run: () => pcArm(atr.id) }, { label: t("Recording in sessions…"), enabled: true, run: () => pcSettings() }, "-");
   items.push({ label: t("Add files…"), enabled: true, run: () => ssAddDlg() }, { label: t("Mix down to a new file"), enabled: ssLen() > 0, run: () => ssBounce(false) }, { label: t("Export…"), key: cmdKeyText("export"), enabled: ssLen() > 0, run: () => ssBounce(true) });
   ctxOpen(e.clientX, e.clientY, items, false);
 }

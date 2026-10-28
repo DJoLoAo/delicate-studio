@@ -601,9 +601,19 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 .sdot{width:calc(8px*var(--fs));height:calc(8px*var(--fs));border-radius:50%;flex:none}
 .stn{flex:1;min-width:0;text-align:left;background:none;border:0;color:var(--white);font:inherit;font-size:calc(11px*var(--fs));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;padding:0}
 .stn:hover{color:var(--gold)}
-.stm,.sts,.sta,.stf{flex:none;background:var(--bg3);border:1px solid var(--border);color:var(--gray);font:inherit;font-size:calc(9px*var(--fs));width:calc(20px*var(--fs));height:calc(18px*var(--fs));cursor:pointer;padding:0}
+.stm,.sts,.sta,.stf,.str{flex:none;background:var(--bg3);border:1px solid var(--border);color:var(--gray);font:inherit;font-size:calc(9px*var(--fs));width:calc(20px*var(--fs));height:calc(18px*var(--fs));cursor:pointer;padding:0}
 .stm.on{color:var(--bg);background:var(--gold);border-color:var(--gold)}
 .sts.on{color:var(--bg);background:var(--blue);border-color:var(--blue)}
+.str.on{color:var(--white);background:#c8303a;border-color:#c8303a}
+.sestrack{position:relative}
+.stin{position:absolute;left:0;right:0;bottom:0;height:calc(3px*var(--fs));background:var(--bg4)}
+.stin b{display:block;height:100%;width:0;background:var(--green)}
+.stin.clip b{background:var(--red)}
+#sesRec{display:inline-flex;align-items:center;justify-content:center}
+#sesRec .rdot{width:calc(11px*var(--fs));height:calc(11px*var(--fs));border-radius:50%;background:#c8303a;display:block;opacity:.55}
+#sesRec.armed .rdot,#sesRec:hover .rdot{opacity:1}
+#sesRec.on{border-color:#c8303a}
+#sesRec.on .rdot{opacity:1;animation:recpulse 1s ease-in-out infinite}
 .sta.has{color:var(--pink);border-color:var(--pink)}
 .sta.on{color:var(--bg);background:var(--pink);border-color:var(--pink)}
 .st2.auto input{accent-color:var(--pink)}

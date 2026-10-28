@@ -144,7 +144,9 @@ const CMDS = [
   { id: "cueImport", g: "Locations", label: "Import cue sheet…", run: () => ftCuePick(), doc: true, kw: "cue cuesheet tracklist tracks import ranges eac foobar" },
   { id: "open", g: "File", label: "Open a file…", run: () => pickFiles() },
   { id: "recPanel", g: "File", label: "Record…", run: () => recToggle(), kw: "record recording input microphone vinyl rip turntable guitar capture" },
-  { id: "rec", g: "Transport", label: "Record / stop recording", run: () => recGo(), kw: "record recording start stop capture" },
+  { id: "rec", g: "Transport", label: "Record / stop recording", run: () => recGo(), ss: () => pcGo(), kw: "record recording start stop capture punch in out take" },
+  { id: "sesNewTrack", g: "Edit", label: "New track", run: () => pcNewTrack(), ss: () => pcNewTrack(), sesOnly: true, kw: "multitrack add empty track record audio" },
+  { id: "punchCfg", g: "Transport", label: "Recording in sessions…", run: () => pcSettings(), ss: () => pcSettings(), sesOnly: true, kw: "punch in out pre roll post roll latency offset takes monitor input" },
   { id: "export", g: "File", label: "Export…", run: () => openExport(), doc: true, kw: "render bounce save wav flac master dither", ss: () => ssBounce(true), ssWhen: () => ssLen() > 0 },
   { id: "publish", g: "File", label: "Publish…", run: () => pbOpen(), doc: true, kw: "mixcloud locker upload share release set mix", ss: () => pbOpen(), ssWhen: () => ssLen() > 0 },
   { id: "sesNew", g: "File", label: "New session…", run: () => ssNewDlg(), kw: "multitrack session tracks mix arrange daw project" },
@@ -276,7 +278,7 @@ function runCmd(c) {
 
 function runCmdById(id) { return runCmd(CMD[id]); }
 
-const TIP_IDS = { homeBtn: "home", playBtn: "play", stopBtn: "stop", loopBtn: "loop", zinBtn: "zoomIn", zoutBtn: "zoomOut", zselBtn: "zoomSel", zfitBtn: "zoomFull", keysBtn: "keys", palBtn: "palette", specBtn: "spec", spToolTime: "toolTime", spToolRect: "toolRect", spToolLasso: "toolLasso", spToolBrush: "toolBrush", sesPlay: "play", sesStop: "stop", sesHome: "home", sesLoop: "loop", sesZin: "zoomIn", sesZout: "zoomOut", sesZfit: "zoomFull", sesClose: "close" };
+const TIP_IDS = { homeBtn: "home", playBtn: "play", stopBtn: "stop", loopBtn: "loop", zinBtn: "zoomIn", zoutBtn: "zoomOut", zselBtn: "zoomSel", zfitBtn: "zoomFull", keysBtn: "keys", palBtn: "palette", specBtn: "spec", spToolTime: "toolTime", spToolRect: "toolRect", spToolLasso: "toolLasso", spToolBrush: "toolBrush", sesPlay: "play", sesStop: "stop", sesHome: "home", sesLoop: "loop", sesZin: "zoomIn", sesZout: "zoomOut", sesZfit: "zoomFull", sesClose: "close", sesRec: "rec" };
 
 function applyTitles() {
   const set = (el, id) => {

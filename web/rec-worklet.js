@@ -20,6 +20,7 @@ class StudioRec extends AudioWorkletProcessor {
     const inp = inputs[0] || [], ctrl = this.ctrl, data = this.data, M = this.M, R = this.R;
     const frames = inp.length && inp[0] ? inp[0].length : 128;
     const w = Atomics.load(ctrl, 1);
+    Atomics.store(ctrl, 3, (currentFrame - w) | 0);
     for (let k = 0; k < this.ch; k++) {
       const src = inp[this.map[k]], base = k * R;
       let pk = this.pk[k], ss = this.ss[k], run = this.run[k], clip = this.clip[k];

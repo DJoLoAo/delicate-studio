@@ -290,6 +290,7 @@ async function start(m) {
     R.phase = "rec";
     d.startedAt = Date.now();
     const p = preTake(Math.round(R.cfg.pre * R.sr));
+    d.inAt = (Atomics.load(R.ring.ctrl, 2) - p.n + R.settle) | 0;
     append(p.x, 0, p.n);
     d.lastLoud = d.total;
   }
@@ -337,7 +338,7 @@ async function stop(reason) {
   else if (frames === 0) {
     try { await (await docsDir()).removeEntry(d.id, { recursive: true }); } catch {}
     post({ t: "rdone", empty: true, reason });
-  } else post({ t: "rdone", meta, reason, dropped: R.dropped });
+  } else post({ t: "rdone", meta, reason, dropped: R.dropped, inAt: d.inAt });
   status(true);
 }
 

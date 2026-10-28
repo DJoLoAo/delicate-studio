@@ -13,6 +13,17 @@ function smXfades(clips) {
   return out;
 }
 
+function smHole(clips, a, b) {
+  const out = [];
+  for (const k of clips) {
+    const e = k.at + k.len;
+    if (e <= a || (b >= 0 && k.at >= b)) { out.push(k); continue; }
+    if (k.at < a) out.push(Object.assign({}, k, { len: a - k.at, fin: Math.min(k.fin, a - k.at), fout: 0 }));
+    if (b >= 0 && e > b) out.push(Object.assign({}, k, { id: k.id + "~", at: b, from: k.from + (b - k.at), len: e - b, fin: 0, fout: Math.min(k.fout, e - b) }));
+  }
+  return out;
+}
+
 function smXin(q, xi) { return xi > 0 && q < xi ? Math.sin((q + 0.5) / xi * Math.PI / 2) : 1; }
 function smXout(q, len, xo) { const s = len - xo; return xo > 0 && q >= s ? Math.cos((q - s + 0.5) / xo * Math.PI / 2) : 1; }
 

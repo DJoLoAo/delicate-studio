@@ -1232,7 +1232,7 @@ function startPlay(start, end, loop, off) {
   }, 8);
 }
 
-const SES = { s: null, docs: new Map(), mix: null, job: null };
+const SES = { s: null, docs: new Map(), mix: null, job: null, punch: null };
 
 async function sessionsDir() {
   return (await studioDir()).getDirectoryHandle("sessions", { create: true });
@@ -1263,7 +1263,9 @@ function sesClean(v) {
     const au = tr.auto && typeof tr.auto === "object" ? tr.auto : {};
     const auto = { vol: env(au.vol, SM_FLOOR, SM_TOP), pan: env(au.pan, -1, 1) };
     const touch = tr.touch === "vol" || tr.touch === "pan" ? tr.touch : "";
-    tracks.push({ id: str(tr.id, 40) || crypto.randomUUID().slice(0, 12), name: str(tr.name, 80), gain: num(tr.gain, -96, 12, 0), pan: num(tr.pan, -1, 1, 0), mute: !!tr.mute, solo: !!tr.solo, clips, auto, touch, view: ["vol", "pan"].includes(tr.view) ? tr.view : "", fx: rkObj(tr.fx) });
+    const takes = [];
+    for (const q of Array.isArray(tr.takes) ? tr.takes.slice(0, 500) : []) if (q && typeof q === "object" && q.doc) takes.push({ id: str(q.id, 40) || crypto.randomUUID().slice(0, 12), doc: str(q.doc, 80), at: int(q.at, -(2 ** 40), 2 ** 40), len: int(q.len, 1, 2 ** 40), n: int(q.n, 1, 9999), name: str(q.name, 160) });
+    tracks.push({ id: str(tr.id, 40) || crypto.randomUUID().slice(0, 12), name: str(tr.name, 80), gain: num(tr.gain, -96, 12, 0), pan: num(tr.pan, -1, 1, 0), mute: !!tr.mute, solo: !!tr.solo, clips, auto, touch, view: ["vol", "pan"].includes(tr.view) ? tr.view : "", fx: rkObj(tr.fx), takes });
   }
   const marks = [];
   for (const k of Array.isArray(s.marks) ? s.marks.slice(0, 999) : []) if (k && typeof k === "object") marks.push({ id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), at: int(k.at, 0, 2 ** 40), name: str(k.name, 160) });
@@ -1441,8 +1443,9 @@ function sesMixer(s) {
     const rack = sesRack(tr.id, tr.fx, s.sr);
     if (rack) keep.add(tr.id);
     const mono = tr.clips.every(k => { const c = SES.docs.get(k.doc); return !c || c.meta.channels === 1; });
+    const P = SES.punch, clips = P && P.tr === tr.id ? smHole(tr.clips, P.a, P.b) : tr.clips;
     return {
-      g: tr.gain <= -96 ? 0 : Math.pow(10, tr.gain / 20), pan: tr.pan, clips: tr.clips, xf: smXfades(tr.clips), rack, mono,
+      g: tr.gain <= -96 ? 0 : Math.pow(10, tr.gain / 20), pan: tr.pan, clips, xf: smXfades(clips), rack, mono,
       vol: tr.touch === "vol" || !tr.auto.vol.length ? null : tr.auto.vol, pn: tr.touch === "pan" || !tr.auto.pan.length ? null : tr.auto.pan
     };
   });
@@ -1556,7 +1559,9 @@ function sesClose() {
 function sesStartPlay(m) {
   stopPlay();
   if (!SES.s || !SES.mix || !ring) return;
-  const F = sesLen(SES.s);
+  const P = m.punch && typeof m.punch === "object" ? { tr: String(m.punch.tr), a: Math.max(0, Math.floor(Number(m.punch.a) || 0)), b: Number(m.punch.b) >= 0 ? Math.floor(Number(m.punch.b)) : -1 } : null;
+  if (P || SES.punch) { SES.punch = P; SES.mix = sesMixer(SES.s); }
+  const F = m.rec ? Math.max(sesLen(SES.s), Math.floor(Number(m.end) || 0)) : sesLen(SES.s);
   const start = Math.max(0, Math.min(Math.floor(m.start), F)), end = Math.max(start, Math.min(Math.floor(m.end), F));
   if (end - start < 1) return;
   const loop = !!m.loop;
@@ -4315,7 +4320,7 @@ async function handle(m) {
   if (m.t === "cancel") { cancelImport = true; if (downloadCtl) downloadCtl.abort(); return; }
   if (m.t === "ring") { ring = { data: new Float32Array(m.data), ctrl: new Int32Array(m.ctrl), size: m.size }; return; }
   if (m.t === "play") { startPlay(m.start, m.end, m.loop, m.off); return; }
-  if (m.t === "stop") { stopPlay(); return; }
+  if (m.t === "stop") { stopPlay(); if (SES.punch) { SES.punch = null; if (SES.s) SES.mix = sesMixer(SES.s); } return; }
   if (m.t === "read") {
     if (!cur || cur.meta.id !== m.id) { postMessage({ t: "samples", req: m.req, id: m.id, ver: -1, start: m.start, count: 0, data: new Float32Array(0) }); return; }
     const start = Math.max(0, Math.floor(m.start)), count = Math.max(0, Math.min(Math.floor(m.count), 4194304, cur.len - start));

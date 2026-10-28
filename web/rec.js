@@ -76,8 +76,8 @@ function recMsg(m) {
   }
 }
 
-function recMap() {
-  const n = rc.devChans, c = String(rc.cfg.chans);
+function recMap(chans) {
+  const n = chans || rc.devChans, c = String(rc.cfg.chans);
   const pair = c.match(/^(\d+)-(\d+)$/);
   if (pair) { const a = +pair[1] - 1; if (a + 1 < n) return [a, a + 1]; }
   else if (/^\d+$/.test(c) && +c >= 1 && +c <= n) return [+c - 1];
