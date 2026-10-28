@@ -82,6 +82,7 @@ function ssCommit() {
   ssHeads();
   ssButtons();
   ssDraw();
+  snRender();
 }
 
 function ssRestore(i) {
@@ -95,6 +96,7 @@ function ssRestore(i) {
   ssHeads();
   ssButtons();
   ssDraw();
+  snRender();
   fxSesSync();
 }
 
@@ -170,6 +172,7 @@ async function ssOpen(id) {
   ssInfo();
   ssHeads();
   ssButtons();
+  snRestoreMode();
   requestAnimationFrame(() => {
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem("studioSesView:" + id) || "null"); } catch {}
@@ -188,6 +191,7 @@ async function ssClose(quiet) {
   vwKeep();
   fxSesClose();
   ssStop();
+  snHide();
   pcDisarm();
   await ssSave();
   ses.open = false;
@@ -233,6 +237,7 @@ function ssPlayhead() {
 
 async function ssPlay(from) {
   if (!ses.open || !ses.s.sr || pc.rec || pc.busy) return;
+  if (ses.mode === "scenes") { await snPlay([]); return; }
   const L = ssLen();
   if (!L) return;
   await ensureAudioFor(ses.s.sr, 2);
@@ -257,6 +262,7 @@ function ssStop(keep) {
   if (ed.ring) Atomics.store(ed.ring.ctrl, 0, 0);
   ed.worker.postMessage({ t: "stop" });
   if (keep === "here") ses.cursor = Math.floor(pos);
+  if (ses.mode === "scenes") snStopped();
   ssButtons();
   ssDraw();
 }
@@ -271,6 +277,7 @@ function ssTick() {
   if (st === 0 && performance.now() - ses.play.t0 > 2000) { ses.ticking = false; ssStop(); tell(t("Playback did not start.")); return; }
   const ph = ssPlayhead(), W = ssWidth(), vis = W * ses.view.spp;
   pcTick(ph);
+  snTick(ph);
   if (!ses.drag && (ph > ses.view.start + vis * 0.98 || ph < ses.view.start)) { ses.view.start = ph - vis * 0.02; ssClamp(); }
   ssDraw();
   ssFollow(ph);
@@ -295,6 +302,7 @@ function ssDraw() {
 
 function ssRender() {
   ssButtons();
+  if (ses.mode === "scenes") { $("sesNow").textContent = fmtTime(ses.play.on ? ssPlayhead() : 0); $("sesLen").textContent = ""; return; }
   ssRuler();
   ssLanes();
   if (!ses.play.on) { $("sesNow").textContent = fmtTime(ses.cursor); ssFollow(ses.cursor); }
@@ -822,7 +830,7 @@ async function ssAddDlg() {
   for (const id of ids) await ssAddDoc(id);
 }
 
-async function ssAddDoc(id, at, range) {
+async function ssPrepDoc(id) {
   let p;
   try { p = (await call({ t: "sesdoc", id })).doc; } catch (e) { tell(String(e.message || e), t("Could not add the file")); return null; }
   if (p.missing) return null;
@@ -835,6 +843,12 @@ async function ssAddDoc(id, at, range) {
   }
   ssUse(p);
   if (!ses.s.sr) ses.s.sr = p.meta.sampleRate;
+  return p;
+}
+
+async function ssAddDoc(id, at, range) {
+  const p = await ssPrepDoc(id);
+  if (!p) return null;
   const tr = { id: ssNewId(), name: (p.meta.name || "").replace(/\.[^.]+$/, "") || ssTrackName(ses.s.tracks.length + 1), gain: 0, pan: 0, mute: false, solo: false, clips: [] };
   const r0 = range ? Math.max(0, Math.min(p.len - 1, Math.round(range.a * p.meta.sampleRate))) : 0, r1 = range ? Math.max(r0 + 1, Math.min(p.len, Math.round(range.b * p.meta.sampleRate))) : p.len;
   tr.clips.push({ id: ssNewId(), doc: p.id, at: Math.max(0, Math.round(at !== undefined ? at : ses.cursor)), from: r0, len: r1 - r0, gain: 0, fin: 0, fout: 0, name: p.meta.name });

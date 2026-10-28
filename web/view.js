@@ -44,7 +44,7 @@ function vwFit(s) {
   return cut;
 }
 
-function vwView() { return ses.open ? "multi" : ed.doc ? "wave" : ""; }
+function vwView() { return ses.open ? (ses.mode === "scenes" ? "scenes" : "multi") : ed.doc ? "wave" : ""; }
 
 function vwRender() {
   const v = vwView();
@@ -71,19 +71,25 @@ async function vwOpenDoc(id) {
   else vwForgetDoc(id);
 }
 
-async function vwMulti() {
-  if (vw.busy || ses.open) return;
+async function vwMulti(mode) {
+  mode = mode === "scenes" ? "scenes" : "multi";
+  if (vw.busy) return;
+  if (ses.open) { if (ses.mode !== mode) snMode(mode); return; }
   vw.busy = true;
   try {
     const list = await ssLoadList();
-    if (vw.ses && list.some(s => s.id === vw.ses)) { await ssOpen(vw.ses); return; }
-    vwForgetSes(vw.ses);
-    const pick = await vwPick(list);
-    if (!pick) return;
-    if (pick === "new") await vwInsert(true);
-    else await ssOpen(pick);
+    if (vw.ses && list.some(s => s.id === vw.ses)) await ssOpen(vw.ses);
+    else {
+      vwForgetSes(vw.ses);
+      const pick = await vwPick(list);
+      if (pick === "new") await vwInsert(true);
+      else if (pick) await ssOpen(pick);
+    }
+    if (ses.open && ses.mode !== mode) snMode(mode);
   } finally { vw.busy = false; vwRender(); }
 }
+
+function vwScenes() { return vwMulti("scenes"); }
 
 async function vwPick(list) {
   const rows = [];
@@ -132,6 +138,6 @@ async function vwOpenClip(k) {
 
 function wireView() {
   vwLoad();
-  document.querySelectorAll("#viewSw button").forEach(b => b.addEventListener("click", e => { e.currentTarget.blur(); if (b.dataset.v === "wave") vwWave(); else vwMulti(); }));
+  document.querySelectorAll("#viewSw button").forEach(b => b.addEventListener("click", e => { e.currentTarget.blur(); if (b.dataset.v === "wave") vwWave(); else if (b.dataset.v === "scenes") vwScenes(); else vwMulti(); }));
   vwRender();
 }

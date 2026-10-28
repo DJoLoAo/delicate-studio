@@ -138,6 +138,7 @@ function pcNewTrack() {
 
 async function pcGo() {
   if (!ses.open) return;
+  if (ses.mode === "scenes" && !pc.rec) { flash(t("Record in the multitrack.")); return; }
   if (pc.rec) { ssStop(); return; }
   if (pc.fin || pc.busy) return;
   if (recBusy()) { tell(t("A recording is running.")); return; }
