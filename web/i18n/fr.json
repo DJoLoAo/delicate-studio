@@ -1393,5 +1393,19 @@
  "select": "sélection",
  "track…": "piste…",
  "undo": "annuler",
- "velocity": "vélocité"
+ "velocity": "vélocité",
+ "Added to the DJ crate {c}": "Ajouté au bac DJ {c}",
+ "Adds the exported file to a crate in Delicate DJ": "Ajoute le fichier exporté à un bac dans Delicate DJ",
+ "DJ crate": "Bac DJ",
+ "Friday peak time": "Vendredi peak time",
+ "New crate": "Nouveau bac",
+ "New crate…": "Nouveau bac…",
+ "No crate": "Aucun bac",
+ "The crate could not be made in Delicate DJ.": "Le bac n'a pas pu être créé dans Delicate DJ.",
+ "This file has no markers yet. A DJ recording opened from Sessions → DJ recording… brings the tracklist from your play history; or add markers with M.": "Ce fichier n'a pas encore de marqueurs. Un enregistrement DJ ouvert via Sessions → Enregistrement DJ… apporte la tracklist de votre historique ; ou ajoutez des marqueurs avec M.",
+ "Times come from the markers, one line each, ready for Mixcloud, YouTube or SoundCloud. Export can write a .cue sheet next to the audio as well.": "Les temps viennent des marqueurs, une ligne chacun, prêts pour Mixcloud, YouTube ou SoundCloud. L'export peut aussi écrire une feuille .cue à côté de l'audio.",
+ "Tracklist": "Tracklist",
+ "Tracklist copied": "Tracklist copiée",
+ "Tracklist…": "Tracklist…",
+ "{f} is in the Locker, but it could not be added to the crate {c}.": "{f} est dans le Locker, mais n'a pas pu être ajouté au bac {c}."
 }

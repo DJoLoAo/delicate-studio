@@ -1393,5 +1393,19 @@
  "select": "चुनें",
  "track…": "ट्रैक…",
  "undo": "पूर्ववत",
- "velocity": "वेलोसिटी"
+ "velocity": "वेलोसिटी",
+ "Added to the DJ crate {c}": "DJ क्रेट {c} में जोड़ा",
+ "Adds the exported file to a crate in Delicate DJ": "एक्सपोर्ट की फ़ाइल Delicate DJ के क्रेट में जोड़ता है",
+ "DJ crate": "DJ क्रेट",
+ "Friday peak time": "शुक्रवार पीक टाइम",
+ "New crate": "नया क्रेट",
+ "New crate…": "नया क्रेट…",
+ "No crate": "कोई क्रेट नहीं",
+ "The crate could not be made in Delicate DJ.": "Delicate DJ में क्रेट नहीं बन सका।",
+ "This file has no markers yet. A DJ recording opened from Sessions → DJ recording… brings the tracklist from your play history; or add markers with M.": "इस फ़ाइल में अभी मार्कर नहीं हैं। सेशन → DJ रिकॉर्डिंग… से खुली रिकॉर्डिंग आपके इतिहास से ट्रैकलिस्ट लाती है; या M से मार्कर जोड़ें।",
+ "Times come from the markers, one line each, ready for Mixcloud, YouTube or SoundCloud. Export can write a .cue sheet next to the audio as well.": "समय मार्करों से आते हैं, हर एक की एक पंक्ति, Mixcloud, YouTube या SoundCloud के लिए तैयार। एक्सपोर्ट ऑडियो के साथ .cue शीट भी लिख सकता है।",
+ "Tracklist": "ट्रैकलिस्ट",
+ "Tracklist copied": "ट्रैकलिस्ट कॉपी हुई",
+ "Tracklist…": "ट्रैकलिस्ट…",
+ "{f} is in the Locker, but it could not be added to the crate {c}.": "{f} Locker में है, पर क्रेट {c} में नहीं जुड़ सका।"
 }

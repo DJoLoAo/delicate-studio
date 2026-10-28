@@ -1,5 +1,5 @@
 const XP_RATES = [0, 44100, 48000, 88200, 96000, 176400, 192000];
-const XP_DEFAULT = { range: "all", formats: [{ type: "wav", bits: 24, rate: 0 }], gain: 0, dither: "tpdf", shaping: "off", tplFile: "$name", tplRange: "$index $range", dest: "download", folder: "Studio", marks: "file", cue: "off" };
+const XP_DEFAULT = { range: "all", formats: [{ type: "wav", bits: 24, rate: 0 }], gain: 0, dither: "tpdf", shaping: "off", tplFile: "$name", tplRange: "$index $range", dest: "download", folder: "Studio", marks: "file", cue: "off", crate: 0 };
 const XP_TRACK = new Set(["TITLE", "TRACKNUMBER", "ISRC", "CUESHEET"]);
 const xp = { cfg: null, jobs: [], seq: 0, pics: {}, batches: [], docPics: {}, album: null };
 
@@ -255,6 +255,8 @@ function xpRender() {
   document.querySelectorAll("#xDest button").forEach(b => b.classList.toggle("on", b.dataset.v === c.dest));
   $("xFolder").value = c.folder;
   $("xFolder").classList.toggle("hidden", c.dest !== "locker");
+  $("xCrateRow").classList.toggle("hidden", c.dest !== "locker" || !!xp.album);
+  if (c.dest === "locker" && !xp.album) { if (djl.crates) djCrateDd(); else djCrates().then(() => { if (!$("exp").classList.contains("hidden")) djCrateDd(); }); }
   const plan = xpPlan();
   $("xPreview").textContent = plan.slice(0, 3).map(p => (c.dest === "locker" && c.folder ? c.folder.replace(/\/+$/, "") + "/" : "") + p.name).join("  ·  ") + (plan.length > 3 ? "  ·  +" + (plan.length - 3) : "");
   const bytes = plan.reduce((s, p) => s + xpBytes(p), 0);
@@ -329,6 +331,7 @@ async function xpGo() {
   xpSave();
   const master = { gain: c.gain, dither: c.dither, shaping: c.shaping };
   const dest = c.dest === "locker" ? { kind: "locker", folder: c.folder } : { kind: "download" };
+  const crate = dest.kind === "locker" && !xp.album && c.crate ? { id: c.crate, name: djCrateLabel(c.crate) } : null;
   const doc = ed.doc, A = xp.album, plan = xpPlan(), rel = dest.kind === "locker" ? Number((plan.find(p => p.release) || {}).release) || 0 : 0;
   const batch = rel ? { release: rel, jobs: [] } : null;
   xp.going = true;
@@ -341,7 +344,7 @@ async function xpGo() {
       const tags = p.tags.slice();
       if (p.fmt.type === "flac" && p.marks.some(m => m.b > m.a)) tags.push(["CUESHEET", xpCueText([{ name: p.name, tracks: xpCueTracks(p.marks.filter(m => m.b > m.a), d.sampleRate, d) }], d)]);
       const id = "x" + Date.now().toString(36) + (++xp.seq);
-      const job = { id, name: p.name, fmt: p.fmt, dest, state: "queued", frac: 0, doc: d.name, fmtLabel: xpFmtLabel(p.fmt, d.sampleRate), len: (p.b - p.a) / d.sampleRate, pos: p.pos };
+      const job = { id, name: p.name, fmt: p.fmt, dest, state: "queued", frac: 0, doc: d.name, fmtLabel: xpFmtLabel(p.fmt, d.sampleRate), len: (p.b - p.a) / d.sampleRate, pos: p.pos, crate, tags };
       xp.jobs.push(job);
       if (batch && p.release) batch.jobs.push(id);
       call({ t: "export", id: d.id, jobId: id, a: p.a, b: p.b, name: p.name, fmt: p.fmt, master, dest, tags, pic, marks: p.marks.map(m => ({ a: m.a, b: m.b, name: m.name, isrc: m.isrc })) }).catch(e => { job.state = "failed"; job.error = e.message; xpQueue(); xpBatches(); });
@@ -364,6 +367,7 @@ function xpJob(m) {
     if (was !== "done") {
       if (j.dest.kind === "download") xpDownload(j);
       if (j.pub) pbDone(j);
+      else if (j.crate && j.locker) djAddToCrate(j);
       else flash(t("Exported") + " " + (j.locker ? j.locker.path : j.name));
     }
   }

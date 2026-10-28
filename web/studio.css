@@ -679,6 +679,8 @@ html .tdisp,html .selpanel input,html .tbtn .cnt,html .hrow .hn,html #dlg .dfiel
 .bst.work{color:var(--gold)}
 body.mcrec #palBtn{color:#ff6b5e}
 #batch>*{flex-shrink:0}
+.tltext{width:100%;min-height:calc(220px*var(--fs));background:var(--bg3);color:var(--white);border:1px solid var(--border);font-family:var(--mono);font-size:calc(11px*var(--fs));padding:calc(8px*var(--fs));resize:vertical;margin:calc(8px*var(--fs)) 0}
+#xCrate{min-width:calc(200px*var(--fs))}
 #pr{position:fixed;left:0;right:0;top:calc(46px*var(--fs));bottom:0;z-index:30;background:var(--bg);display:flex;flex-direction:column;border-top:1px solid var(--border)}
 #pr.hidden{display:none}
 .prbar{display:flex;align-items:center;flex-wrap:wrap;gap:calc(6px*var(--fs));padding:calc(5px*var(--fs)) calc(10px*var(--fs));border-bottom:1px solid var(--border);background:var(--bg2);font-size:calc(11px*var(--fs))}

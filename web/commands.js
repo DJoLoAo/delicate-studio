@@ -107,6 +107,7 @@ const CMDS = [
   { id: "ldLoud", g: "Edit", label: "Match loudness…", run: () => ldOpen("loud"), doc: true, kw: "lufs loudness target limiter louder master streaming ebu r128" },
   { id: "ldNorm", g: "Edit", label: "Normalize…", run: () => ldOpen("norm"), doc: true, kw: "normalise peak level maximize" },
   { id: "ldReport", g: "Edit", label: "Loudness report…", run: () => repOpen(), doc: true, kw: "loudness report lufs true peak lra spotify apple youtube ebu r128 podcast streaming clip dc offset bit depth analysis statistics" },
+  { id: "tracklist", g: "File", label: "Tracklist…", run: () => djTracklist(), doc: true, kw: "tracklist set list timestamps markers mixcloud youtube soundcloud copy dj recording history" },
   { id: "pianoRoll", g: "File", label: "MIDI files…", run: () => openFiles("midi"), kw: "midi piano roll notes editor mid sequencer synth" },
   { id: "streamPrev", g: "Edit", label: "Streaming preview…", run: () => svOpen(), doc: true, kw: "streaming preview codec opus aac vorbis mp3 lossy encode spotify apple youtube soundcloud deezer listen how it sounds platform loudness" },
   { id: "nullTest", g: "Edit", label: "Null test…", run: () => nlOpen(), doc: true, kw: "null test compare difference subtract invert phase identical bit exact two files versions a b" },
