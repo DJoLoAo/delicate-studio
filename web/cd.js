@@ -1,4 +1,4 @@
-const cd = { trans: null, timer: 0 };
+const cd = { trans: null, timer: 0, ddp: null };
 const CD_GAP = 2, CD_PREGAP = 2, CD_MAXF = (79 * 60 + 57) * 75 + 74;
 
 function cdSnap(x, sr) { const f = sr / 75; return Math.max(0, Math.round(Math.round(x / f) * f)); }
@@ -75,19 +75,66 @@ function cdCheck(A, s) {
   const sr = s.sr || 44100, L = cdClips(s), out = [], ok = (good, text) => out.push({ good, text });
   if (!L.length) { ok(false, t("The montage has no tracks.")); return out; }
   ok(L.length <= 99, L.length <= 99 ? t("{n} tracks").replace("{n}", L.length) : t("A CD holds at most 99 tracks."));
-  const short = L.filter(k => k.len < sr * 4);
+  const short = L.filter((k, i) => (i + 1 < L.length ? L[i + 1].at - k.at : k.len) < sr * 4);
   ok(!short.length, short.length ? t("Shorter than 4 s, too short for a CD track") + ": " + short.map(k => (k.cd && k.cd.title) || k.name).join(", ") : t("Every track is at least 4 s long"));
   const total = CD_PREGAP * sr + Math.max(...L.map(k => k.at + k.len)) - L[0].at, tf = Math.round(total / sr * 75);
-  ok(tf <= CD_MAXF, (tf <= CD_MAXF ? t("Total {t}, fits on a CD") : t("Total {t}, longer than a CD (79:57:74)")).replace("{t}", cdTime(total, sr)));
+  out.push({ good: tf <= CD_MAXF, soft: true, text: (tf <= CD_MAXF ? t("Total {t}, fits on a CD") : t("Total {t}, longer than a CD (79:57:74)")).replace("{t}", cdTime(total, sr)) });
   const isrc = L.map(k => (k.cd && k.cd.isrc) || ""), bad = isrc.filter(v => v && !cdIsrcOk(v)), dup = isrc.filter((v, i) => v && isrc.indexOf(v) !== i);
   if (bad.length) ok(false, t("ISRC not in the form CC-XXX-YY-NNNNN") + ": " + bad.join(", "));
   else if (dup.length) ok(false, t("The same ISRC on two tracks") + ": " + [...new Set(dup)].join(", "));
   else ok(true, isrc.every(Boolean) ? t("ISRC on every track") : t("ISRC on {n} of {m} tracks").replace("{n}", isrc.filter(Boolean).length).replace("{m}", L.length));
   const upc = (A.cd && A.cd.upc) || "";
   ok(!upc || cdUpcOk(upc), !upc ? t("No UPC/EAN") : cdUpcOk(upc) ? t("UPC/EAN checks out") : t("UPC/EAN check digit is wrong"));
-  ok(!!(A.cd && A.cd.title && L.every(k => k.cd && k.cd.title)), t("CD-Text for the album and every track"));
+  out.push({ good: !!(A.cd && A.cd.title && L.every(k => k.cd && k.cd.title)), text: t("CD-Text for the album and every track"), soft: true });
+  const packs = (cdText(A, L) || []).length / 18;
+  if (packs > 256) ok(false, t("Too much CD-Text: shorten the titles and names"));
   if (sr !== 44100) ok(true, t("Made at {r} kHz; the DDP is written at 44.1 kHz, 16-bit").replace("{r}", (sr / 1000).toLocaleString()));
   return out;
+}
+
+function cdTracks(A, L) {
+  const P = (A.cd && A.cd.performer) || alArtist(A) || "";
+  return L.map(k => ({ at: k.at, isrc: (k.cd && k.cd.isrc) || "", title: (k.cd && k.cd.title) || k.name || "", performer: (k.cd && k.cd.performer) || P }));
+}
+
+function cdText(A, L) {
+  if (!L.length) return null;
+  return ddpCdText({ title: (A.cd && A.cd.title) || alTitle(A) || "", performer: (A.cd && A.cd.performer) || alArtist(A) || "" }, cdTracks(A, L));
+}
+
+function cdBase(A) { return (((A.cd && A.cd.title) || alTitle(A) || "CD").replace(/[\\/:*?"<>|]+/g, "-").trim().slice(0, 60) || "CD") + " DDP"; }
+
+async function cdDdp(A) {
+  const s0 = await cdSession(A);
+  if (!s0) return;
+  const bad = cdCheck(A, s0).filter(r => !r.good && !r.soft);
+  if (bad.length) { tell(bad.map(r => "⚠ " + r.text).join("\n"), t("Fix these before writing the DDP")); return; }
+  const sr0 = s0.sr || 44100, L0 = cdClips(s0), end0 = Math.max(...L0.map(k => k.at + k.len)), tf = Math.round((CD_PREGAP * sr0 + end0 - L0[0].at) / sr0 * 75);
+  if (tf > (99 * 60 + 59) * 75 + 74) { tell(t("The program is longer than 99:59:74 and cannot be written as a DDP."), t("Could not write the DDP")); return; }
+  if (tf > CD_MAXF && !(await ask(t("Longer than a CD"), t("The program is longer than 79:57:74. Not every plant presses that much; ask yours first."), { ok: t("Write the DDP") }))) return;
+  await cdOpen(A);
+  if (!ses.open || ses.s.id !== A.montage) return;
+  await ssSave();
+  const s = ses.s, L = cdClips(s), end = Math.max(...L.map(k => k.at + k.len)), jobId = "d" + Date.now();
+  cd.ddp = { id: jobId };
+  let r;
+  try {
+    r = await call({ t: "cdddp", jobId, a: L[0].at, b: end, tracks: cdTracks(A, L), title: (A.cd && A.cd.title) || alTitle(A) || "", performer: (A.cd && A.cd.performer) || alArtist(A) || "", upc: (A.cd && A.cd.upc) || "", folder: cdBase(A), cdtext: true, head: ["Delicate Studio · " + new Date().toISOString().slice(0, 10)] });
+  } catch (e) { if ((e && e.message) !== "cancelled") tell(String(e.message || e), t("Could not write the DDP")); return; }
+  finally { cd.ddp = null; $("stMsg").textContent = ""; }
+  try {
+    const root = await navigator.storage.getDirectory(), dir = await (await root.getDirectoryHandle("studio")).getDirectoryHandle("exports");
+    const f = await (await dir.getFileHandle(r.file)).getFile(), url = URL.createObjectURL(f), a = document.createElement("a");
+    a.href = url;
+    a.download = cdBase(A) + ".zip";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 600000);
+  } catch { tell(t("The rendered file is no longer here. Render it again."), t("Could not write the DDP")); return; }
+  const msg = t("DDP written: {n} tracks, {t}, 44.1 kHz 16-bit, with PQ list, cue sheet and MD5 checksums").replace("{n}", L.length).replace("{t}", cdTime(r.sectors / 75 * 44100, 44100));
+  if (r.clipped) tell(msg + "\n\n" + t("{n} samples went over full scale and were clipped. Turn the montage down, or use a limiter, and write it again.").replace("{n}", r.clipped), t("DDP written with clipping"));
+  else flash(msg);
 }
 
 function cdGaps(L) { return L.map((k, i) => i ? k.at - (L[i - 1].at + L[i - 1].len) : 0); }
@@ -162,7 +209,7 @@ async function alRenderCd(A) {
   for (const r of cdCheck(A, s)) chk.appendChild(alEl("div", r.good ? "ok" : "bad", (r.good ? "✓ " : "⚠ ") + r.text));
   box.appendChild(chk);
   const btns = alEl("div", "cdbtns");
-  btns.append(alBtn(t("Open the montage"), t("Open it in the multitrack to move, trim and fade the tracks"), () => cdOpen(A)), alBtn(t("Play the transitions"), t("The last 10 s of each track into the first 5 s of the next"), () => cdTransitions(A)), alBtn(t("Rebuild from the sides"), t("Lay the montage out again from the range markers of the sides"), async () => { if (await ask(t("Rebuild the montage?"), t("Gaps, crossfades and CD-Text of the montage are laid out again from the sides."), { ok: t("rebuild") })) cdMake(A, true); }));
+  btns.append(alBtn(t("Open the montage"), t("Open it in the multitrack to move, trim and fade the tracks"), () => cdOpen(A)), alBtn(t("Play the transitions"), t("The last 10 s of each track into the first 5 s of the next"), () => cdTransitions(A)), alBtn(t("Write the DDP"), t("A DDP 2.0 fileset for the pressing plant, 44.1 kHz 16-bit, as a zip with PQ list, cue sheet and MD5 checksums"), () => cdDdp(A)), alBtn(t("Rebuild from the sides"), t("Lay the montage out again from the range markers of the sides"), async () => { if (await ask(t("Rebuild the montage?"), t("Gaps, crossfades and CD-Text of the montage are laid out again from the sides."), { ok: t("rebuild") })) cdMake(A, true); }));
   box.appendChild(btns);
 }
 

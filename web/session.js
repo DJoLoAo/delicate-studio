@@ -937,6 +937,7 @@ function ssProg(m) {
   if (djProg(m)) return;
   if (ses.conv && m.id === ses.conv.id) { clearTimeout(ed.flashT); $("stMsg").textContent = t("Converting") + " · " + Math.round(m.frac * 100) + " %"; }
   if (ses.bounce && m.id === ses.bounce.id) { clearTimeout(ed.flashT); $("stMsg").textContent = t("Mixing down") + " · " + Math.round(m.frac * 100) + " %"; }
+  if (cd.ddp && m.id === cd.ddp.id) { clearTimeout(ed.flashT); $("stMsg").textContent = t("Writing the DDP") + " · " + Math.round(m.frac * 100) + " %"; }
 }
 
 async function ssBounce(thenExport) {

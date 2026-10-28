@@ -1,4 +1,4 @@
-importScripts("/edit.js", "/trcore.js", "/tags.js", "/onset.js", "/sesmath.js");
+importScripts("/edit.js", "/trcore.js", "/tags.js", "/onset.js", "/sesmath.js", "/ddp.js");
 
 const BLOCK = 65536;
 const BUCKET = 256;
@@ -1724,6 +1724,116 @@ async function sesBounce(m) {
       }
     }, job, { source: { kind: "session", from: s.id }, locs: djLocs(s.marks.filter(k => k.at >= a && k.at < b).map(k => ({ at: k.at - a, name: k.name })), b - a) });
     return { t: "bounced", meta: r.meta, peak: r.peak };
+  } finally { job.done(); }
+}
+
+async function cdDdp(m) {
+  if (!SES.s || !SES.mix) throw new Error("stale");
+  const s = SES.s, sr = s.sr, F = sesLen(s), a = clampI(m.a, 0, F), b = clampI(m.b, a, F);
+  if (b <= a || !sr) throw new Error("nothing");
+  const OUT = 44100, outN = sr === OUT ? b - a : Math.ceil((b - a) * OUT / sr), sectors = DDP_PREGAP + Math.ceil(outN / DDP_SPF);
+  const sec = f => DDP_PREGAP + Math.round((f - a) / sr * 75);
+  const tracks = (m.tracks || []).map(k => ({ at: sec(k.at), pre: null, idx: [], isrc: String(k.isrc || ""), title: String(k.title || ""), performer: String(k.performer || "") }));
+  const disc = { title: String(m.title || ""), performer: String(m.performer || "") };
+  const upc = String(m.upc || ""), base = String(m.folder || "DDP").replace(/[\\/:*?"<>|]/g, "-").slice(0, 80) || "DDP";
+  const ct = m.cdtext ? ddpCdText(disc, tracks) : null, pq = ddpPq(tracks, sectors, upc);
+  const streams = (ct ? [{ kind: "cdtext", len: ct.length, file: "CDTEXT.BIN" }] : []).concat([{ kind: "pq", len: pq.length, file: "PQDESCR" }, { kind: "da", len: sectors, pre: DDP_PREGAP, file: "IMAGE.DAT" }]);
+  const small = [["DDPID", ddpId(upc, m.mid || disc.title)], ["DDPMS", ddpMs(streams)]].concat(ct ? [["CDTEXT.BIN", ct]] : [], [["PQDESCR", pq]]);
+  const job = sesJob(m), x = await dspExports(), when = ddpZipTime(new Date());
+  await exportsReady;
+  const dir = await exportsDir(), file = m.jobId + ".zip";
+  const hd = await (await dir.getFileHandle(file, { create: true })).createSyncAccessHandle();
+  const entries = [], sums = [];
+  let off = 0, peak = 0, clipped = 0, rsOpen = false;
+  const put = (name, bytes, sum) => {
+    const crc = ddpCrc32(0, bytes), h = ddpZipLocal(base + "/" + name, crc, bytes.length, when);
+    entries.push({ name: base + "/" + name, crc, size: bytes.length, off });
+    putAt(hd, h, off); off += h.length;
+    putAt(hd, bytes, off); off += bytes.length;
+    if (sum) sums.push({ name, md5: ddpMd5(bytes), crc });
+  };
+  try {
+    hd.truncate(0);
+    for (const [n, bts] of small) put(n, bts, true);
+    const size = sectors * DDP_SPF * 4, name = base + "/IMAGE.DAT", head = off;
+    off += ddpZipLocal(name, 0, size, when).length;
+    const md = ddpMd5New(), OB = DDP_SPF * 4 * 256, ob = new Uint8Array(OB), o16 = new Int16Array(ob.buffer);
+    let crc = 0, o = 0, done = 0;
+    const flush = () => { if (!o) return; const v = ob.subarray(0, o); crc = ddpCrc32(crc, v); ddpMd5Push(md, v); putAt(hd, v, off); off += o; o = 0; };
+    const rnd = xorshift(Date.now() ^ 0x5bd1e995), dith = m.dither !== "off";
+    const q = v => {
+      const av = v < 0 ? -v : v;
+      if (av > peak) peak = av;
+      let w = Math.floor(v * 32768 + (dith ? rnd() - rnd() : 0) + 0.5);
+      if (w > 32767) { w = 32767; clipped++; } else if (w < -32768) { w = -32768; clipped++; }
+      return w;
+    };
+    const emit = (L, R, n) => {
+      for (let i = 0; i < n; i++) {
+        if (o + 4 > OB) flush();
+        o16[o >> 1] = q(L[i]); o16[(o >> 1) + 1] = q(R[i]); o += 4;
+      }
+      done += n;
+    };
+    const zeros = new Float32Array(DDP_SPF);
+    for (let i = 0; i < DDP_PREGAP; i++) { for (let k = 0; k < DDP_SPF; k++) { if (o + 4 > OB) flush(); o16[o >> 1] = 0; o16[(o >> 1) + 1] = 0; o += 4; } }
+    const mix = SES.mix, N = 65536, buf = new Float32Array(N * 2);
+    if (sr === OUT) {
+      for (let p = a; p < b; p += N) {
+        const n = Math.min(N, b - p);
+        mix(p, n, buf, N);
+        emit(buf, buf.subarray(N), n);
+        await job.tick(done / outN);
+      }
+    } else {
+      if (x.rs_open(sr, OUT, 2) !== 0) throw new Error(dspError(x));
+      rsOpen = true;
+      const need = x.rs_need(), sIn = x.rs_in_stride(), sOut = x.rs_out_stride(), tmp = new Float32Array(Math.max(need, 1) * 2);
+      let skip = x.rs_delay(), pos = a;
+      while (done < outN) {
+        const take = Math.max(0, Math.min(need, b - pos));
+        if (take) mix(pos, take, tmp, need);
+        const inV = new Float32Array(x.memory.buffer, x.rs_in(), sIn * 2);
+        for (let c = 0; c < 2; c++) {
+          if (take) inV.set(tmp.subarray(c * need, c * need + take), c * sIn);
+          inV.fill(0, c * sIn + take, c * sIn + need);
+        }
+        pos += take;
+        const k = x.rs_process(need);
+        if (k < 0) throw new Error(dspError(x));
+        const outV = new Float32Array(x.memory.buffer, x.rs_out(), sOut * 2);
+        let st = 0;
+        if (skip) { st = Math.min(skip, k); skip -= st; }
+        const n = Math.min(k - st, outN - done);
+        if (n > 0) emit(outV.subarray(st, st + n), outV.subarray(sOut + st, sOut + st + n), n);
+        await job.tick(done / outN);
+      }
+      x.rs_close();
+      rsOpen = false;
+    }
+    const tail = (sectors - DDP_PREGAP) * DDP_SPF - outN;
+    for (let i = 0; i < tail; i++) { if (o + 4 > OB) flush(); o16[o >> 1] = 0; o16[(o >> 1) + 1] = 0; o += 4; }
+    flush();
+    if (off - head - ddpZipLocal(name, 0, size, when).length !== size) throw new Error("image size");
+    putAt(hd, ddpZipLocal(name, crc, size, when), head);
+    entries.push({ name, crc, size, off: head });
+    sums.push({ name: "IMAGE.DAT", md5: ddpMd5Hex(md), crc });
+    const ck = ddpChecksums(sums);
+    put("CHECKSUM.MD5", ck.md5, false);
+    put("CHECKSUM.TXT", ck.txt, false);
+    put("IMAGE.cue", ddpCue(m.cdtext ? disc : {}, m.cdtext ? tracks : tracks.map(k => ({ at: k.at, pre: null, idx: [], isrc: k.isrc })), upc, "IMAGE.DAT"), false);
+    put("PQ.TXT", ddpPqList(disc, tracks, sectors, upc, m.head), false);
+    const end = ddpZipEnd(entries, off, when);
+    putAt(hd, end, off);
+    off += end.length;
+    hd.flush();
+    hd.close();
+    return { t: "ddp", file, size: off, sectors, peak, clipped, md5: sums[sums.length - 1].md5, tracks: tracks.map(k => k.at) };
+  } catch (e) {
+    try { hd.close(); } catch {}
+    if (rsOpen) { try { x.rs_close(); } catch {} }
+    try { await dir.removeEntry(file); } catch {}
+    throw e;
   } finally { job.done(); }
 }
 
@@ -4530,6 +4640,7 @@ async function handle(m) {
   if (m.t === "sesclose") { postMessage(Object.assign({ req: m.req }, await enqueue(async () => sesClose()))); return; }
   if (m.t === "sesdel") { postMessage(Object.assign({ req: m.req }, await sesDel(m))); return; }
   if (m.t === "sesbounce") { postMessage(Object.assign({ req: m.req }, await sesBounce(m))); return; }
+  if (m.t === "cdddp") { postMessage(Object.assign({ req: m.req }, await cdDdp(m))); return; }
   if (m.t === "sesconv") { postMessage(Object.assign({ req: m.req }, await sesConvert(m))); return; }
   if (m.t === "sescancel") { if (SES.job) SES.job.cancel = true; return; }
   if (m.t === "djprobe") { postMessage(Object.assign({ req: m.req }, await djProbe(m))); return; }

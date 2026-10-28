@@ -1596,5 +1596,17 @@
  "montage": "मोंटाज",
  "pregap": "प्रीगैप",
  "rebuild": "दोबारा बनाएँ",
- "{n} tracks in the montage, 2 s apart": "मोंटाज में {n} ट्रैक, 2 से के अंतर पर"
+ "{n} tracks in the montage, 2 s apart": "मोंटाज में {n} ट्रैक, 2 से के अंतर पर",
+ "Too much CD-Text: shorten the titles and names": "CD-Text बहुत ज़्यादा है: शीर्षक और नाम छोटे करें",
+ "Fix these before writing the DDP": "DDP लिखने से पहले इन्हें ठीक करें",
+ "The program is longer than 99:59:74 and cannot be written as a DDP.": "प्रोग्राम 99:59:74 से लंबा है और DDP के रूप में नहीं लिखा जा सकता।",
+ "Could not write the DDP": "DDP नहीं लिखा जा सका",
+ "DDP written: {n} tracks, {t}, 44.1 kHz 16-bit, with PQ list, cue sheet and MD5 checksums": "DDP लिखा गया: {n} ट्रैक, {t}, 44.1 kHz 16-बिट, PQ सूची, cue शीट और MD5 चेकसम के साथ",
+ "{n} samples went over full scale and were clipped. Turn the montage down, or use a limiter, and write it again.": "{n} सैंपल फ़ुल स्केल से ऊपर गए और क्लिप हो गए। मोंटाज धीमा करें या लिमिटर लगाएँ, और फिर से लिखें।",
+ "DDP written with clipping": "DDP क्लिपिंग के साथ लिखा गया",
+ "Write the DDP": "DDP लिखें",
+ "A DDP 2.0 fileset for the pressing plant, 44.1 kHz 16-bit, as a zip with PQ list, cue sheet and MD5 checksums": "प्रेसिंग प्लांट के लिए DDP 2.0 फ़ाइल सेट, 44.1 kHz 16-बिट, PQ सूची, cue शीट और MD5 चेकसम के साथ zip में",
+ "Writing the DDP": "DDP लिखा जा रहा है",
+ "Longer than a CD": "CD से लंबा",
+ "The program is longer than 79:57:74. Not every plant presses that much; ask yours first.": "प्रोग्राम 79:57:74 से लंबा है। हर प्लांट इतना नहीं दबाता; पहले अपने प्लांट से पूछें।"
 }

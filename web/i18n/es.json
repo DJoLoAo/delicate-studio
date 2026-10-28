@@ -1596,5 +1596,17 @@
  "montage": "montaje",
  "pregap": "pregap",
  "rebuild": "rehacer",
- "{n} tracks in the montage, 2 s apart": "{n} pistas en el montaje, a 2 s"
+ "{n} tracks in the montage, 2 s apart": "{n} pistas en el montaje, a 2 s",
+ "Too much CD-Text: shorten the titles and names": "Demasiado CD-Text: acorta los títulos y los nombres",
+ "Fix these before writing the DDP": "Corrige esto antes de escribir el DDP",
+ "The program is longer than 99:59:74 and cannot be written as a DDP.": "El programa dura más de 99:59:74 y no se puede escribir como DDP.",
+ "Could not write the DDP": "No se pudo escribir el DDP",
+ "DDP written: {n} tracks, {t}, 44.1 kHz 16-bit, with PQ list, cue sheet and MD5 checksums": "DDP escrito: {n} pistas, {t}, 44,1 kHz 16 bits, con lista PQ, cue sheet y sumas MD5",
+ "{n} samples went over full scale and were clipped. Turn the montage down, or use a limiter, and write it again.": "{n} muestras superaron la escala completa y se recortaron. Baja el montaje o usa un limitador y vuelve a escribirlo.",
+ "DDP written with clipping": "DDP escrito con recorte",
+ "Write the DDP": "Escribir el DDP",
+ "A DDP 2.0 fileset for the pressing plant, 44.1 kHz 16-bit, as a zip with PQ list, cue sheet and MD5 checksums": "Un conjunto de archivos DDP 2.0 para la planta de prensado, 44,1 kHz 16 bits, en zip con lista PQ, cue sheet y sumas MD5",
+ "Writing the DDP": "Escribiendo el DDP",
+ "Longer than a CD": "Más largo que un CD",
+ "The program is longer than 79:57:74. Not every plant presses that much; ask yours first.": "El programa dura más de 79:57:74. No todas las plantas prensan tanto; pregunta antes a la tuya."
 }
