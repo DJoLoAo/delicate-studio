@@ -1550,5 +1550,12 @@
  "Source in": "Entrée source",
  "Source out": "Sortie source",
  "Source window": "Fenêtre source",
- "There are no files in Studio yet.": "Il n'y a pas encore de fichiers dans Studio."
+ "There are no files in Studio yet.": "Il n'y a pas encore de fichiers dans Studio.",
+ "Replace the selected range of the session with the source range; what follows closes up or opens out on all tracks": "Remplacer la plage choisie de la session par la plage source ; la suite se resserre ou s'écarte sur toutes les pistes",
+ "Replace the selection from the source": "Remplacer la sélection depuis la source",
+ "Select the range to replace in the session first.": "Sélectionnez d'abord la plage à remplacer dans la session.",
+ "same length": "même durée",
+ "{d} longer": "{d} plus long",
+ "{d} shorter": "{d} plus court",
+ "Replaced {a} with {b} of the source on {n}; what follows moved along": "{a} remplacé par {b} de la source sur {n} ; la suite s'est décalée"
 }

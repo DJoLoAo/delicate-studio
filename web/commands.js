@@ -150,6 +150,7 @@ const CMDS = [
   { id: "srcOut", g: "Edit", label: "Source out", run: () => sdMark("out"), ss: () => sdMark("out"), sesOnly: true, ssWhen: () => sd.open && !!sdM(), kw: "source out point mark" },
   { id: "srcOver", g: "Edit", label: "Overwrite from the source", run: () => sdOverwrite(), ss: () => sdOverwrite(), sesOnly: true, ssWhen: () => sd.open && !!sdM(), kw: "source destination overwrite three point edit" },
   { id: "srcIns", g: "Edit", label: "Insert from the source", run: () => sdInsert(), ss: () => sdInsert(), sesOnly: true, ssWhen: () => sd.open && !!sdM(), kw: "source destination insert ripple three point edit" },
+  { id: "srcRep", g: "Edit", label: "Replace the selection from the source", run: () => sdReplace(), ss: () => sdReplace(), sesOnly: true, ssWhen: () => sd.open && !!sdM() && ses.sel.b > ses.sel.a, kw: "source destination replace four point 4 point edit ripple" },
   { id: "sesNewTrack", g: "Edit", label: "New track", run: () => pcNewTrack(), ss: () => pcNewTrack(), sesOnly: true, kw: "multitrack add empty track record audio" },
   { id: "punchCfg", g: "Transport", label: "Recording in sessions…", run: () => pcSettings(), ss: () => pcSettings(), sesOnly: true, kw: "punch in out pre roll post roll latency offset takes monitor input" },
   { id: "export", g: "File", label: "Export…", run: () => openExport(), doc: true, kw: "render bounce save wav flac master dither", ss: () => ssBounce(true), ssWhen: () => ssLen() > 0 },

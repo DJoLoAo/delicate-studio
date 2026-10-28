@@ -1550,5 +1550,12 @@
  "Source in": "In sorgente",
  "Source out": "Out sorgente",
  "Source window": "Finestra sorgente",
- "There are no files in Studio yet.": "Non ci sono ancora file in Studio."
+ "There are no files in Studio yet.": "Non ci sono ancora file in Studio.",
+ "Replace the selected range of the session with the source range; what follows closes up or opens out on all tracks": "Sostituisci il tratto scelto della sessione con il tratto sorgente; ciò che segue si avvicina o si allontana su tutte le tracce",
+ "Replace the selection from the source": "Sostituisci la selezione dalla sorgente",
+ "Select the range to replace in the session first.": "Seleziona prima il tratto da sostituire nella sessione.",
+ "same length": "stessa durata",
+ "{d} longer": "{d} più lungo",
+ "{d} shorter": "{d} più corto",
+ "Replaced {a} with {b} of the source on {n}; what follows moved along": "{a} sostituito con {b} della sorgente su {n}; ciò che segue si è spostato"
 }

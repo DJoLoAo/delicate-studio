@@ -1550,5 +1550,12 @@
  "Source in": "Entrada da origem",
  "Source out": "Saída da origem",
  "Source window": "Janela de origem",
- "There are no files in Studio yet.": "Ainda não há ficheiros no Studio."
+ "There are no files in Studio yet.": "Ainda não há ficheiros no Studio.",
+ "Replace the selected range of the session with the source range; what follows closes up or opens out on all tracks": "Substituir o intervalo escolhido da sessão pelo intervalo de origem; o que vem depois aproxima-se ou afasta-se em todas as faixas",
+ "Replace the selection from the source": "Substituir a seleção a partir da origem",
+ "Select the range to replace in the session first.": "Selecione primeiro o intervalo a substituir na sessão.",
+ "same length": "mesma duração",
+ "{d} longer": "{d} mais longo",
+ "{d} shorter": "{d} mais curto",
+ "Replaced {a} with {b} of the source on {n}; what follows moved along": "{a} substituído por {b} da origem em {n}; o que vem depois deslocou-se"
 }

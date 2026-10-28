@@ -1550,5 +1550,12 @@
  "Source in": "स्रोत इन",
  "Source out": "स्रोत आउट",
  "Source window": "स्रोत विंडो",
- "There are no files in Studio yet.": "Studio में अभी कोई फ़ाइल नहीं है।"
+ "There are no files in Studio yet.": "Studio में अभी कोई फ़ाइल नहीं है।",
+ "Replace the selected range of the session with the source range; what follows closes up or opens out on all tracks": "सेशन की चुनी रेंज को स्रोत रेंज से बदलें; आगे का सब कुछ सभी ट्रैक पर पास या दूर खिसकता है",
+ "Replace the selection from the source": "चयन को स्रोत से बदलें",
+ "Select the range to replace in the session first.": "पहले सेशन में बदलने वाली रेंज चुनें।",
+ "same length": "बराबर लंबाई",
+ "{d} longer": "{d} लंबा",
+ "{d} shorter": "{d} छोटा",
+ "Replaced {a} with {b} of the source on {n}; what follows moved along": "{n} पर {a} को स्रोत के {b} से बदला; आगे का सब खिसका"
 }

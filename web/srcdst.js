@@ -217,6 +217,46 @@ function sdInsert() {
   flash(t("Inserted {d} on {n}; what follows moved along on all tracks").replace("{d}", fmtDur(n / sr)).replace("{n}", tr.name));
 }
 
+function sdCut(a, b, X) {
+  const n = b - a;
+  for (const tr of ses.s.tracks) {
+    const out = [];
+    for (const k of tr.clips) {
+      const e = k.at + k.len;
+      if (e <= a) { out.push(k); continue; }
+      if (k.at >= b) { out.push(Object.assign({}, k, { at: k.at - n })); continue; }
+      if (k.at < a) { const ll = a - k.at; out.push(Object.assign({}, k, { len: ll, fin: Math.min(k.fin, ll), fout: Math.min(X, ll) })); }
+      if (e > b) { const rl = e - b; out.push(Object.assign({}, k, { id: ssNewId(), at: a, from: k.from + (b - k.at), len: rl, fin: Math.min(X, rl), fout: Math.min(k.fout, rl) })); }
+    }
+    tr.clips = out.sort((p, q) => p.at - q.at);
+    const au = ssAuto(tr);
+    for (const kind of ["vol", "pan"]) {
+      const pts = au[kind];
+      if (!pts.length) continue;
+      const v = smAt(pts, b);
+      au[kind] = pts.filter(q => q[0] < a).concat([[a, v]]).concat(pts.filter(q => q[0] >= b).map(q => [q[0] - n, q[1]])).sort((p, q) => p[0] - q[0]).filter((q, i, A) => i === 0 || q[0] !== A[i - 1][0]);
+    }
+    for (const q of tr.takes || []) if (q.at >= b) q.at -= n;
+  }
+  for (const m of ses.s.marks || []) { if (m.at >= b) m.at -= n; else if (m.at > a) m.at = a; }
+}
+
+function sdReplace() {
+  const M = sdM(), n = sd.b - sd.a;
+  if (!M || n < 2) { flash(t("Set In and Out in the source first.")); return; }
+  if (!(ses.sel.b > ses.sel.a)) { flash(t("Select the range to replace in the session first.")); return; }
+  const tr = sdTarget(), a = Math.round(ses.sel.a), b = Math.round(ses.sel.b), d = b - a, sr = ssRate(), X = Math.max(2, Math.round(sr * PC_XF));
+  if (n > d) sdRipple(b, n - d, X);
+  else if (n < d) sdCut(a + n, b, X);
+  if (!pcPlace(tr, { doc: sd.doc, at: a - sd.a, from: 0, len: sd.len, name: M.meta.name }, a, a + n, true)) return;
+  ses.track = tr.id;
+  ses.cursor = a + n;
+  ses.sel = { a: 0, b: 0 };
+  ssCommit();
+  const diff = n - d, how = diff === 0 ? t("same length") : (diff > 0 ? t("{d} longer") : t("{d} shorter")).replace("{d}", fmtDur(Math.abs(diff) / sr));
+  flash(t("Replaced {a} with {b} of the source on {n}; what follows moved along").replace("{a}", fmtDur(d / sr)).replace("{b}", fmtDur(n / sr)).replace("{n}", tr.name) + " · " + how);
+}
+
 function wireSrc() {
   const cv = $("srcCv");
   cv.addEventListener("pointerdown", e => {
@@ -250,6 +290,7 @@ function wireSrc() {
   $("srcOut").addEventListener("click", e => { e.currentTarget.blur(); sdMark("out"); });
   $("srcOver").addEventListener("click", e => { e.currentTarget.blur(); sdOverwrite(); });
   $("srcIns").addEventListener("click", e => { e.currentTarget.blur(); sdInsert(); });
+  $("srcRep").addEventListener("click", e => { e.currentTarget.blur(); sdReplace(); });
   $("srcX").addEventListener("click", () => sdToggle());
   window.addEventListener("resize", () => { if (sd.open) sdDraw(); });
 }

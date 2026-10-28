@@ -240,6 +240,7 @@ function ssButtons() {
   set("sesDel", !!k);
   set("sesBounce", ssLen() > 0);
   set("sesExport", ssLen() > 0);
+  set("srcRep", sd.open && !!sdM() && ses.sel.b > ses.sel.a);
   $("sesPlay").classList.toggle("on", ses.play.on);
   $("sesRec").classList.toggle("on", !!pc.rec);
   $("sesRec").classList.toggle("armed", !!pc.arm);

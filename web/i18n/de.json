@@ -1550,5 +1550,12 @@
  "Source in": "Quell-In",
  "Source out": "Quell-Out",
  "Source window": "Quellfenster",
- "There are no files in Studio yet.": "Es gibt noch keine Dateien in Studio."
+ "There are no files in Studio yet.": "Es gibt noch keine Dateien in Studio.",
+ "Replace the selected range of the session with the source range; what follows closes up or opens out on all tracks": "Den gewählten Bereich der Session durch den Quellbereich ersetzen; was folgt, rückt auf allen Spuren zusammen oder auseinander",
+ "Replace the selection from the source": "Auswahl aus der Quelle ersetzen",
+ "Select the range to replace in the session first.": "Wähle zuerst den zu ersetzenden Bereich in der Session.",
+ "same length": "gleich lang",
+ "{d} longer": "{d} länger",
+ "{d} shorter": "{d} kürzer",
+ "Replaced {a} with {b} of the source on {n}; what follows moved along": "{a} auf {n} durch {b} der Quelle ersetzt; was folgt, ist nachgerückt"
 }
