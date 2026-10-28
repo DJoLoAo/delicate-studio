@@ -1131,7 +1131,8 @@ function albumClean(v) {
     for (const d of Array.isArray(a.sides) ? a.sides : []) { const id = s(d, 80); if (id && !sides.includes(id) && sides.length < 26) sides.push(id); }
     let rel = a.release && typeof a.release === "object" ? a.release : null;
     if (rel && JSON.stringify(rel).length > 200000) rel = null;
-    out.push({ id: s(a.id, 60) || crypto.randomUUID(), title: s(a.title, 200), release: rel, sides, created: Number(a.created) || Date.now(), updated: Date.now() });
+    const cd = a.cd && typeof a.cd === "object" ? { upc: s(a.cd.upc, 20).replace(/\D/g, ""), title: s(a.cd.title, 160), performer: s(a.cd.performer, 160) } : { upc: "", title: "", performer: "" };
+    out.push({ id: s(a.id, 60) || crypto.randomUUID(), title: s(a.title, 200), release: rel, sides, created: Number(a.created) || Date.now(), updated: Date.now(), montage: s(a.montage, 60), cd });
   }
   return out;
 }
@@ -1251,7 +1252,8 @@ function sesClean(v) {
     for (const k of Array.isArray(tr.clips) ? tr.clips.slice(0, 2000) : []) {
       if (!k || typeof k !== "object" || !k.doc) continue;
       const len = int(k.len, 1, 2 ** 40), fin = int(k.fin, 0, len);
-      clips.push({ id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), doc: str(k.doc, 80), at: int(k.at, 0, 2 ** 40), from: int(k.from, 0, 2 ** 40), len, gain: num(k.gain, -96, 24, 0), fin, fout: int(k.fout, 0, len - fin), name: str(k.name, 160) });
+      const cd = k.cd && typeof k.cd === "object" ? { title: str(k.cd.title, 160), performer: str(k.cd.performer, 160), isrc: str(k.cd.isrc, 15).toUpperCase().replace(/[^A-Z0-9]/g, "") } : null;
+      clips.push({ id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), doc: str(k.doc, 80), at: int(k.at, 0, 2 ** 40), from: int(k.from, 0, 2 ** 40), len, gain: num(k.gain, -96, 24, 0), fin, fout: int(k.fout, 0, len - fin), name: str(k.name, 160), cd });
     }
     clips.sort((a, b) => a.at - b.at);
     const env = (L, lo, hi) => {
@@ -4515,10 +4517,11 @@ async function handle(m) {
   if (m.t === "fxapply") { postMessage(Object.assign({ req: m.req }, await fxApply(m))); return; }
   if (m.t === "proc") { postMessage(Object.assign({ req: m.req }, await pxApply(m))); return; }
   if (m.t === "seslist") { postMessage(Object.assign({ req: m.req }, await sesList())); return; }
+  if (m.t === "sesget") { try { postMessage({ req: m.req, t: "sesget", s: await enqueue(() => sesRead(m.id)) }); } catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); } return; }
   if (m.t === "sesnew") { postMessage(Object.assign({ req: m.req }, await sesNew(m))); return; }
   if (m.t === "sesopen") { postMessage(Object.assign({ req: m.req }, await enqueue(() => sesOpen(m)))); return; }
   if (m.t === "sesdoc") { postMessage(Object.assign({ req: m.req }, await enqueue(async () => ({ t: "sesdoc", doc: await sesPayload(String(m.id)) })))); return; }
-  if (m.t === "sesput") { postMessage(Object.assign({ req: m.req }, await sesPut(m))); return; }
+  if (m.t === "sesput") { postMessage(Object.assign({ req: m.req }, await enqueue(() => sesPut(m)))); return; }
   if (m.t === "sesmix") { sesSetMix(m); return; }
   if (m.t === "sesplay") { sesStartPlay(m); return; }
   if (m.t === "sclaunch") { scLaunch(m); return; }

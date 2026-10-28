@@ -238,6 +238,7 @@ function alRender() {
   const s = alRenderTracks(A);
   $("albSum").textContent = [A.sides.length === 1 ? t("1 side") : t("{n} sides").replace("{n}", A.sides.length), s.n === 1 ? t("1 track") : t("{n} tracks").replace("{n}", s.n), s.n ? fmtDur(s.total) : "", s.missing ? t("{n} not found").replace("{n}", s.missing) : ""].filter(Boolean).join(" · ");
   $("albExport").disabled = !s.n;
+  alRenderCd(A);
 }
 
 async function alChanged() {
