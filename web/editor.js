@@ -913,7 +913,9 @@ async function libSearch() {
   for (const it of items) {
     const title = it.title || it.id;
     const info = [it.artist, it.album, it.duration ? fmtDur(it.duration) : "", it.sampleRate ? (it.sampleRate / 1000) + " kHz" : ""].filter(Boolean).join(" · ");
-    box.appendChild(rowEl(title, info, () => importRemote({ kind: "library", id: String(it.id), title: it.title || "", artist: it.artist || "", album: it.album || "" })));
+    const row = rowEl(title, info, () => importRemote({ kind: "library", id: String(it.id), title: it.title || "", artist: it.artist || "", album: it.album || "" }));
+    row.appendChild(stmButton({ kind: "library", id: String(it.id), title: it.title || "", artist: it.artist || "", album: it.album || "", path: "" }));
+    box.appendChild(row);
   }
 }
 
@@ -941,7 +943,10 @@ function renderLocker() {
   for (const f of hits.slice(0, 300)) {
     const ext = (f.path || "").split(".").pop().toLowerCase();
     const info = [f.artist, f.album, f.duration ? fmtDur(f.duration) : "", f.size ? fmtBytes(f.size) : "", f.folder].filter(Boolean).join(" · ");
-    box.appendChild(rowEl(f.title || f.path, info, () => /^midi?$/i.test(ext || "") ? prImportRemote(f) : importRemote({ kind: "locker", id: String(f.id), title: f.title || "", artist: f.artist || "", album: f.album || "", path: f.path || "" }, ext), ext ? ext.toUpperCase() : ""));
+    const mid = /^midi?$/i.test(ext || ""), src = { kind: "locker", id: String(f.id), title: f.title || "", artist: f.artist || "", album: f.album || "", path: f.path || "" };
+    const row = rowEl(f.title || f.path, info, () => mid ? prImportRemote(f) : importRemote(src, ext), ext ? ext.toUpperCase() : "");
+    if (!mid) row.appendChild(stmButton(src));
+    box.appendChild(row);
   }
   $("lkInfo").textContent = hits.length > 300 ? t("Showing 300 of") + " " + hits.length + " — " + t("refine the filter") : files.length + " " + t("files in your Locker");
 }
