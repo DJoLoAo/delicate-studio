@@ -680,7 +680,8 @@ async function applyEdit(m) {
     case "markadd":
     case "markset":
     case "markdel":
-    case "marktracks": {
+    case "marktracks":
+    case "markpoints": {
       const r = markOp(m, before);
       pushHist(r.info, c.lists, before, before, r.marks);
       persist();
@@ -728,6 +729,19 @@ function markOp(m, before) {
     }
     if (!add.length) throw new Error("nosel");
     return { id: add[0].id, marks: keep.concat(add).sort((x, y) => x.n - y.n), info: { op: "marktracks", a: add[0].a, b: add[add.length - 1].b, n: add.length, ch: null, mk: { n: add.length, name: "", kind: "range", removed: marks.length - keep.length } } };
+  }
+  if (m.op === "markpoints") {
+    const taken = new Set(marks.map(x => x.n)), add = [];
+    let id = 1, n = 1;
+    for (const h of c.hist) for (const x of h.marks) if (x.id >= id) id = x.id + 1;
+    for (const p of Array.isArray(m.points) ? m.points.slice(0, 999) : []) {
+      while (taken.has(n)) n++;
+      if (n > 999) break;
+      add.push(shape({ id: id++, n, kind: "point", a: clampI(p && p.a, 0, F), name: "", view: null, chans: null }, { name: String(p && p.name || "").slice(0, 120) }));
+      taken.add(n);
+    }
+    if (!add.length) throw new Error("nosel");
+    return { id: add[0].id, marks: marks.concat(add).sort((x, y) => x.n - y.n), info: { op: "markpoints", a: add[0].a, b: add[add.length - 1].a, n: add.length, ch: null, mk: { n: add.length, name: "", kind: "point" } } };
   }
   if (m.op === "markadd") {
     let id = 1;
@@ -917,6 +931,18 @@ function tgFileInfo(fm, scan, source, sr, F) {
   }
   list = list.filter(m => Number.isFinite(m.a) && m.a >= 0 && m.a <= F).map(m => Object.assign({}, m, { b: m.b > m.a ? Math.min(F, m.b) : 0 })).filter(m => !(m.b && m.b <= m.a));
   return { tags, locs: tgMarks(list), cover: fm && fm.pic ? fm.pic : null };
+}
+
+async function txGet(m) {
+  try { return { t: "tx", tx: await readJson(await (await docsDir()).getDirectoryHandle(String(m.id)), "transcript.json") }; } catch { return { t: "tx", tx: null }; }
+}
+
+async function txPut(m) {
+  const dir = await (await docsDir()).getDirectoryHandle(String(m.id));
+  if (!m.tx) { try { await dir.removeEntry("transcript.json"); } catch {} return { t: "txok" }; }
+  const v = m.tx, segs = (Array.isArray(v.segs) ? v.segs : []).slice(0, 20000).map(s => ({ a: Math.max(0, Math.floor(Number(s.a) || 0)), b: Math.max(0, Math.floor(Number(s.b) || 0)), text: String(s.text || "").slice(0, 2000), words: (Array.isArray(s.words) ? s.words : []).slice(0, 400).map(w => ({ w: String(w.w || "").slice(0, 80), a: Math.max(0, Math.floor(Number(w.a) || 0)), b: Math.max(0, Math.floor(Number(w.b) || 0)), p: Number(w.p) || 0 })) }));
+  await writeFile(dir, "transcript.json", enc({ v: 1, lang: String(v.lang || "").slice(0, 12), made: Number(v.made) || Date.now(), hist: Number(v.hist) || 0, sr: Number(v.sr) || 48000, segs }));
+  return { t: "txok" };
 }
 
 async function tagsGet(m) {
@@ -4764,6 +4790,8 @@ async function handle(m) {
   if (m.t === "albums") { postMessage(Object.assign({ req: m.req }, await albumsGet())); return; }
   if (m.t === "albumsput") { postMessage(Object.assign({ req: m.req }, await enqueue(() => albumsPut(m)))); return; }
   if (m.t === "tagsget") { postMessage(Object.assign({ req: m.req }, await tagsGet(m))); return; }
+  if (m.t === "txget") { postMessage(Object.assign({ req: m.req }, await enqueue(() => txGet(m)))); return; }
+  if (m.t === "txput") { postMessage(Object.assign({ req: m.req }, await enqueue(() => txPut(m)))); return; }
   if (m.t === "tagsset") { postMessage(Object.assign({ req: m.req }, await enqueue(() => tagsSet(m)))); return; }
   if (m.t === "pxnew") { postMessage(Object.assign({ req: m.req }, await pxNewDoc(m))); return; }
   if (m.t === "pxcancel") { if (PX.job) PX.job.cancel = true; return; }

@@ -1,0 +1,18 @@
+[Unit]
+Description=Whisper speech recognition for Delicate Studio
+After=network.target
+
+[Service]
+ExecStart=/opt/whisper.cpp/build/bin/whisper-server -m /opt/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin --host 127.0.0.1 --port 4546 -t 8 -l auto
+WorkingDirectory=/opt/whisper.cpp
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+Nice=10
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

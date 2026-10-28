@@ -202,6 +202,16 @@ button,a{touch-action:manipulation}
 .cdlrow .dd{min-width:calc(150px*var(--fs))}
 .cdlsum{font-size:calc(11px*var(--fs));color:var(--gray)}
 .vnside{display:flex;flex-direction:column;gap:calc(4px*var(--fs))}
+.txlist{display:flex;flex-direction:column;gap:calc(2px*var(--fs));max-height:calc(360px*var(--fs));overflow-y:auto;border:1px solid var(--border);padding:calc(4px*var(--fs))}
+.txseg{display:flex;gap:calc(8px*var(--fs));align-items:baseline;padding:calc(2px*var(--fs)) calc(4px*var(--fs));font-size:calc(12px*var(--fs));line-height:1.5;color:var(--gray)}
+.txseg.now{background:color-mix(in srgb,var(--gold) 10%,transparent);color:var(--white)}
+.txt{flex:none;background:none;border:none;color:var(--gold);font-family:var(--mono);font-size:calc(10px*var(--fs));cursor:pointer;padding:0;min-width:calc(42px*var(--fs));text-align:right}
+.txp{flex:1;min-width:0}
+.txw{cursor:pointer;white-space:pre-wrap}
+.txw:hover{color:var(--white)}
+.txw.low{text-decoration:underline dotted var(--dim)}
+.txw.hit{background:color-mix(in srgb,var(--pink) 35%,transparent)}
+.txw.on{color:var(--gold)}
 .vnh{font-size:calc(11px*var(--fs));color:var(--white)}
 .vnspots{display:inline-flex;flex-wrap:wrap;gap:calc(4px*var(--fs));margin-left:calc(6px*var(--fs))}
 .vnt{background:none;border:1px solid var(--border);color:var(--gold);font-family:var(--mono);font-size:calc(10px*var(--fs));padding:0 calc(5px*var(--fs));cursor:pointer}
@@ -514,7 +524,8 @@ canvas.ru{height:calc(34px*var(--fs))}
 .dgfoot{margin-top:auto}
 #dgBtn{height:calc(26px*var(--fs))}
 #diag .rptabs{margin-left:calc(10px*var(--fs))}
-#diag .rptabs{min-width:0;overflow-x:auto;scrollbar-width:none}
+#diag .rptabs{min-width:0;flex:1;flex-wrap:wrap;row-gap:calc(3px*var(--fs));overflow:visible}
+#diag .rptabs+.grow{display:none}
 #diag .rptabs .segbtn{padding:calc(3px*var(--fs)) calc(7px*var(--fs));white-space:nowrap;flex:none}
 .dgbody.hidden{display:none}
 .nrbody{overflow-y:auto;overflow-x:hidden;padding-right:2px}

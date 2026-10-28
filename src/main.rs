@@ -13,11 +13,13 @@ use tower_http::{
     set_header::SetResponseHeaderLayer,
 };
 
+mod transcribe;
 mod watch;
 
 const BIND: &str = "127.0.0.1:4541";
 const WEB_DIR: &str = "/opt/delicate-studio/web";
 const DJ_API: &str = "http://127.0.0.1:4540";
+const WHISPER: &str = "http://127.0.0.1:4546/inference";
 
 #[derive(Clone)]
 struct AppState {
@@ -25,6 +27,9 @@ struct AppState {
     dj: String,
     web: PathBuf,
     watch: watch::Shared,
+    slow: reqwest::Client,
+    whisper: String,
+    tq: transcribe::Shared,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -93,13 +98,21 @@ async fn main() {
         .unwrap();
     let watch = watch::open(dj.clone());
     tokio::spawn(watch::run(watch.clone()));
-    let state = AppState { http, dj, web: web.clone(), watch };
+    let slow = reqwest::Client::builder()
+        .no_proxy()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(1800))
+        .build()
+        .unwrap();
+    let whisper = std::env::var("STUDIO_WHISPER").unwrap_or_else(|_| WHISPER.to_string());
+    let state = AppState { http, dj, web: web.clone(), watch, slow, whisper, tq: transcribe::open() };
     let api = Router::new()
         .route("/me", get(me))
         .route("/version", get(version))
         .route("/watch", get(watch::get_all).post(watch::create))
         .route("/watch/{id}", axum::routing::patch(watch::patch).delete(watch::remove))
         .route("/watch/{id}/run", post(watch::run_now))
+        .route("/transcribe", post(transcribe::run).layer(axum::extract::DefaultBodyLimit::max(transcribe::MAX_BODY)))
         .fallback(|| async { StatusCode::NOT_FOUND })
         .with_state(state);
     let app = Router::new()

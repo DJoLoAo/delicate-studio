@@ -145,7 +145,7 @@
       <canvas id="ru" class="ru" title="Click to place the cursor"></canvas>
       <div class="wvwrap"><canvas id="wv"></canvas><div id="spSplit" title="Drag to share the space between waveform and spectrogram; double-click to show only the spectrogram"></div><canvas id="sp"></canvas><div id="spTools" class="sptools"><button class="tbtn sm" id="spToolTime" data-tool="time" title="Time selection tool" aria-label="Time selection tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M9 4h6M9 20h6M12 4v16"/></svg></button><button class="tbtn sm" id="spToolRect" data-tool="rect" title="Marquee selection tool" aria-label="Marquee selection tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.5 2"><rect x="4" y="6" width="16" height="12"/></svg></button><button class="tbtn sm" id="spToolLasso" data-tool="lasso" title="Lasso selection tool" aria-label="Lasso selection tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="13" cy="9.5" rx="7.5" ry="5"/><path d="M8.5 13.5c-.8 1.6-.6 3.2.6 4.2s1 2.6-.6 3.3"/></svg></button><button class="tbtn sm" id="spToolBrush" data-tool="brush" title="Spot Healing Brush" aria-label="Spot Healing Brush"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="2.5" y="8" width="19" height="8" rx="4" transform="rotate(-45 12 12)"/><rect x="9.5" y="9.5" width="5" height="5" transform="rotate(-45 12 12)"/></svg></button><span class="spbrush"><label for="spBrush">Size</label><input type="range" id="spBrush" min="4" max="120" step="1"><span id="spBrushV"></span></span></div>
         <div id="diag" class="hidden" role="dialog" aria-label="Diagnostics">
-          <div class="hhead"><b class="fxtitle" id="fxTitle"></b><div class="seg rptabs" id="rpTabs"><button class="segbtn" data-v="diag">Diagnostics</button><button class="segbtn" data-v="nr">Noise Reduction</button><button class="segbtn" data-v="hum">DeHummer</button><button class="segbtn" data-v="ld">Loudness</button><button class="segbtn" data-v="fx">Effects</button><button class="segbtn" data-v="md">MIDI</button><button class="segbtn" data-v="tr">Tracks</button></div><span class="grow"></span><button class="x" id="dgX" title="Close" aria-label="Close">×</button></div>
+          <div class="hhead"><b class="fxtitle" id="fxTitle"></b><div class="seg rptabs" id="rpTabs"><button class="segbtn" data-v="diag">Diagnostics</button><button class="segbtn" data-v="nr">Noise Reduction</button><button class="segbtn" data-v="hum">DeHummer</button><button class="segbtn" data-v="ld">Loudness</button><button class="segbtn" data-v="fx">Effects</button><button class="segbtn" data-v="md">MIDI</button><button class="segbtn" data-v="tr">Tracks</button><button class="segbtn" data-v="tx">Transcript</button></div><span class="grow"></span><button class="x" id="dgX" title="Close" aria-label="Close">×</button></div>
           <div class="dgbody" id="dgBody">
             <div class="row"><label>Effect</label><div class="dd down" id="dgFx"></div></div>
             <div class="row dgclick"><label for="dgSens">Sensitivity</label><input type="range" id="dgSens" min="0" max="100" step="1"><span class="snote" id="dgSensV"></span></div>
@@ -277,6 +277,16 @@
             <div class="row"><label>Save</label><button class="outbtn" id="mdDl">Download .mid</button><button class="outbtn" id="mdLock">Save to Locker</button><button class="outbtn" id="mdEdit" title="Edit the notes in the piano roll with the recording playing along">edit in the piano roll</button></div>
             <div class="row"><label>Folder</label><input class="xtext" id="mdFolder" placeholder="Folder in the Locker" autocomplete="off" spellcheck="false"></div>
             <div class="row dgfoot"><button class="primary" id="mdConvert">Convert</button><div class="bbar hidden" id="mdBar"><i></i></div><button class="outbtn hidden" id="mdCancel">cancel</button><span class="grow"></span><button class="outbtn" id="mdClear">clear notes</button><button class="outbtn" id="mdDefaults">defaults</button></div>
+          </div>
+          <div class="dgbody nrbody hidden" id="txBody">
+            <div class="row"><label>Range</label><span class="snote" id="txRangeT"></span></div>
+            <div class="row"><label>Language</label><div class="dd down" id="txLang"><div class="cur"></div><div class="list"></div></div></div>
+            <div class="row"><label for="txPrompt">Spelling</label><input class="xtext" id="txPrompt" placeholder="Names and words as they should be written" autocomplete="off" spellcheck="false"></div>
+            <div class="row dgfoot"><button class="primary" id="txGo">Transcribe</button><div class="bbar hidden" id="txBar"><i></i></div><button class="outbtn hidden" id="txCancel">cancel</button></div>
+            <div class="snote" id="txNote"></div>
+            <div class="row"><input class="xtext" id="txQ" placeholder="Search the transcript" autocomplete="off" spellcheck="false"></div>
+            <div class="txlist" id="txList"></div>
+            <div class="row dgfoot"><button class="outbtn" id="txSrt">SRT</button><button class="outbtn" id="txVtt">VTT</button><button class="outbtn" id="txTxt">TXT</button><button class="outbtn" id="txMarks" title="One point marker per line">markers</button><span class="grow"></span><button class="outbtn" id="txClear">remove</button></div>
           </div>
           <div class="dgbody nrbody hidden" id="trBody">
             <div class="row"><label>Range</label><span class="snote" id="trRangeT"></span><span class="grow"></span><button class="outbtn" id="trFind">Find tracks</button></div>
@@ -552,6 +562,7 @@
 <script src="/djlink.js"></script>
 <script src="/stems.js"></script>
 <script src="/md.js"></script>
+<script src="/transcript.js"></script>
 <script src="/trcore.js"></script>
 <script src="/tr.js"></script>
 <script src="/px.js"></script>

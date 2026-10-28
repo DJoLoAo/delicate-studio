@@ -1280,6 +1280,7 @@ async function insertSilenceDlg() {
 function histLabel(h) {
   if (isMarkOp(h)) {
     const k = h.mk || {}, nm = k.name ? " · " + k.name : "";
+    if (h.op === "markpoints") return (h.n === 1 ? t("1 marker from the transcript") : t("{n} markers from the transcript").replace("{n}", h.n)) + " · " + fmtTime(h.a) + "–" + fmtTime(h.b);
     if (h.op === "marktracks") return (h.n === 1 ? t("Split into 1 track") : t("Split into {n} tracks").replace("{n}", h.n)) + " · " + fmtTime(h.a) + "–" + fmtTime(h.b);
     if (h.op === "markadd") return t(k.kind === "range" ? "Add range" : k.kind === "view" ? "Add view" : "Add marker") + " " + k.n + nm;
     if (h.op === "markdel") return t("Delete location") + " " + k.n + nm;
@@ -1828,6 +1829,7 @@ function wireUi() {
   wirePianoRoll();
   wireLoud();
   wireMidi();
+  txInit();
   wireTracks();
   wirePx();
   wirePen();
