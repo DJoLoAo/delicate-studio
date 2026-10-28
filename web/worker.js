@@ -1135,7 +1135,8 @@ function albumClean(v) {
     const loud = { mode: lo.mode === "track" ? "track" : "album", target: fnum(lo.target, -40, 0, -14), ceil: fnum(lo.ceil, -12, 0, -1) };
     const cd = a.cd && typeof a.cd === "object" ? { upc: s(a.cd.upc, 20).replace(/\D/g, ""), title: s(a.cd.title, 160), performer: s(a.cd.performer, 160), loud } : { upc: "", title: "", performer: "", loud };
     const mix = a.mix && typeof a.mix === "object" && s(a.mix.doc, 80) ? { doc: s(a.mix.doc, 80), sig: s(a.mix.sig, 40) } : null;
-    out.push({ id: s(a.id, 60) || crypto.randomUUID(), title: s(a.title, 200), release: rel, sides, created: Number(a.created) || Date.now(), updated: Date.now(), montage: s(a.montage, 60), cd, mix });
+    const vinyl = { fmt: ["12-33", "12-45", "10-33", "10-45", "7-45", "7-33"].includes(a.vinyl && a.vinyl.fmt) ? a.vinyl.fmt : "12-33" };
+    out.push({ id: s(a.id, 60) || crypto.randomUUID(), title: s(a.title, 200), release: rel, sides, created: Number(a.created) || Date.now(), updated: Date.now(), montage: s(a.montage, 60), cd, mix, vinyl });
   }
   return out;
 }
@@ -1866,6 +1867,87 @@ async function cdLoud(m) {
   } finally { job.done(); }
   const album = out.pop();
   return { t: "cdloud", tracks: out, album };
+}
+
+function vnBq(kind, f, sr) {
+  const w = 2 * Math.PI * f / sr, c = Math.cos(w), al = Math.sin(w) / Math.SQRT2, a0 = 1 + al;
+  const b = kind === "lp" ? [(1 - c) / 2, 1 - c, (1 - c) / 2] : [(1 + c) / 2, -(1 + c), (1 + c) / 2];
+  return { b0: b[0] / a0, b1: b[1] / a0, b2: b[2] / a0, a1: -2 * c / a0, a2: (1 - al) / a0, x1: 0, x2: 0, y1: 0, y2: 0 };
+}
+
+function vnRun(q, x) {
+  const y = q.b0 * x + q.b1 * q.x1 + q.b2 * q.x2 - q.a1 * q.y1 - q.a2 * q.y2;
+  q.x2 = q.x1; q.x1 = x; q.y2 = q.y1; q.y1 = y;
+  return y;
+}
+
+function vnRegions(list, gap, max) {
+  const out = [];
+  for (const w of list) {
+    const r = out[out.length - 1];
+    if (r && w.at - r.b <= gap) { r.b = w.b; if (w.v < r.v === r.low) r.v = w.v; continue; }
+    out.push({ a: w.at, b: w.b, v: w.v, low: w.low });
+  }
+  return out.sort((x, y) => (x.low ? x.v - y.v : y.v - x.v)).slice(0, max).sort((x, y) => x.a - y.a).map(r => ({ a: r.a, b: r.b, v: Math.round(r.v * 100) / 100 }));
+}
+
+async function vnCheck(m) {
+  const id = String(m.id), docDir = await (await docsDir()).getDirectoryHandle(id);
+  const meta = await readJson(docDir, "meta.json");
+  let c = cur && cur.meta.id === id ? cur : lingering.get(id) || null, fresh = false;
+  if (!c) { c = await loadDoc(docDir, meta); fresh = true; }
+  const sr = c.meta.sampleRate, ch = c.meta.channels, F = c.len, rd = (src, cc, f, q, o, off) => readSrcOf(c, src, cc, f, q, o, off);
+  const job = sesJob(m), N = 65536, buf = new Float32Array(N * ch);
+  const st = ch >= 2;
+  const lf = [vnBq("lp", 150, sr), vnBq("lp", 150, sr), vnBq("lp", 150, sr), vnBq("lp", 150, sr)];
+  const hf = [vnBq("hp", 8000, sr), vnBq("hp", 8000, sr)];
+  const WL = Math.round(sr / 10), WH = Math.round(sr / 20);
+  const tracks = (m.tracks || []).map(t => ({ a: clampI(t[0], 0, F), b: clampI(t[1], 0, F), e: 0, h: 0, n: 0 }));
+  const dc = new Float64Array(ch), phase = [], wide = [], hot = [];
+  let peak = 0, clip = 0, sLL = 0, sRR = 0, sLR = 0, wl = { ll: 0, rr: 0, lr: 0, mm: 0, ss: 0, n: 0, at: 0 }, wh = { e: 0, n: 0, at: 0 }, hmax = -Infinity, ti = 0;
+  try {
+    for (let p = 0; p < F; p += N) {
+      const n = Math.min(N, F - p);
+      for (let k = 0; k < ch; k++) readList(c.lists[k], c.cum[k], p, n, buf, k * N, rd);
+      for (let i = 0; i < n; i++) {
+        const f = p + i, L = buf[i], R = st ? buf[N + i] : L;
+        for (let k = 0; k < ch; k++) { const v = buf[k * N + i], a = v < 0 ? -v : v; dc[k] += v; if (a > peak) peak = a; if (a >= 0.9999) clip++; }
+        sLL += L * L; sRR += R * R; sLR += L * R;
+        const l = vnRun(lf[1], vnRun(lf[0], L)), r = vnRun(lf[3], vnRun(lf[2], R)), mid = (L + R) / 2, h = vnRun(hf[1], vnRun(hf[0], mid));
+        wl.ll += l * l; wl.rr += r * r; wl.lr += l * r; wl.mm += (l + r) * (l + r) / 4; wl.ss += (l - r) * (l - r) / 4; wl.n++;
+        wh.e += h * h; wh.n++;
+        while (ti < tracks.length && f >= tracks[ti].b) ti++;
+        if (ti < tracks.length && f >= tracks[ti].a) { const T = tracks[ti]; T.e += mid * mid; T.h += h * h; T.n++; }
+        if (wl.n === WL) {
+          const lev = Math.max(wl.ll, wl.rr) / WL;
+          if (st && lev > 1e-4) {
+            const cor = wl.lr / Math.sqrt(wl.ll * wl.rr + 1e-30), sm = 10 * Math.log10((wl.ss + 1e-30) / (wl.mm + 1e-30));
+            if (cor < 0) phase.push({ at: wl.at, b: f + 1, v: cor, low: true });
+            else if (sm > -6) wide.push({ at: wl.at, b: f + 1, v: sm, low: false });
+          }
+          wl = { ll: 0, rr: 0, lr: 0, mm: 0, ss: 0, n: 0, at: f + 1 };
+        }
+        if (wh.n === WH) {
+          const db = 10 * Math.log10(wh.e / WH + 1e-30);
+          if (db > hmax) hmax = db;
+          if (db > -20) hot.push({ at: wh.at, b: f + 1, v: db, low: false });
+          wh = { e: 0, n: 0, at: f + 1 };
+        }
+      }
+      await job.tick((p + n) / F);
+    }
+  } finally {
+    job.done();
+    if (fresh) closeHandles(c);
+  }
+  const db = v => v > 0 ? Math.round(10 * Math.log10(v) * 10) / 10 : null;
+  return {
+    t: "vncheck", id, sr, ch, frames: F, peak: peak > 0 ? Math.round(20 * Math.log10(peak) * 10) / 10 : null, clip,
+    dc: Array.from(dc, v => Math.round(v / Math.max(1, F) * 1e5) / 1e5), corr: st ? Math.round(sLR / Math.sqrt(sLL * sRR + 1e-30) * 100) / 100 : 1,
+    hfmax: Number.isFinite(hmax) ? Math.round(hmax * 10) / 10 : null,
+    phase: vnRegions(phase, sr / 2, 12), wide: vnRegions(wide, sr / 2, 12), hot: vnRegions(hot, sr / 4, 12),
+    tracks: tracks.map(T => ({ a: T.a, b: T.b, rms: T.n ? db(T.e / T.n) : null, hf: T.n ? db(T.h / T.n) : null }))
+  };
 }
 
 async function sesConvert(m) {
@@ -4673,6 +4755,7 @@ async function handle(m) {
   if (m.t === "sesbounce") { postMessage(Object.assign({ req: m.req }, await sesBounce(m))); return; }
   if (m.t === "cdddp") { postMessage(Object.assign({ req: m.req }, await cdDdp(m))); return; }
   if (m.t === "cdloud") { postMessage(Object.assign({ req: m.req }, await cdLoud(m))); return; }
+  if (m.t === "vncheck") { postMessage(Object.assign({ req: m.req }, await vnCheck(m))); return; }
   if (m.t === "sesconv") { postMessage(Object.assign({ req: m.req }, await sesConvert(m))); return; }
   if (m.t === "sescancel") { if (SES.job) SES.job.cancel = true; return; }
   if (m.t === "djprobe") { postMessage(Object.assign({ req: m.req }, await djProbe(m))); return; }
