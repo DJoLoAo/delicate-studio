@@ -1264,8 +1264,8 @@ function sesClean(v) {
     const auto = { vol: env(au.vol, SM_FLOOR, SM_TOP), pan: env(au.pan, -1, 1) };
     const touch = tr.touch === "vol" || tr.touch === "pan" ? tr.touch : "";
     const takes = [];
-    for (const q of Array.isArray(tr.takes) ? tr.takes.slice(0, 500) : []) if (q && typeof q === "object" && q.doc) takes.push({ id: str(q.id, 40) || crypto.randomUUID().slice(0, 12), doc: str(q.doc, 80), at: int(q.at, -(2 ** 40), 2 ** 40), len: int(q.len, 1, 2 ** 40), n: int(q.n, 1, 9999), name: str(q.name, 160) });
-    tracks.push({ id: str(tr.id, 40) || crypto.randomUUID().slice(0, 12), name: str(tr.name, 80), gain: num(tr.gain, -96, 12, 0), pan: num(tr.pan, -1, 1, 0), mute: !!tr.mute, solo: !!tr.solo, clips, auto, touch, view: ["vol", "pan"].includes(tr.view) ? tr.view : "", fx: rkObj(tr.fx), takes });
+    for (const q of Array.isArray(tr.takes) ? tr.takes.slice(0, 500) : []) if (q && typeof q === "object" && q.doc) takes.push({ id: str(q.id, 40) || crypto.randomUUID().slice(0, 12), doc: str(q.doc, 80), at: int(q.at, -(2 ** 40), 2 ** 40), from: int(q.from, 0, 2 ** 40), len: int(q.len, 1, 2 ** 40), n: int(q.n, 1, 9999), name: str(q.name, 160) });
+    tracks.push({ id: str(tr.id, 40) || crypto.randomUUID().slice(0, 12), name: str(tr.name, 80), gain: num(tr.gain, -96, 12, 0), pan: num(tr.pan, -1, 1, 0), mute: !!tr.mute, solo: !!tr.solo, clips, auto, touch, view: ["vol", "pan"].includes(tr.view) ? tr.view : "", fx: rkObj(tr.fx), takes, lanes: !!tr.lanes && takes.length > 0 });
   }
   const marks = [];
   for (const k of Array.isArray(s.marks) ? s.marks.slice(0, 999) : []) if (k && typeof k === "object") marks.push({ id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), at: int(k.at, 0, 2 ** 40), name: str(k.name, 160) });
@@ -1361,7 +1361,7 @@ async function sesOpen(m) {
   const s = await sesRead(m.id);
   sesRelease();
   SES.s = s;
-  const ids = [...new Set(s.tracks.flatMap(tr => tr.clips.map(k => k.doc)).concat(s.scenes.rows.flatMap(r => Object.values(r.slots).map(k => k.doc))))];
+  const ids = [...new Set(s.tracks.flatMap(tr => tr.clips.map(k => k.doc).concat(tr.takes.map(k => k.doc))).concat(s.scenes.rows.flatMap(r => Object.values(r.slots).map(k => k.doc))))];
   const docs = [];
   for (const id of ids) docs.push(await sesPayload(id));
   await dspExports();

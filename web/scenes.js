@@ -389,7 +389,7 @@ async function snFillFile(tid) {
 function snFillTakes(tid) {
   const tr = ses.s.tracks.find(x => x.id === tid);
   if (!tr || !(tr.takes || []).length) return;
-  snPut(tid, tr.takes.map(k => ({ id: ssNewId(), doc: k.doc, from: 0, len: k.len, name: k.name || t("Take") + " " + k.n, loop: true, gain: 0 })));
+  snPut(tid, tr.takes.map(k => ({ id: ssNewId(), doc: k.doc, from: k.from || 0, len: k.len, name: k.name || t("Take") + " " + k.n, loop: true, gain: 0 })));
 }
 
 async function snFillStems(rowId) {

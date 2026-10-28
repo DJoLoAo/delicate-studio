@@ -3,16 +3,31 @@ const SS_HEADH = 15, SS_EDGE = 6, SS_SNAP = 8, SS_FBOX = 9, SS_PTR = 4, SS_COLOR
 const ses = { open: false, s: null, docs: new Map(), view: { start: 0, spp: 256 }, cursor: 0, sel: { a: 0, b: 0 }, clip: null, track: null, hist: [], idx: 0, drag: null, play: { on: false, start: 0, end: 0, loop: false, off: 0, t0: 0 }, loop: false, saveT: 0, mixT: 0, list: [], dirty: false, mark: null, mdrag: null, apt: null, touch: null, trim: null };
 
 function ssLane() { return Math.round(84 * thFs()); }
+function ssTakeH() { return Math.round(40 * thFs()); }
+function ssTakes(tr) { return tr && tr.lanes && Array.isArray(tr.takes) ? tr.takes : []; }
+function ssRowH(r) { const tr = ses.s && ses.s.tracks[r]; return ssLane() + ssTakes(tr).length * ssTakeH(); }
+function ssRowTop(r) { let y = 0; for (let i = 0; i < r; i++) y += ssRowH(i); return y; }
+function ssTotalH() { const n = ses.s ? ses.s.tracks.length : 0; return n ? ssRowTop(n) : ssLane(); }
+function ssRowAt(y) {
+  const n = ses.s ? ses.s.tracks.length : 0;
+  let top = 0;
+  for (let r = 0; r < n; r++) {
+    const h = ssRowH(r);
+    if (y < top + h) { const q = y - top - ssLane(); return { r, take: q < 0 ? -1 : Math.min(ssTakes(ses.s.tracks[r]).length - 1, Math.floor(q / ssTakeH())), top }; }
+    top += h;
+  }
+  return { r: y < 0 ? -1 : n, take: -1, top };
+}
 
 function ssLin(db) { return db <= -96 ? 0 : Math.pow(10, db / 20); }
 function ssAuto(tr) { if (!tr.auto || typeof tr.auto !== "object") tr.auto = { vol: [], pan: [] }; if (!Array.isArray(tr.auto.vol)) tr.auto.vol = []; if (!Array.isArray(tr.auto.pan)) tr.auto.pan = []; return tr.auto; }
 function ssAutoRange(kind) { return kind === "pan" ? [-1, 1] : [SM_FLOOR, SM_TOP]; }
 function ssAutoY(kind, v, r) {
-  const L = ssLane(), y0 = r * L + 6, h = L - 12, [lo, hi] = ssAutoRange(kind), u = (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo);
+  const L = ssLane(), y0 = ssRowTop(r) + 6, h = L - 12, [lo, hi] = ssAutoRange(kind), u = (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo);
   return kind === "pan" ? y0 + u * h : y0 + (1 - u) * h;
 }
 function ssAutoV(kind, y, r) {
-  const L = ssLane(), y0 = r * L + 6, h = L - 12, [lo, hi] = ssAutoRange(kind), u = Math.max(0, Math.min(1, (y - y0) / h));
+  const L = ssLane(), y0 = ssRowTop(r) + 6, h = L - 12, [lo, hi] = ssAutoRange(kind), u = Math.max(0, Math.min(1, (y - y0) / h));
   const v = kind === "pan" ? lo + u * (hi - lo) : lo + (1 - u) * (hi - lo);
   return kind === "pan" ? Math.round(v * 100) / 100 : Math.round(v * 2) / 2;
 }
@@ -439,17 +454,18 @@ function ssShown(tr, k) {
 }
 
 function ssLanes() {
-  const s = ses.s, cv = $("sesCv"), rows = Math.max(1, s.tracks.length);
-  cv.style.height = rows * ssLane() + "px";
-  const dpr = canvasFit(cv), g = cv.getContext("2d"), W = cv.width, H = cv.height, L = ssLane() * dpr;
+  const s = ses.s, cv = $("sesCv");
+  cv.style.height = Math.max(ssTotalH(), ssLane()) + "px";
+  const dpr = canvasFit(cv), g = cv.getContext("2d"), W = cv.width, H = cv.height;
   g.fillStyle = TH.canvas;
   g.fillRect(0, 0, W, H);
   s.tracks.forEach((tr, r) => {
+    const y = ssRowTop(r) * dpr, h = ssRowH(r) * dpr;
     g.fillStyle = r % 2 ? TH.laneA : TH.laneB;
-    g.fillRect(0, r * L, W, L);
-    if (tr.id === ses.track) { g.fillStyle = tw(0.03); g.fillRect(0, r * L, W, L); }
+    g.fillRect(0, y, W, h);
+    if (tr.id === ses.track) { g.fillStyle = tw(0.03); g.fillRect(0, y, W, h); }
     g.fillStyle = tw(0.1);
-    g.fillRect(0, (r + 1) * L - dpr, W, dpr);
+    g.fillRect(0, y + h - dpr, W, dpr);
   });
   if (ses.sel.b > ses.sel.a) {
     const a = Math.max(0, ssX(ses.sel.a) * dpr), b = Math.min(W, ssX(ses.sel.b) * dpr);
@@ -467,13 +483,14 @@ function ssLanes() {
     const xf = smXfades(shown.map(x => x[0]));
     for (const [k, cr] of shown) ssClip(g, k, r, dpr, W, cr, xf.get(k.id));
     if (tr.view) ssAutoDraw(g, tr, r, dpr, W);
+    ssTakeDraw(g, tr, r, dpr, W);
   });
   if (!s.tracks.length) {
     g.fillStyle = TH.muted;
     g.font = thFont(11, dpr);
     g.textAlign = "left";
     g.textBaseline = "middle";
-    g.fillText(t("Add files to start: each file becomes a track."), 14 * dpr, L / 2);
+    g.fillText(t("Add files to start: each file becomes a track."), 14 * dpr, ssLane() * dpr / 2);
   }
   g.fillStyle = tc("blue", 0.4);
   for (const b of ssMarks()) { const x = Math.round(ssX(b.at) * dpr); if (x >= 0 && x <= W) g.fillRect(x, 0, Math.max(1, dpr), H); }
@@ -486,8 +503,33 @@ function ssLanes() {
   }
 }
 
+function ssTakeIn(tk, k) { return k.doc === tk.doc && k.from - (tk.from || 0) === k.at - tk.at; }
+
+function ssTakeDraw(g, tr, r, dpr, W) {
+  const tk = ssTakes(tr);
+  if (!tk.length) return;
+  const top = (ssRowTop(r) + ssLane()) * dpr, H = ssTakeH() * dpr, d = ses.drag;
+  tk.forEach((q, i) => {
+    const y0 = top + i * H, s = Math.max(0, q.at);
+    g.fillStyle = tw(0.06);
+    g.fillRect(0, y0, W, dpr);
+    const k = { id: "tk" + q.id, doc: q.doc, at: s, from: (q.from || 0) + (s - q.at), len: q.at + q.len - s, gain: 0, fin: 0, fout: 0, name: q.name || t("Take") + " " + q.n };
+    g.save();
+    g.globalAlpha = 0.45;
+    ssClip(g, k, r, dpr, W, r, null, { y0: y0 + 2 * dpr, h: H - 4 * dpr });
+    g.restore();
+    g.fillStyle = tc("gold", 0.3);
+    for (const c of tr.clips) if (ssTakeIn(q, c)) { const a = Math.max(0, ssX(c.at) * dpr), b = Math.min(W, ssX(c.at + c.len) * dpr); if (b > a) g.fillRect(a, y0 + 2 * dpr, b - a, H - 4 * dpr); }
+    if (d && d.kind === "comp" && d.tr === tr.id && d.take === i && d.moved) {
+      const a = ssX(Math.min(d.a, d.b)) * dpr, b = ssX(Math.max(d.a, d.b)) * dpr;
+      g.fillStyle = tc("pink", 0.35);
+      g.fillRect(a, y0 + 2 * dpr, Math.max(1, b - a), H - 4 * dpr);
+    }
+  });
+}
+
 function ssAutoDraw(g, tr, r, dpr, W) {
-  const kind = tr.view, pts = ssAuto(tr)[kind], L = ssLane() * dpr, top = r * L;
+  const kind = tr.view, pts = ssAuto(tr)[kind], L = ssLane() * dpr, top = ssRowTop(r) * dpr;
   g.save();
   g.globalAlpha = 0.55;
   g.fillStyle = TH.canvas;
@@ -523,9 +565,9 @@ function ssAutoDraw(g, tr, r, dpr, W) {
   g.restore();
 }
 
-function ssClip(g, k, r, dpr, W, colorRow, x) {
+function ssClip(g, k, r, dpr, W, colorRow, x, geo) {
   x = x || { xi: 0, xo: 0 };
-  const L = ssLane() * dpr, y0 = r * L + 2 * dpr, h = L - 4 * dpr;
+  const L = ssLane() * dpr, y0 = geo ? geo.y0 : ssRowTop(r) * dpr + 2 * dpr, h = geo ? geo.h : L - 4 * dpr;
   const x0 = ssX(k.at) * dpr, x1 = ssX(k.at + k.len) * dpr;
   if (x1 < 0 || x0 > W) return;
   const col = SS_COLORS[colorRow % SS_COLORS.length], sel = ses.clip === k.id, M = ses.docs.get(k.doc);
@@ -584,13 +626,14 @@ function ssClip(g, k, r, dpr, W, colorRow, x) {
 }
 
 function ssHit(x, y) {
-  const s = ses.s, r = Math.floor(y / ssLane());
+  const s = ses.s, at = ssRowAt(y), r = at.r;
   if (r < 0 || r >= s.tracks.length) return { row: r };
   const tr = s.tracks[r];
+  if (at.take >= 0) return { row: r, tr, take: at.take };
   for (let i = tr.clips.length - 1; i >= 0; i--) {
     const k = tr.clips[i], x0 = ssX(k.at), x1 = ssX(k.at + k.len);
     if (x < x0 - 1 || x > x1 + 1) continue;
-    const yy = y - r * ssLane() - 2;
+    const yy = y - at.top - 2;
     if (ses.clip === k.id && yy >= SS_HEADH && yy <= SS_HEADH + SS_FBOX + 2) {
       const fi = ssX(k.at + k.fin), fo = ssX(k.at + k.len - k.fout);
       if (Math.abs(x - fi) <= SS_FBOX || (k.fin === 0 && x >= x0 && x <= x0 + SS_FBOX)) return { row: r, tr, k, part: "fin" };
@@ -650,13 +693,21 @@ function ssAutoDown(e, tr, row, x, y) {
 function ssDown(e) {
   if (!ses.open || e.button > 0) return;
   const cv = $("sesCv"), r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-  const ar = Math.floor(y / ssLane()), atr = ses.s.tracks[ar];
-  if (atr && atr.view) { ssAutoDown(e, atr, ar, x, y); return; }
+  const at = ssRowAt(y), ar = at.r, atr = ses.s.tracks[ar];
+  if (atr && atr.view && at.take < 0) { ssAutoDown(e, atr, ar, x, y); return; }
   ses.apt = null;
   const h = ssHit(x, y);
   e.preventDefault();
   cv.setPointerCapture(e.pointerId);
   if (h.tr) ses.track = h.tr.id;
+  if (h.take !== undefined) {
+    const f = Math.max(0, Math.round(ssF(x)));
+    ses.clip = null;
+    ses.drag = { kind: "comp", tr: h.tr.id, take: h.take, a: f, b: f, x0: x, moved: false };
+    ssHeads();
+    ssDraw();
+    return;
+  }
   if (!h.k) {
     ses.clip = null;
     const f = Math.max(0, Math.round(ssF(x)));
@@ -677,9 +728,10 @@ function ssMove(e) {
   if (!ses.open) return;
   const cv = $("sesCv"), r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, d = ses.drag;
   if (!d) {
-    const ar = Math.floor(y / ssLane()), atr = ses.s.tracks[ar];
-    if (atr && atr.view) { cv.style.cursor = ssAutoHit(atr, ar, x, y) >= 0 ? "move" : "crosshair"; return; }
+    const at = ssRowAt(y), ar = at.r, atr = ses.s.tracks[ar];
+    if (atr && atr.view && at.take < 0) { cv.style.cursor = ssAutoHit(atr, ar, x, y) >= 0 ? "move" : "crosshair"; return; }
     const h = ssHit(x, y);
+    if (h.take !== undefined) { cv.style.cursor = "col-resize"; return; }
     cv.style.cursor = !h.k ? "text" : h.part === "l" || h.part === "r" ? "ew-resize" : h.part === "fin" || h.part === "fout" ? "col-resize" : "grab";
     return;
   }
@@ -701,11 +753,12 @@ function ssMove(e) {
     ssDraw();
     return;
   }
+  if (d.kind === "comp") { d.b = Math.max(0, Math.round(ssF(x))); ssDraw(); return; }
   const o = d.orig, dx = Math.round((x - d.x0) * ses.view.spp), min = ssMinLen(), c = d.cur, free = e.altKey;
   if (d.kind === "move") {
     let nd = ssSnapDelta(o.id, [o.at, o.at + o.len], dx, free);
     c.at = Math.max(0, o.at + nd);
-    d.row = Math.max(0, Math.min(ses.s.tracks.length - 1, Math.floor(y / ssLane())));
+    d.row = Math.max(0, Math.min(ses.s.tracks.length - 1, ssRowAt(y).r));
     cv.style.cursor = "grabbing";
   } else if (d.kind === "l") {
     let nd = ssSnapDelta(o.id, [o.at], dx, free);
@@ -741,6 +794,14 @@ function ssUp(e) {
       return;
     }
     if (d.moved || d.added) ssCommit(); else ssDraw();
+    return;
+  }
+  if (d.kind === "comp") {
+    const tr = ses.s.tracks.find(q => q.id === d.tr), tk = ssTakes(tr)[d.take];
+    if (!d.moved || e.type === "pointercancel" || !tk) { if (!d.moved) { ses.cursor = d.a; if (ses.play.on) ssPlay(ses.cursor); } ssDraw(); return; }
+    const a = Math.min(d.a, d.b), b = Math.max(d.a, d.b);
+    if (pcPlace(tr, tk, a, b, true)) { ssCommit(); flash(t("{t} comped in").replace("{t}", tk.name || t("Take") + " " + tk.n) + " · " + fmtDur((b - a) / ssRate())); }
+    else { flash(t("This take does not reach there.")); ssDraw(); }
     return;
   }
   if (d.kind === "sel") {
@@ -893,16 +954,23 @@ function ssHeads() {
   if (!ses.open) return;
   const box = $("sesHeads");
   box.innerHTML = "";
-  box.style.height = Math.max(1, ses.s.tracks.length) * ssLane() + "px";
+  box.style.height = Math.max(ssTotalH(), ssLane()) + "px";
   ses.s.tracks.forEach((tr, r) => {
     const el = document.createElement("div");
     el.className = "sestrack" + (tr.id === ses.track ? " cur" : "");
     el.style.height = ssLane() + "px";
     el.dataset.id = tr.id;
-    el.innerHTML = `<div class="st1"><i class="sdot" style="background:${tc(SS_COLORS[r % SS_COLORS.length])}"></i><button class="stn"></button><button class="str" title="${esc(t("Arm for recording"))}" aria-label="${esc(t("Arm for recording"))}">R</button><button class="stm" title="${esc(t("Mute"))}">M</button><button class="sts" title="${esc(t("Solo"))}">S</button><button class="sta"></button><button class="stf">FX</button><button class="x std" title="${esc(t("Remove the track"))}" aria-label="${esc(t("Remove the track"))}">×</button></div>`
+    el.innerHTML = `<div class="st1"><i class="sdot" style="background:${tc(SS_COLORS[r % SS_COLORS.length])}"></i><button class="stn"></button><button class="str" title="${esc(t("Arm for recording"))}" aria-label="${esc(t("Arm for recording"))}">R</button><button class="stm" title="${esc(t("Mute"))}">M</button><button class="sts" title="${esc(t("Solo"))}">S</button><button class="sta"></button><button class="stt"></button><button class="stf">FX</button><button class="x std" title="${esc(t("Remove the track"))}" aria-label="${esc(t("Remove the track"))}">×</button></div>`
       + `<label class="st2"><span>${esc(t("Vol"))}</span><input type="range" class="stg" min="-48" max="12" step="0.5"><b class="stgv"></b></label>`
       + `<label class="st2"><span>${esc(t("Pan"))}</span><input type="range" class="stp" min="-100" max="100" step="1"><b class="stpv"></b></label>`;
     el.querySelector(".stn").textContent = tr.name;
+    const stt = el.querySelector(".stt"), nT = (tr.takes || []).length;
+    stt.textContent = "T";
+    stt.classList.toggle("hidden", !nT);
+    stt.classList.toggle("on", !!tr.lanes && nT > 0);
+    stt.title = tr.lanes ? t("Hide the takes") : t("Show the takes") + " (" + nT + ")";
+    stt.setAttribute("aria-label", stt.title);
+    stt.addEventListener("click", () => { tr.lanes = !tr.lanes; ssSaveSoon(); ssHeads(); ssDraw(); });
     el.querySelector(".str").classList.toggle("on", pc.arm === tr.id);
     el.querySelector(".str").addEventListener("click", () => pcArm(tr.id));
     if (pc.arm === tr.id) { const m = document.createElement("i"); m.className = "stin"; m.appendChild(document.createElement("b")); el.appendChild(m); }
@@ -982,6 +1050,20 @@ function ssHeads() {
     el.querySelector(".std").addEventListener("click", () => ssRemoveTrack(tr.id));
     el.addEventListener("pointerdown", () => { if (ses.track !== tr.id) { ses.track = tr.id; box.querySelectorAll(".sestrack").forEach(x => x.classList.toggle("cur", x.dataset.id === tr.id)); ssDraw(); } });
     box.appendChild(el);
+    const tk = ssTakes(tr);
+    if (tk.length) {
+      const lane = document.createElement("div");
+      lane.className = "sttakes";
+      lane.style.height = tk.length * ssTakeH() + "px";
+      for (const q of tk) {
+        const b = document.createElement("div");
+        b.className = "sttk";
+        b.style.height = ssTakeH() + "px";
+        b.textContent = q.name || t("Take") + " " + q.n;
+        lane.appendChild(b);
+      }
+      box.appendChild(lane);
+    }
   });
 }
 
@@ -1046,7 +1128,7 @@ function ssMenu(e) {
   e.preventDefault();
   if (!ses.open) return;
   const cv = $("sesCv"), r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, h = ssHit(x, y);
-  const arow = Math.floor(y / ssLane()), atr = ses.s.tracks[arow];
+  const rat = ssRowAt(y), arow = rat.r, atr = rat.take < 0 ? ses.s.tracks[arow] : null;
   if (h.k && !(atr && atr.view)) { ses.clip = h.k.id; ssButtons(); ssDraw(); }
   else { ses.cursor = Math.max(0, Math.round(ssF(x))); ssDraw(); }
   const items = [
@@ -1110,7 +1192,7 @@ function wireSes() {
   cv.addEventListener("wheel", ssWheel, { passive: false });
   cv.addEventListener("contextmenu", ssMenu);
   cv.addEventListener("dblclick", e => {
-    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, row = Math.floor(y / ssLane()), tr = ses.s && ses.s.tracks[row];
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, rat = ssRowAt(y), row = rat.r, tr = ses.s && rat.take < 0 ? ses.s.tracks[row] : null;
     if (tr && tr.view) { const i = ssAutoHit(tr, row, x, y); if (i >= 0) { ssAuto(tr)[tr.view].splice(i, 1); ses.apt = null; ssCommit(); } return; }
     const h = ssHit(x, y);
     if (!h.k) return;

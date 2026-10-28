@@ -1523,5 +1523,10 @@
  "Stop the cue": "क्यू रोकें",
  "That output is not available. Cueing on the main output.": "वह आउटपुट उपलब्ध नहीं है। मुख्य आउटपुट पर क्यू।",
  "Write what you launch onto the multitrack at its cursor when you stop": "रोकने पर जो चलाया वह मल्टीट्रैक में कर्सर पर लिख देता है",
- "{n} clips captured into the multitrack at {t}": "{n} क्लिप {t} पर मल्टीट्रैक में कैप्चर हुए"
+ "{n} clips captured into the multitrack at {t}": "{n} क्लिप {t} पर मल्टीट्रैक में कैप्चर हुए",
+ "Hide the takes": "टेक छिपाएँ",
+ "Show the takes": "टेक दिखाएँ",
+ "This take does not reach there.": "यह टेक वहाँ तक नहीं पहुँचता।",
+ "{n} takes recorded on {t} — swipe across a take lane to comp": "{t} पर {n} टेक रिकॉर्ड हुए — कंप करने के लिए टेक लेन पर स्वाइप करें",
+ "{t} comped in": "{t} कंप में जोड़ा"
 }

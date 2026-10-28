@@ -1523,5 +1523,10 @@
  "Stop the cue": "Ferma il preascolto",
  "That output is not available. Cueing on the main output.": "Quell'uscita non è disponibile. Preascolto sull'uscita principale.",
  "Write what you launch onto the multitrack at its cursor when you stop": "Scrive ciò che avvii nel multitraccia, al cursore, quando fermi",
- "{n} clips captured into the multitrack at {t}": "{n} clip catturati nel multitraccia a {t}"
+ "{n} clips captured into the multitrack at {t}": "{n} clip catturati nel multitraccia a {t}",
+ "Hide the takes": "Nascondi i take",
+ "Show the takes": "Mostra i take",
+ "This take does not reach there.": "Questo take non arriva fin lì.",
+ "{n} takes recorded on {t} — swipe across a take lane to comp": "{n} take registrati su {t} — trascina su una corsia di take per comporre",
+ "{t} comped in": "{t} inserito"
 }

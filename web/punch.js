@@ -155,8 +155,8 @@ async function pcGo() {
   const sr = ed.ctx.sampleRate;
   if (!ses.s.sr) { ses.s.sr = sr; ssSaveSoon(); ed.worker.postMessage({ t: "sesmix", s: ses.s }); }
   if (ses.play.on) ssStop();
-  const sel = ses.sel.b > ses.sel.a, a = Math.round(sel ? ses.sel.a : ses.cursor), b = sel ? Math.round(ses.sel.b) : -1;
-  const from = Math.max(0, a - Math.round(pc.cfg.pre * sr)), end = b >= 0 ? b + Math.round(pc.cfg.post * sr) : Math.max(ssLen(), a) + sr * 3600 * 4;
+  const sel = ses.sel.b > ses.sel.a, a = Math.round(sel ? ses.sel.a : ses.cursor), b = sel ? Math.round(ses.sel.b) : -1, loop = sel && ses.loop && b - a >= sr * 0.5;
+  const from = loop ? a : Math.max(0, a - Math.round(pc.cfg.pre * sr)), end = loop ? b : b >= 0 ? b + Math.round(pc.cfg.post * sr) : Math.max(ssLen(), a) + sr * 3600 * 4;
   const n = (tr.takes || []).length + 1, name = (ses.s.name + " – " + tr.name + " – " + t("take") + " " + n).slice(0, 120);
   pc.busy = true;
   const wait = 300 - (performance.now() - (pc.armT || 0));
@@ -164,10 +164,10 @@ async function pcGo() {
   const ok = await new Promise(res => { pc.wait = res; pcWorker().postMessage({ t: "start", name, device: pc.label, cfg: { pre: 0, autoStart: false, autoStop: false, thr: -45, after: 5 } }); setTimeout(() => { if (pc.wait === res) { pc.wait = null; res(false); } }, 5000); });
   pc.busy = false;
   if (!ok) { tell(t("The recording could not start.")); return; }
-  pc.rec = { tr: tr.id, a, b, from, end, sr, n, P: null, D: null };
+  pc.rec = { tr: tr.id, a, b, from, end, sr, n, P: null, D: null, loop };
   Atomics.store(ed.ring.ctrl, 0, 0);
-  ses.play = { on: true, start: from, end, loop: false, off: 0, t0: performance.now() };
-  ed.worker.postMessage({ t: "sesplay", start: from, end, loop: false, off: 0, rec: true, punch: { tr: tr.id, a, b } });
+  ses.play = { on: true, start: from, end, loop, off: 0, t0: performance.now() };
+  ed.worker.postMessage({ t: "sesplay", start: from, end, loop, off: 0, rec: true, punch: { tr: tr.id, a, b } });
   ssButtons();
   ssDraw();
   if (!ses.ticking) { ses.ticking = true; ssTick(); }
@@ -183,7 +183,8 @@ function pcEnd(pos) {
   const R = pc.rec;
   if (!R) return;
   pc.rec = null;
-  const out = R.b >= 0 ? Math.min(R.b, Math.floor(pos)) : Math.floor(pos);
+  const heard = R.loop ? Math.max(0, Atomics.load(ed.ring.ctrl, 2) - Math.round(((ed.ctx.outputLatency || 0) + (ed.ctx.baseLatency || 0)) * R.sr)) : 0;
+  const out = R.loop ? R.a + heard : R.b >= 0 ? Math.min(R.b, Math.floor(pos)) : Math.floor(pos);
   if (out - R.a < Math.round(R.sr * 0.05)) {
     pc.worker.postMessage({ t: "cancel" });
     pc.fin = { cancel: true };
@@ -209,7 +210,8 @@ async function pcDone(m) {
   if (!ses.open || p.missing) return;
   ssUse(p);
   const tr = ses.s.tracks.find(x => x.id === R.tr) || pcNewTrack();
-  const tk = { id: ssNewId(), doc: meta.id, at: pcTakeAt(R.from, m.inAt | 0, F.D, F.P, F.lat), len: meta.frames, n: R.n, name: t("Take") + " " + R.n };
+  if (R.loop) { pcLoopTakes(tr, meta, m, F); return; }
+  const tk = { id: ssNewId(), doc: meta.id, at: pcTakeAt(R.from, m.inAt | 0, F.D, F.P, F.lat), from: 0, len: meta.frames, n: R.n, name: t("Take") + " " + R.n };
   if (!pcPlace(tr, tk, R.a, F.out)) { flash(t("The take did not reach the punch range.")); ssMix(); ssDraw(); return; }
   ses.track = tr.id;
   ssCommit();
@@ -217,7 +219,32 @@ async function pcDone(m) {
   flash(t("{t} recorded on {n}").replace("{t}", tk.name).replace("{n}", tr.name) + " · " + fmtDur((F.out - R.a) / R.sr) + warn);
 }
 
-function pcPlace(tr, tk, a0, b0) {
+function pcLoopTakes(tr, meta, m, F) {
+  const R = F.R, len = R.b - R.a, c0 = pcTakeAt(0, m.inAt | 0, F.D, F.P, F.lat), heard = F.out - R.a, X = Math.round(R.sr * 0.05);
+  const passes = Math.floor(heard / len), part = heard - passes * len, list = [];
+  for (let i = 0; i <= passes; i++) {
+    let L = i < passes ? len : part, at = R.a, f = i * len - c0;
+    if (L < X) continue;
+    if (f < 0) { at -= f; L += f; f = 0; }
+    L = Math.min(L, meta.frames - f);
+    if (L < X) continue;
+    list.push({ id: ssNewId(), doc: meta.id, at, from: f, len: L, n: 0, name: "" });
+  }
+  if (!list.length) { flash(t("The take did not reach the punch range.")); ssMix(); ssDraw(); return; }
+  if (!Array.isArray(tr.takes)) tr.takes = [];
+  let n = tr.takes.length;
+  for (const q of list) { q.n = ++n; q.name = t("Take") + " " + q.n; }
+  const keep = list.length > 1 && list[list.length - 1].len < len - X ? list[list.length - 2] : list[list.length - 1];
+  for (const q of list) if (q !== keep) tr.takes.push(q);
+  pcPlace(tr, keep, keep.at, keep.at + keep.len);
+  tr.takes.sort((p, q) => p.n - q.n);
+  if (list.length > 1) tr.lanes = true;
+  ses.track = tr.id;
+  ssCommit();
+  flash(t("{n} takes recorded on {t} — swipe across a take lane to comp").replace("{n}", list.length).replace("{t}", tr.name));
+}
+
+function pcPlace(tr, tk, a0, b0, comp) {
   const sr = ssRate(), X = Math.max(2, Math.round(sr * PC_XF)), h = X >> 1;
   const a = Math.max(a0, tk.at, 0), b = Math.min(b0, tk.at + tk.len);
   if (b - a < X * 2) return false;
@@ -238,8 +265,9 @@ function pcPlace(tr, tk, a0, b0) {
     }
   }
   const s = Math.max(tk.at, 0, left ? a - h : a), e = Math.min(tk.at + tk.len, right ? b + h : b);
-  out.push({ id: ssNewId(), doc: tk.doc, at: s, from: s - tk.at, len: e - s, gain: 0, fin: left ? 0 : X, fout: right ? 0 : X, name: tk.name });
+  out.push({ id: ssNewId(), doc: tk.doc, at: s, from: (tk.from || 0) + s - tk.at, len: e - s, gain: 0, fin: left ? 0 : X, fout: right ? 0 : X, name: tk.name });
   tr.clips = out.sort((p, q) => p.at - q.at);
+  if (comp) return true;
   if (!Array.isArray(tr.takes)) tr.takes = [];
   tr.takes.push(tk);
   return true;
@@ -248,7 +276,7 @@ function pcPlace(tr, tk, a0, b0) {
 function pcDraw(g, dpr, W, H) {
   const tr = pc.arm, r = tr ? ses.s.tracks.findIndex(x => x.id === tr) : -1;
   if (r < 0) return;
-  const L = ssLane() * dpr, y = r * L;
+  const L = ssLane() * dpr, y = ssRowTop(r) * dpr;
   const R = pc.rec;
   const a = R ? R.a : ses.sel.b > ses.sel.a ? ses.sel.a : ses.cursor, b = R ? R.b : ses.sel.b > ses.sel.a ? ses.sel.b : -1;
   g.fillStyle = tc("pink", 0.9);
@@ -266,7 +294,7 @@ function pcDraw(g, dpr, W, H) {
   g.font = thFont(9.5, dpr);
   g.textAlign = "left";
   g.textBaseline = "top";
-  g.fillText(t("Recording") + " · " + t("take") + " " + R.n, x0 + 5 * dpr, y + 5 * dpr);
+  g.fillText(t("Recording") + " · " + t("take") + " " + (R.loop ? R.n + Math.floor(Math.max(0, Atomics.load(ed.ring.ctrl, 2)) / Math.max(1, R.b - R.a)) : R.n), x0 + 5 * dpr, y + 5 * dpr);
 }
 
 async function pcSettings() {
