@@ -71,6 +71,7 @@ function xpTags(p) {
     add("ALBUMARTIST", g.albumArtist);
     add("ALBUM", g.album);
     add("TRACKNUMBER", g.pos || p.index);
+    add("TRACKTOTAL", g.total);
     add("DISCNUMBER", g.disc);
     add("DISCTOTAL", g.discs);
     add("DATE", g.year);
@@ -83,6 +84,7 @@ function xpTags(p) {
     add("CUSTOM4", g.country);
     add("CUSTOM5", g.format);
     add("ISRC", g.isrc);
+    add("BARCODE", g.upc);
   } else {
     add("TITLE", p.range);
     if (p.index) add("TRACKNUMBER", p.index);
@@ -114,7 +116,7 @@ function xpCueTracks(marks, sr, d) {
 
 function xpCueHead(d) {
   const A = xp.album;
-  if (A) return { title: A.title, performer: A.artist, genre: A.genre, date: A.year };
+  if (A) return { title: A.title, performer: A.artist, genre: A.genre, date: A.year, catalog: A.upc || "" };
   const tg = xpDocTags(d);
   return { title: tgGet(tg, "ALBUM") || tgGet(tg, "TITLE"), performer: tgGet(tg, "ALBUMARTIST") || tgGet(tg, "ARTIST"), genre: tgAll(tg, "GENRE").join(", "), date: tgGet(tg, "DATE"), catalog: tgGet(tg, "BARCODE") };
 }
@@ -150,8 +152,8 @@ async function xpDocPic(d) {
   return pic;
 }
 
-function xpBlob(name, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: "application/x-cue" }));
+function xpBlob(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type: type || "application/x-cue" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
@@ -176,6 +178,7 @@ function xpName(tpl, ctx) {
 
 function xpAlbumPieces() {
   const A = xp.album, out = [];
+  if (A.pieces) return A.pieces;
   let index = 0;
   for (const s of A.sides) {
     const ranges = (s.info.marks || []).filter(m => m.kind === "range").sort((x, y) => x.a - y.a);
@@ -229,7 +232,7 @@ function xpRender() {
     b.disabled = !!A || (b.dataset.v === "sel" && !hasSel) || (b.dataset.v === "ranges" && !nr);
   });
   const nt = A ? xpAlbumPieces().length : 0;
-  $("xRangeInfo").textContent = A ? t("Album") + " · " + (nt === 1 ? t("1 track") : t("{n} tracks").replace("{n}", nt)) + " · " + (A.sides.length === 1 ? t("1 side") : t("{n} sides").replace("{n}", A.sides.length)) : c.range === "sel" ? fmtTime(ed.sel.a) + "–" + fmtTime(ed.sel.b) : c.range === "ranges" ? nr + " " + t(nr === 1 ? "file per format" : "files per format") : fmtDur(ed.doc.frames / ed.doc.sampleRate);
+  $("xRangeInfo").textContent = A && A.pieces ? t("Release from the montage") + " · " + (nt === 1 ? t("1 track") : t("{n} tracks").replace("{n}", nt)) : A ? t("Album") + " · " + (nt === 1 ? t("1 track") : t("{n} tracks").replace("{n}", nt)) + " · " + (A.sides.length === 1 ? t("1 side") : t("{n} sides").replace("{n}", A.sides.length)) : c.range === "sel" ? fmtTime(ed.sel.a) + "–" + fmtTime(ed.sel.b) : c.range === "ranges" ? nr + " " + t(nr === 1 ? "file per format" : "files per format") : fmtDur(ed.doc.frames / ed.doc.sampleRate);
   const box = $("xFormats");
   box.innerHTML = "";
   c.formats.forEach((f, i) => {
@@ -350,6 +353,7 @@ async function xpGo() {
       call({ t: "export", id: d.id, jobId: id, a: p.a, b: p.b, name: p.name, fmt: p.fmt, master, dest, tags, pic, marks: p.marks.map(m => ({ a: m.a, b: m.b, name: m.name, isrc: m.isrc })) }).catch(e => { job.state = "failed"; job.error = e.message; xpQueue(); xpBatches(); });
     }
     if (c.cue === "on" && dest.kind === "download" && (A || ed.doc === doc)) for (const q of xpCues(plan)) xpBlob(q.name, q.text);
+    if (A && A.sheet && dest.kind === "download") xpBlob(A.sheet.name, A.sheet.text, "text/csv");
   } finally {
     xp.going = false;
     if (batch && batch.jobs.length) xp.batches.push(batch);

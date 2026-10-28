@@ -1624,5 +1624,10 @@
  "album gain {d} dB": "guadagno d'album {d} dB",
  "{d} dB short of the target: the peaks reach the ceiling. Use a limiter to go louder.": "{d} dB sotto l'obiettivo: i picchi raggiungono il tetto. Usa un limiter per alzare ancora.",
  "each track to {t} LUFS": "ogni traccia a {t} LUFS",
- "{n} tracks stop short at the ceiling": "{n} tracce si fermano al tetto"
+ "{n} tracks stop short at the ceiling": "{n} tracce si fermano al tetto",
+ "Fix these before exporting the release": "Correggi questi punti prima di esportare l'uscita",
+ "release mix": "mix di uscita",
+ "Release from the montage": "Uscita dal montaggio",
+ "Export the release": "Esporta l'uscita",
+ "One file per track from the montage as it plays, with title, artist, ISRC and UPC/EAN, plus a track sheet for the distributor": "Un file per traccia dal montaggio così come suona, con titolo, artista, ISRC e UPC/EAN, più una scheda tracce per il distributore"
 }

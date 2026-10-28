@@ -1624,5 +1624,10 @@
  "album gain {d} dB": "एल्बम गेन {d} dB",
  "{d} dB short of the target: the peaks reach the ceiling. Use a limiter to go louder.": "लक्ष्य से {d} dB कम: पीक सीमा तक पहुँचते हैं। और तेज़ करने के लिए लिमिटर लगाएँ।",
  "each track to {t} LUFS": "हर ट्रैक {t} LUFS पर",
- "{n} tracks stop short at the ceiling": "{n} ट्रैक सीमा पर रुक जाते हैं"
+ "{n} tracks stop short at the ceiling": "{n} ट्रैक सीमा पर रुक जाते हैं",
+ "Fix these before exporting the release": "रिलीज़ एक्सपोर्ट करने से पहले इन्हें ठीक करें",
+ "release mix": "रिलीज़ मिक्स",
+ "Release from the montage": "मोंटाज से रिलीज़",
+ "Export the release": "रिलीज़ एक्सपोर्ट करें",
+ "One file per track from the montage as it plays, with title, artist, ISRC and UPC/EAN, plus a track sheet for the distributor": "मोंटाज जैसे बजता है वैसे हर ट्रैक की एक फ़ाइल, शीर्षक, कलाकार, ISRC और UPC/EAN के साथ, और वितरक के लिए एक ट्रैक शीट"
 }

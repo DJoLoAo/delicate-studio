@@ -1134,7 +1134,8 @@ function albumClean(v) {
     const lo = a.cd && a.cd.loud && typeof a.cd.loud === "object" ? a.cd.loud : {}, fnum = (v, lo2, hi, d) => Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.max(lo2, Math.min(hi, Number(v))) : d;
     const loud = { mode: lo.mode === "track" ? "track" : "album", target: fnum(lo.target, -40, 0, -14), ceil: fnum(lo.ceil, -12, 0, -1) };
     const cd = a.cd && typeof a.cd === "object" ? { upc: s(a.cd.upc, 20).replace(/\D/g, ""), title: s(a.cd.title, 160), performer: s(a.cd.performer, 160), loud } : { upc: "", title: "", performer: "", loud };
-    out.push({ id: s(a.id, 60) || crypto.randomUUID(), title: s(a.title, 200), release: rel, sides, created: Number(a.created) || Date.now(), updated: Date.now(), montage: s(a.montage, 60), cd });
+    const mix = a.mix && typeof a.mix === "object" && s(a.mix.doc, 80) ? { doc: s(a.mix.doc, 80), sig: s(a.mix.sig, 40) } : null;
+    out.push({ id: s(a.id, 60) || crypto.randomUUID(), title: s(a.title, 200), release: rel, sides, created: Number(a.created) || Date.now(), updated: Date.now(), montage: s(a.montage, 60), cd, mix });
   }
   return out;
 }
