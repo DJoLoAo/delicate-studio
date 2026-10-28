@@ -170,6 +170,8 @@ button,a{touch-action:manipulation}
 .scs.play{background:color-mix(in srgb,var(--c) 38%,var(--bg2));border-color:var(--c)}
 .scs.play .scsi{color:var(--white)}
 .scs.queued{border-color:var(--white)}
+.scs.cue{outline:1px dashed var(--white);outline-offset:-4px}
+#scCue{min-width:calc(150px*var(--fs))}
 .vwrows{display:flex;flex-direction:column;gap:calc(4px*var(--fs));max-height:50vh;overflow:auto}
 .vwrow{display:flex;flex-direction:column;align-items:flex-start;gap:calc(2px*var(--fs));text-align:left;background:var(--bg3);border:1px solid var(--border);color:var(--white);font:inherit;padding:calc(7px*var(--fs)) calc(10px*var(--fs));cursor:pointer}
 .vwrow:hover{border-color:var(--gold)}

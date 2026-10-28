@@ -1277,11 +1277,11 @@ function sesClean(v) {
     const slots = {};
     for (const [tid, k] of Object.entries(row.slots && typeof row.slots === "object" ? row.slots : {})) {
       if (!tids.has(tid) || !k || typeof k !== "object" || !k.doc) continue;
-      slots[tid] = { id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), doc: str(k.doc, 80), from: int(k.from, 0, 2 ** 40), len: int(k.len, 1, 2 ** 40), name: str(k.name, 160), loop: k.loop !== false, gain: num(k.gain, -96, 24, 0) };
+      slots[tid] = { id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), doc: str(k.doc, 80), from: int(k.from, 0, 2 ** 40), len: int(k.len, 1, 2 ** 40), name: str(k.name, 160), loop: k.loop !== false, gain: num(k.gain, -96, 24, 0), lufs: num(k.lufs, -120, 20, null) };
     }
     rows.push({ id: str(row.id, 40) || crypto.randomUUID().slice(0, 12), name: str(row.name, 80), slots });
   }
-  const scenes = { tempo: num(sc.tempo, 20, 300, 120), quant: ["bar", "beat", "off"].includes(sc.quant) ? sc.quant : "bar", rows };
+  const scenes = { tempo: num(sc.tempo, 20, 300, 120), quant: ["bar", "beat", "off"].includes(sc.quant) ? sc.quant : "bar", rows, ab: !!sc.ab };
   return { v: 1, id: str(s.id, 60) || crypto.randomUUID(), name: str(s.name, 160) || "Session", sr: sr >= 8000 ? sr : 0, created: Number(s.created) || Date.now(), modified: Date.now(), tracks, marks, src, master: { fx: rkObj(s.master && s.master.fx) }, scenes };
 }
 
@@ -1537,13 +1537,14 @@ function scClips(tid, p, n) {
   for (let i = 0; i < L.length; i++) {
     const k = L[i].k, a0 = L[i].at, a1 = i + 1 < L.length ? L[i + 1].at : Infinity;
     if (!k || a1 <= p || a0 >= e1) continue;
-    const add = (s, j) => {
-      const e = Math.min(s + k.len, a1), len = e - s;
+    const b0 = a0 - (L[i].off || 0) % k.len;
+    const add = (s0, j) => {
+      const s = Math.max(s0, a0), e = Math.min(s0 + k.len, a1), len = e - s;
       if (len < 1 || e <= p || s >= e1) return;
-      out.push({ id: k.id + "#" + j, doc: k.doc, at: s, from: k.from, len, gain: k.gain, fin: j === 0 ? Math.min(F, len) : 0, fout: e < s + k.len || !k.loop ? Math.min(F, len) : 0 });
+      out.push({ id: k.id + "#" + j, doc: k.doc, at: s, from: k.from + (s - s0), len, gain: k.gain, fin: s === a0 ? Math.min(F, len) : 0, fout: e < s0 + k.len || !k.loop ? Math.min(F, len) : 0 });
     };
-    if (!k.loop) { add(a0, 0); continue; }
-    for (let j = Math.max(0, Math.floor((p - a0) / k.len)); a0 + j * k.len < Math.min(a1, e1); j++) add(a0 + j * k.len, j);
+    if (!k.loop) { add(b0, 0); continue; }
+    for (let j = Math.max(0, Math.floor((p - b0) / k.len)); b0 + j * k.len < Math.min(a1, e1); j++) add(b0 + j * k.len, j);
   }
   return out;
 }
@@ -1557,12 +1558,39 @@ function scLaunch(m) {
     const tid = String(it.tr), k = scSlot(it.k);
     const L = (SES.scn.ev.get(tid) || []).filter(e => e.at < at);
     while (L.length > 1 && L[1].at <= r) L.shift();
-    L.push({ at, k });
+    const ref = it.cont && typeof it.cont === "object" ? it.cont : null, off = ref ? Math.max(0, Math.floor(at - Number(ref.at) + (Number(ref.off) || 0))) : 0;
+    L.push({ at, k, off });
     SES.scn.ev.set(tid, L);
-    done.push({ tr: tid, at, k: k ? k.id : null });
+    done.push({ tr: tid, at, k: k ? k.id : null, off });
   }
   sesFlush();
   postMessage({ t: "sclaunched", items: done });
+}
+
+async function scLufs(m) {
+  const c = SES.docs.get(String(m.doc));
+  if (!c) throw new Error("stale");
+  const x = await dspExports(), ch = c.meta.channels, a = clampI(m.from, 0, c.len), b = clampI(Number(m.from) + Number(m.len), 0, c.len);
+  if (b <= a) throw new Error("nothing");
+  if (x.lm_open(ch, c.meta.sampleRate) !== 0) throw new Error(dspError(x));
+  const rd = (src, cc, f, k, out, off) => readSrcOf(c, src, cc, f, k, out, off), B = 65536;
+  let i = 0;
+  for (let s = a; s < b; s += B) {
+    const n = Math.min(B, b - s), p = x.lm_in(n, ch), inb = new Float32Array(x.memory.buffer, p, n * ch);
+    for (let k = 0; k < ch; k++) readList(c.lists[k], c.cum[k], s, n, inb, k * n, rd);
+    if (x.lm_feed(n) !== 0) throw new Error(dspError(x));
+    if (++i % 16 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+  return { t: "sclufs", lufs: ldStatsOut(x).integrated };
+}
+
+function scRead(m) {
+  const c = SES.docs.get(String(m.doc));
+  if (!c) throw new Error("stale");
+  const ch = c.meta.channels, a = clampI(m.from, 0, c.len), n = clampI(m.len, 0, Math.min(c.len - a, c.meta.sampleRate * 120));
+  const out = new Float32Array(n * ch), rd = (src, cc, f, k, o, off) => readSrcOf(c, src, cc, f, k, o, off);
+  for (let k = 0; k < ch; k++) readList(c.lists[k], c.cum[k], a, n, out, k * n, rd);
+  return { t: "scread", ch, n, sr: c.meta.sampleRate, data: out };
 }
 
 function sesRackMeter(key) {
@@ -1618,7 +1646,7 @@ function sesStartPlay(m) {
   if (!SES.s || !SES.mix || !ring) return;
   const P = m.punch && typeof m.punch === "object" ? { tr: String(m.punch.tr), a: Math.max(0, Math.floor(Number(m.punch.a) || 0)), b: Number(m.punch.b) >= 0 ? Math.floor(Number(m.punch.b)) : -1 } : null;
   const scn = m.scenes ? { ev: new Map() } : null;
-  if (scn) for (const it of Array.isArray(m.items) ? m.items : []) scn.ev.set(String(it.tr), [{ at: 0, k: scSlot(it.k) }]);
+  if (scn) for (const it of Array.isArray(m.items) ? m.items : []) scn.ev.set(String(it.tr), [{ at: 0, k: scSlot(it.k), off: Math.max(0, Math.floor(Number(it.off) || 0)) }]);
   if (P || SES.punch || scn || SES.scn) { SES.punch = P; SES.scn = scn; SES.mix = sesMixer(SES.s); }
   const F = m.rec || m.scenes ? Math.max(sesLen(SES.s), Math.floor(Number(m.end) || 0)) : sesLen(SES.s);
   const start = Math.max(0, Math.min(Math.floor(m.start), F)), end = Math.max(start, Math.min(Math.floor(m.end), F));
@@ -4494,6 +4522,8 @@ async function handle(m) {
   if (m.t === "sesmix") { sesSetMix(m); return; }
   if (m.t === "sesplay") { sesStartPlay(m); return; }
   if (m.t === "sclaunch") { scLaunch(m); return; }
+  if (m.t === "sclufs") { try { postMessage(Object.assign({ req: m.req }, await enqueue(() => scLufs(m)))); } catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); } return; }
+  if (m.t === "scread") { try { const r = scRead(m); postMessage(Object.assign({ req: m.req }, r), [r.data.buffer]); } catch (e) { postMessage({ t: "error", req: m.req, msg: errText(e) }); } return; }
   if (m.t === "sesclose") { postMessage(Object.assign({ req: m.req }, await enqueue(async () => sesClose()))); return; }
   if (m.t === "sesdel") { postMessage(Object.assign({ req: m.req }, await sesDel(m))); return; }
   if (m.t === "sesbounce") { postMessage(Object.assign({ req: m.req }, await sesBounce(m))); return; }

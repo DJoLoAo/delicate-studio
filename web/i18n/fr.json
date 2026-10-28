@@ -1511,5 +1511,17 @@
  "There are no stems in Studio yet. Make them with the stems button in the Library or the Locker.": "Il n'y a pas encore de stems dans Studio. Créez-les avec le bouton stems dans la bibliothèque ou le Locker.",
  "This file has no markers. Add some with M in the waveform.": "Ce fichier n'a pas de marqueurs. Ajoutez-en avec M dans la forme d'onde.",
  "{n} slots filled": "{n} emplacements remplis",
- "{n} stems in {s}": "{n} stems dans {s}"
+ "{n} stems in {s}": "{n} stems dans {s}",
+ "A/B: one slot at a time, matched to {v} LUFS": "A/B : un emplacement à la fois, aligné sur {v} LUFS",
+ "Alt+click a slot to hear it on this output": "Alt+clic sur un emplacement pour l'écouter sur cette sortie",
+ "Capture": "Capture",
+ "Cue": "Pré-écoute",
+ "Cue (Alt+click)": "Pré-écoute (Alt+clic)",
+ "Cue on the main output": "Pré-écoute sur la sortie principale",
+ "Measuring loudness": "Mesure de la sonie",
+ "One slot at a time, at matched loudness, switching at the same point": "Un emplacement à la fois, à sonie égale, changement au même endroit",
+ "Stop the cue": "Arrêter la pré-écoute",
+ "That output is not available. Cueing on the main output.": "Cette sortie n'est pas disponible. Pré-écoute sur la sortie principale.",
+ "Write what you launch onto the multitrack at its cursor when you stop": "Écrit ce que vous lancez dans le multipiste, au curseur, à l'arrêt",
+ "{n} clips captured into the multitrack at {t}": "{n} clips capturés dans le multipiste à {t}"
 }

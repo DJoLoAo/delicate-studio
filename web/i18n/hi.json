@@ -1511,5 +1511,17 @@
  "There are no stems in Studio yet. Make them with the stems button in the Library or the Locker.": "Studio में अभी कोई स्टेम नहीं है। लाइब्रेरी या Locker में स्टेम बटन से बनाएँ।",
  "This file has no markers. Add some with M in the waveform.": "इस फ़ाइल में मार्कर नहीं हैं। वेवफ़ॉर्म में M से जोड़ें।",
  "{n} slots filled": "{n} स्लॉट भरे",
- "{n} stems in {s}": "{s} में {n} स्टेम"
+ "{n} stems in {s}": "{s} में {n} स्टेम",
+ "A/B: one slot at a time, matched to {v} LUFS": "A/B: एक बार में एक स्लॉट, {v} LUFS पर मिलाया",
+ "Alt+click a slot to hear it on this output": "किसी स्लॉट पर Alt+क्लिक करके उसे इस आउटपुट पर सुनें",
+ "Capture": "कैप्चर",
+ "Cue": "क्यू",
+ "Cue (Alt+click)": "क्यू (Alt+क्लिक)",
+ "Cue on the main output": "मुख्य आउटपुट पर क्यू",
+ "Measuring loudness": "लाउडनेस माप रहे हैं",
+ "One slot at a time, at matched loudness, switching at the same point": "एक बार में एक स्लॉट, बराबर लाउडनेस पर, उसी जगह बदलते हुए",
+ "Stop the cue": "क्यू रोकें",
+ "That output is not available. Cueing on the main output.": "वह आउटपुट उपलब्ध नहीं है। मुख्य आउटपुट पर क्यू।",
+ "Write what you launch onto the multitrack at its cursor when you stop": "रोकने पर जो चलाया वह मल्टीट्रैक में कर्सर पर लिख देता है",
+ "{n} clips captured into the multitrack at {t}": "{n} क्लिप {t} पर मल्टीट्रैक में कैप्चर हुए"
 }

@@ -1,4 +1,4 @@
-const sn = { ev: new Map(), taps: [], built: "" };
+const sn = { ev: new Map(), taps: [], built: "", capture: false, measuring: false, cue: null };
 
 function snData() {
   if (!ses.s.scenes || typeof ses.s.scenes !== "object") ses.s.scenes = { tempo: 120, quant: "bar", rows: [] };
@@ -6,6 +6,7 @@ function snData() {
   if (!Array.isArray(d.rows)) d.rows = [];
   if (!Number.isFinite(d.tempo)) d.tempo = 120;
   if (!["bar", "beat", "off"].includes(d.quant)) d.quant = "bar";
+  d.ab = !!d.ab;
   return d;
 }
 
@@ -42,6 +43,7 @@ function snShow() {
 }
 
 function snHide() {
+  snCueStop();
   $("ses").classList.remove("scmode");
   $("scn").classList.add("hidden");
   $("sesBody").classList.remove("hidden");
@@ -59,7 +61,7 @@ function snRender() {
   if (!ses.open || ses.mode !== "scenes") return;
   const d = snData();
   snBar(d);
-  const key = JSON.stringify([d.rows, ses.s.tracks.map(tr => [tr.id, tr.name, tr.mute, tr.solo, tr.gain]), ses.s.sr]);
+  const key = JSON.stringify([d.rows, d.ab, ses.s.tracks.map(tr => [tr.id, tr.name, tr.mute, tr.solo, tr.gain]), ses.s.sr]);
   if (key === sn.built) { snTick(ses.play.on ? ssPlayhead() : 0); return; }
   sn.built = key;
   const g = $("scGrid"), T = ses.s.tracks;
@@ -74,7 +76,7 @@ function snRender() {
     T.forEach((tr, i) => {
       const k = row.slots[tr.id];
       if (!k) { h.push(`<button type="button" class="scs empty" data-row="${esc(row.id)}" data-tr="${esc(tr.id)}" title="${esc(t("Choose a file…"))}"></button>`); return; }
-      h.push(`<button type="button" class="scs" data-row="${esc(row.id)}" data-tr="${esc(tr.id)}" data-slot="${esc(k.id)}" style="--c:${tc(SS_COLORS[i % SS_COLORS.length])}"><span class="scsn">${esc(k.name || t("Clip"))}</span><span class="scsi">${k.loop ? "⟳ " : "→ "}${esc(snLenText(k))}</span><i class="scp"></i></button>`);
+      h.push(`<button type="button" class="scs" data-row="${esc(row.id)}" data-tr="${esc(tr.id)}" data-slot="${esc(k.id)}" style="--c:${tc(SS_COLORS[i % SS_COLORS.length])}"><span class="scsn">${esc(k.name || t("Clip"))}</span><span class="scsi">${k.loop ? "⟳ " : "→ "}${esc(snLenText(k))}${d.ab && Number.isFinite(k.lufs) ? " · " + esc(k.lufs.toFixed(1)) + " LUFS" : ""}</span><i class="scp"></i></button>`);
     });
   });
   h.push(`<div class="scrow scadd"><button type="button" class="outbtn scnew">+ ${esc(t("Scene"))}</button></div>`);
@@ -86,14 +88,19 @@ function snBar(d) {
   const b = $("scBar");
   if (!b.dataset.wired) {
     b.dataset.wired = "1";
-    b.innerHTML = `<label class="sctempo"><span>${esc(t("Tempo"))}</span><input id="scTempo" inputmode="decimal" spellcheck="false" autocomplete="off"><b>BPM</b></label><button type="button" class="outbtn" id="scTap">${esc(t("tap"))}</button>${segHtml("q", [["bar", "Bar"], ["beat", "Beat"], ["off", "Off"]], d.quant).replace('class="seg dseg"', 'class="seg" id="scQuant"')}<span class="grow"></span><button type="button" class="outbtn" id="scFill">${esc(t("Fill from the multitrack"))}</button>`;
+    b.innerHTML = `<label class="sctempo"><span>${esc(t("Tempo"))}</span><input id="scTempo" inputmode="decimal" spellcheck="false" autocomplete="off"><b>BPM</b></label><button type="button" class="outbtn" id="scTap">${esc(t("tap"))}</button>${segHtml("q", [["bar", "Bar"], ["beat", "Beat"], ["off", "Off"]], d.quant).replace('class="seg dseg"', 'class="seg" id="scQuant"')}<span class="grow"></span><button type="button" class="outbtn" id="scAb" title="${esc(t("One slot at a time, at matched loudness, switching at the same point"))}">A/B</button><button type="button" class="outbtn" id="scCap" title="${esc(t("Write what you launch onto the multitrack at its cursor when you stop"))}">● ${esc(t("Capture"))}</button><div class="dd down" id="scCue" title="${esc(t("Alt+click a slot to hear it on this output"))}"><div class="cur"></div><div class="list"></div></div><button type="button" class="outbtn" id="scFill">${esc(t("Fill from the multitrack"))}</button>`;
     const ti = $("scTempo");
     ti.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); ti.blur(); } e.stopPropagation(); });
     ti.addEventListener("change", () => { const v = Number(String(ti.value).replace(",", ".")); if (Number.isFinite(v)) snSetTempo(v); else ti.value = snData().tempo; });
     $("scTap").addEventListener("click", e => { e.currentTarget.blur(); snTap(); });
     $("scQuant").addEventListener("click", e => { const x = e.target.closest("button"); if (!x) return; x.blur(); snData().quant = x.dataset.v; ssCommit(); snBar(snData()); });
     $("scFill").addEventListener("click", e => { e.currentTarget.blur(); snFill(); });
+    $("scAb").addEventListener("click", e => { e.currentTarget.blur(); snAbToggle(); });
+    $("scCap").addEventListener("click", e => { e.currentTarget.blur(); sn.capture = !sn.capture; snBar(snData()); });
+    snCueDd();
   }
+  $("scAb").classList.toggle("on", d.ab);
+  $("scCap").classList.toggle("on", sn.capture);
   if (document.activeElement !== $("scTempo")) $("scTempo").value = String(Math.round(d.tempo * 10) / 10);
   $("scQuant").querySelectorAll("button").forEach(x => x.classList.toggle("on", x.dataset.v === d.quant));
 }
@@ -136,7 +143,7 @@ function snTick(ph) {
     const st = on ? snState(el.dataset.tr, ph) : { cur: null, next: null }, id = el.dataset.slot, f = snFind(id);
     let play = !!(st.cur && st.cur.k === id), frac = 0;
     if (play && f) {
-      const q = ph - st.cur.at;
+      const q = ph - st.cur.at + (st.cur.off || 0);
       if (!f.k.loop && q >= f.k.len) play = false;
       frac = f.k.loop ? (q % f.k.len) / f.k.len : Math.min(1, q / f.k.len);
     }
@@ -154,9 +161,46 @@ async function snLaunch(items) {
   if (!ses.open || !items.length) return;
   if (!ses.s.sr) { flash(t("Add a file first: it sets the session's sample rate.")); return; }
   if (pc.rec || pc.busy) return;
-  const wire = items.map(it => ({ tr: it.tr, k: it.k ? Object.assign({}, it.k) : null }));
+  const ab = snData().ab && items.length === 1 && items[0].k;
+  const wire = ab ? snAbItems(items[0]) : items.map(it => ({ tr: it.tr, k: it.k ? Object.assign({}, it.k) : null }));
   if (!ses.play.on) { await snPlay(wire); return; }
-  ed.worker.postMessage({ t: "sclaunch", items: wire, q: snQ() });
+  ed.worker.postMessage({ t: "sclaunch", items: wire, q: ab ? 0 : snQ() });
+}
+
+function snAbTarget() {
+  const L = [];
+  for (const r of snData().rows) for (const k of Object.values(r.slots)) if (Number.isFinite(k.lufs)) L.push(k.lufs);
+  return L.length ? Math.min(...L) : null;
+}
+
+function snAbItems(it) {
+  const T = snAbTarget(), k = Object.assign({}, it.k), ph = ses.play.on ? ssPlayhead() : 0;
+  if (T !== null && Number.isFinite(k.lufs)) k.gain = (k.gain || 0) + (T - k.lufs);
+  let ref = null;
+  if (ses.play.on) for (const [tid, L] of sn.ev) { const st = snState(tid, ph); if (st.cur && st.cur.k && (!ref || st.cur.at > ref.at)) ref = st.cur; }
+  return ses.s.tracks.map(tr => tr.id === it.tr ? { tr: tr.id, k, cont: ref ? { at: ref.at, off: ref.off || 0 } : null } : { tr: tr.id, k: null });
+}
+
+async function snAbToggle() {
+  const d = snData();
+  if (d.ab) { d.ab = false; ssSaveSoon(); snRender(); return; }
+  if (sn.measuring) return;
+  const todo = [];
+  for (const r of d.rows) for (const k of Object.values(r.slots)) if (!Number.isFinite(k.lufs)) todo.push(k);
+  sn.measuring = true;
+  try {
+    for (let i = 0; i < todo.length; i++) {
+      clearTimeout(ed.flashT);
+      $("stMsg").textContent = t("Measuring loudness") + " · " + (i + 1) + "/" + todo.length;
+      try { const r = await call({ t: "sclufs", doc: todo[i].doc, from: todo[i].from, len: todo[i].len }); todo[i].lufs = Number.isFinite(r.lufs) ? r.lufs : null; } catch {}
+    }
+  } finally { sn.measuring = false; $("stMsg").textContent = ""; }
+  if (!ses.open) return;
+  snData().ab = true;
+  ssSaveSoon();
+  sn.built = "";
+  snRender();
+  flash(t("A/B: one slot at a time, matched to {v} LUFS").replace("{v}", (snAbTarget() ?? 0).toFixed(1)));
 }
 
 async function snPlay(items) {
@@ -174,12 +218,89 @@ async function snPlay(items) {
 function snLaunched(m) {
   for (const it of m.items) {
     const L = (sn.ev.get(it.tr) || []).filter(e => e.at < it.at);
-    L.push({ at: it.at, k: it.k });
+    L.push({ at: it.at, k: it.k, off: it.off || 0 });
     sn.ev.set(it.tr, L);
   }
 }
 
-function snStopped() { sn.ev = new Map(); snTick(0); }
+function snStopped(pos) {
+  if (sn.capture && pos !== undefined) snCapture(pos);
+  sn.ev = new Map();
+  snTick(0);
+}
+
+function snCapture(pos) {
+  const base = Math.round(ses.cursor), add = [];
+  for (const [tid, L] of sn.ev) {
+    const tr = ses.s.tracks.find(x => x.id === tid);
+    if (!tr) continue;
+    const mine = [];
+    L.forEach((e, i) => {
+      const f = e.k && snFind(e.k), end = Math.min(pos, i + 1 < L.length ? L[i + 1].at : pos);
+      if (!f || end <= e.at) return;
+      const k = f.k, b0 = e.at - (e.off || 0) % k.len;
+      const put = s0 => { const s = Math.max(s0, e.at), x = Math.min(s0 + k.len, end); if (x - s >= 1) mine.push({ id: ssNewId(), doc: k.doc, at: base + s, from: k.from + (s - s0), len: x - s, gain: k.gain || 0, fin: 0, fout: 0, name: k.name }); };
+      if (!k.loop) put(b0);
+      else for (let s0 = b0; s0 < end; s0 += k.len) put(s0);
+    });
+    if (!mine.length) continue;
+    const a = Math.min(...mine.map(k => k.at)), b = Math.max(...mine.map(k => k.at + k.len));
+    tr.clips = smHole(tr.clips, a, b).map(k => k.id.endsWith("~") ? Object.assign({}, k, { id: ssNewId() }) : k).concat(mine).sort((p, q) => p.at - q.at);
+    add.push(...mine);
+  }
+  if (!add.length) return;
+  ssCommit();
+  flash(t("{n} clips captured into the multitrack at {t}").replace("{n}", add.length).replace("{t}", fmtTime(base)));
+}
+
+async function snCueDevs() {
+  let L = [];
+  try { L = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audiooutput" && d.deviceId !== "default" && d.deviceId !== "communications"); } catch {}
+  return L.map((d, i) => ({ v: d.deviceId, label: d.label || t("Output") + " " + (i + 1) }));
+}
+
+async function snCueDd() {
+  const el = $("scCue"), can = typeof AudioContext !== "undefined" && "setSinkId" in AudioContext.prototype;
+  let cur = "";
+  try { cur = localStorage.getItem("studioCueDev") || ""; } catch {}
+  const devs = can ? await snCueDevs() : [];
+  const items = [{ v: "", label: t("Cue on the main output") }].concat(devs.map(d => ({ v: d.v, label: t("Cue") + ": " + d.label })));
+  fxDd(el, items, v => { try { localStorage.setItem("studioCueDev", v); } catch {} snCueStop(); snCueDd(); });
+  const it = items.find(x => x.v === cur) || items[0];
+  el.querySelector(".cur").textContent = it.label;
+}
+
+function snCueStop() {
+  const C = sn.cue;
+  sn.cue = null;
+  if (C) { try { C.src.stop(); } catch {} try { C.ctx.close(); } catch {} }
+  document.querySelectorAll("#scGrid .scs.cue").forEach(e => e.classList.remove("cue"));
+}
+
+async function snCue(k) {
+  const was = sn.cue && sn.cue.id;
+  snCueStop();
+  if (was === k.id) return;
+  let r;
+  try { r = await call({ t: "scread", doc: k.doc, from: k.from, len: k.len }); } catch (e) { tell(String(e.message || e)); return; }
+  if (!r.n) return;
+  const ctx = new AudioContext({ sampleRate: r.sr, latencyHint: "interactive" });
+  let dev = "";
+  try { dev = localStorage.getItem("studioCueDev") || ""; } catch {}
+  if (dev && ctx.setSinkId) { try { await ctx.setSinkId(dev); } catch { flash(t("That output is not available. Cueing on the main output.")); } }
+  const buf = ctx.createBuffer(r.ch, r.n, r.sr);
+  for (let c = 0; c < r.ch; c++) buf.copyToChannel(r.data.subarray(c * r.n, (c + 1) * r.n), c);
+  const src = ctx.createBufferSource(), g = ctx.createGain();
+  src.buffer = buf;
+  src.loop = k.loop;
+  g.gain.value = Math.pow(10, (k.gain || 0) / 20);
+  src.connect(g).connect(ctx.destination);
+  src.onended = () => { if (sn.cue && sn.cue.src === src) snCueStop(); };
+  src.start();
+  sn.cue = { ctx, src, id: k.id };
+  const el = document.querySelector('#scGrid .scs[data-slot="' + CSS.escape(k.id) + '"]');
+  if (el) el.classList.add("cue");
+}
 
 function snRowLaunch(rowId) {
   const row = snData().rows.find(r => r.id === rowId);
@@ -347,6 +468,7 @@ function snMenu(e) {
     const f = snFind(el.dataset.slot);
     if (!f) return;
     items.push({ label: t("Launch"), enabled: true, run: () => snLaunch([{ tr: f.tid, k: f.k }]) },
+      { label: sn.cue && sn.cue.id === f.k.id ? t("Stop the cue") : t("Cue (Alt+click)"), enabled: true, run: () => snCue(f.k) },
       { label: f.k.loop ? t("Play once") : t("Loop"), enabled: true, run: () => { const g = snFind(f.k.id); if (g) { g.k.loop = !g.k.loop; ssCommit(); snRender(); } } },
       { label: t("Rename the slot"), enabled: true, run: () => snRename("slot", f.k.id) },
       { label: t("Open in waveform"), enabled: true, run: () => vwOpenClip(f.k) },
@@ -372,6 +494,7 @@ function snClick(e) {
   if (b.classList.contains("scs")) {
     if (b.classList.contains("empty")) { snChoose(b.dataset.row, b.dataset.tr); return; }
     const f = snFind(b.dataset.slot);
+    if (f && e.altKey) { snCue(f.k); return; }
     if (f) snLaunch([{ tr: f.tid, k: f.k }]);
   }
 }

@@ -262,7 +262,7 @@ function ssStop(keep) {
   if (ed.ring) Atomics.store(ed.ring.ctrl, 0, 0);
   ed.worker.postMessage({ t: "stop" });
   if (keep === "here") ses.cursor = Math.floor(pos);
-  if (ses.mode === "scenes") snStopped();
+  if (ses.mode === "scenes") snStopped(pos);
   ssButtons();
   ssDraw();
 }
