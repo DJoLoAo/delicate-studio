@@ -149,6 +149,10 @@ const CMDS = [
   { id: "punchCfg", g: "Transport", label: "Recording in sessions…", run: () => pcSettings(), ss: () => pcSettings(), sesOnly: true, kw: "punch in out pre roll post roll latency offset takes monitor input" },
   { id: "export", g: "File", label: "Export…", run: () => openExport(), doc: true, kw: "render bounce save wav flac master dither", ss: () => ssBounce(true), ssWhen: () => ssLen() > 0 },
   { id: "publish", g: "File", label: "Publish…", run: () => pbOpen(), doc: true, kw: "mixcloud locker upload share release set mix", ss: () => pbOpen(), ssWhen: () => ssLen() > 0 },
+  { id: "djApp", g: "File", label: "Open Delicate DJ", run: () => { location.href = "https://dj.delicateaudio.com/"; }, kw: "dj app decks delicate dj switch app" },
+  { id: "viewWave", g: "View", label: "Waveform", run: () => vwWave(), ss: () => vwWave(), kw: "waveform editor sample editor switch view single file audition 8" },
+  { id: "viewMulti", g: "View", label: "Multitrack", run: () => vwMulti(), ss: () => {}, ssWhen: () => false, kw: "multitrack session switch view arrange audition 9" },
+  { id: "toMulti", g: "File", label: "Insert into multitrack", run: () => vwInsert(false), doc: true, kw: "add to session multitrack track clip selection range insert audition" },
   { id: "sesNew", g: "File", label: "New session…", run: () => ssNewDlg(), kw: "multitrack session tracks mix arrange daw project" },
   { id: "sessions", g: "File", label: "Sessions", run: () => openFiles("sessions"), kw: "multitrack session tracks mix arrange project" },
   { id: "sesAdd", g: "Edit", label: "Add files to the session…", run: () => ssAddDlg(), ss: () => ssAddDlg(), sesOnly: true, kw: "multitrack track import file clip" },
@@ -181,7 +185,7 @@ const BASE_KEYS = {
   undo: ["Mod+Z"], redo: ["Mod+Shift+Z", "Mod+Y"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
   delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"], heal: ["Mod+U"], nrCap: ["Shift+P"],
   markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"], spec: ["Shift+D"], toolRect: ["E"], toolLasso: ["D"], toolBrush: ["B"], pencil: ["P"], sesSplit: ["S"], transients: ["Shift+T"], nextTransient: ["Tab"], prevTransient: ["Shift+Tab"],
-  open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"], rec: ["Shift+Space"]
+  open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"], rec: ["Shift+Space"], viewWave: ["8"], viewMulti: ["9"]
 };
 
 const KEYMAPS = {

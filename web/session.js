@@ -88,6 +88,7 @@ function ssRestore(i) {
   if (i < 0 || i >= ses.hist.length || i === ses.idx) return;
   ses.idx = i;
   ses.s = JSON.parse(ses.hist[i]);
+  vwFit(ses.s);
   if (ses.clip && !ssTrackOf(ses.clip)) ses.clip = null;
   ssSaveSoon();
   ssMix();
@@ -149,8 +150,11 @@ async function ssOpen(id) {
   ses.s = r.s;
   ses.docs = new Map();
   for (const p of r.docs) ssUse(p);
+  const cut = vwFit(ses.s);
   ses.hist = [ssSnap()];
   ses.idx = 0;
+  vwRestore();
+  vwNoteSes(id);
   ses.clip = null;
   ses.mark = null;
   ses.mdrag = null;
@@ -173,12 +177,15 @@ async function ssOpen(id) {
     else ssZoomFit();
   });
   ed.worker.postMessage({ t: "sesmix", s: ses.s });
+  vwRender();
+  if (cut.length) { ssSaveSoon(); ssMix(); tell(t("These clips were shortened because their files are shorter now:") + "\n" + [...new Set(cut)].join("\n"), t("Files changed")); }
   const miss = r.docs.filter(p => p.missing).length;
   if (miss) flash(miss === 1 ? t("1 file of this session is no longer in Studio.") : t("{n} files of this session are no longer in Studio.").replace("{n}", miss));
 }
 
 async function ssClose(quiet) {
   if (!ses.open) return;
+  vwKeep();
   fxSesClose();
   ssStop();
   pcDisarm();
@@ -191,6 +198,7 @@ async function ssClose(quiet) {
   try { localStorage.removeItem("studioLastSession"); } catch {}
   call({ t: "sesclose" }).catch(() => {});
   if (!quiet && !ed.doc) $("empty").classList.remove("hidden");
+  vwRender();
 }
 
 function ssInfo() {
@@ -814,7 +822,7 @@ async function ssAddDlg() {
   for (const id of ids) await ssAddDoc(id);
 }
 
-async function ssAddDoc(id, at) {
+async function ssAddDoc(id, at, range) {
   let p;
   try { p = (await call({ t: "sesdoc", id })).doc; } catch (e) { tell(String(e.message || e), t("Could not add the file")); return null; }
   if (p.missing) return null;
@@ -828,7 +836,8 @@ async function ssAddDoc(id, at) {
   ssUse(p);
   if (!ses.s.sr) ses.s.sr = p.meta.sampleRate;
   const tr = { id: ssNewId(), name: (p.meta.name || "").replace(/\.[^.]+$/, "") || ssTrackName(ses.s.tracks.length + 1), gain: 0, pan: 0, mute: false, solo: false, clips: [] };
-  tr.clips.push({ id: ssNewId(), doc: p.id, at: Math.max(0, Math.round(at !== undefined ? at : ses.cursor)), from: 0, len: p.len, gain: 0, fin: 0, fout: 0, name: p.meta.name });
+  const r0 = range ? Math.max(0, Math.min(p.len - 1, Math.round(range.a * p.meta.sampleRate))) : 0, r1 = range ? Math.max(r0 + 1, Math.min(p.len, Math.round(range.b * p.meta.sampleRate))) : p.len;
+  tr.clips.push({ id: ssNewId(), doc: p.id, at: Math.max(0, Math.round(at !== undefined ? at : ses.cursor)), from: r0, len: r1 - r0, gain: 0, fin: 0, fout: 0, name: p.meta.name });
   ses.s.tracks.push(tr);
   ses.track = tr.id;
   ssCommit();
@@ -1042,16 +1051,11 @@ function ssMenu(e) {
     items.push({ label: t("Split at the cursor"), key: cmdKeyText("sesSplit"), enabled: true, run: () => { ses.cursor = Math.round(ssF(x)); ssSplit(); } },
       { label: t("Clip gain…"), enabled: true, run: () => ssClipGain() },
       { label: t("Remove the clip"), key: cmdKeyText("delete"), enabled: true, run: () => ssDelete() },
-      { label: t("Open the file"), enabled: !!(ses.docs.get(h.k.doc) && !ses.docs.get(h.k.doc).missing), run: () => ssOpenFile(h.k.doc) }, "-");
+      { label: t("Open in waveform"), key: cmdKeyText("viewWave"), enabled: !!(ses.docs.get(h.k.doc) && !ses.docs.get(h.k.doc).missing), run: () => vwOpenClip(h.k) }, "-");
   }
   items.push({ label: t("New track"), enabled: true, run: () => pcNewTrack() }, { label: atr && pc.arm === atr.id ? t("Disarm the track") : t("Arm the track for recording"), enabled: !!atr && !pc.rec, run: () => pcArm(atr.id) }, { label: t("Recording in sessions…"), enabled: true, run: () => pcSettings() }, "-");
   items.push({ label: t("Add files…"), enabled: true, run: () => ssAddDlg() }, { label: t("Mix down to a new file"), enabled: ssLen() > 0, run: () => ssBounce(false) }, { label: t("Export…"), key: cmdKeyText("export"), enabled: ssLen() > 0, run: () => ssBounce(true) });
   ctxOpen(e.clientX, e.clientY, items, false);
-}
-
-async function ssOpenFile(id) {
-  await ssClose(true);
-  await openDoc(id);
 }
 
 function ssFilesTab() {
@@ -1073,6 +1077,7 @@ function ssFilesTab() {
         ev.stopPropagation();
         if (!(await ask(t("Delete this session?"), t("Only the session goes. Its files stay in Studio."), { ok: t("delete") }))) return;
         try { await call({ t: "sesdel", id: s.id }); } catch {}
+        vwForgetSes(s.id);
         if (ses.open && ses.s && ses.s.id === s.id) await ssClose();
         ssFilesTab();
       });
@@ -1094,7 +1099,9 @@ function wireSes() {
     const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, row = Math.floor(y / ssLane()), tr = ses.s && ses.s.tracks[row];
     if (tr && tr.view) { const i = ssAutoHit(tr, row, x, y); if (i >= 0) { ssAuto(tr)[tr.view].splice(i, 1); ses.apt = null; ssCommit(); } return; }
     const h = ssHit(x, y);
-    if (h.k) ssClipGain();
+    if (!h.k) return;
+    ses.clip = h.k.id;
+    if (e.altKey) ssClipGain(); else vwOpenClip(h.k);
   });
   const ru = $("sesRu");
   let rd = false;

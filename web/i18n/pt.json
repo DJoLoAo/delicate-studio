@@ -1464,5 +1464,12 @@
  "The recording could not start.": "A gravação não conseguiu começar.",
  "The take did not reach the punch range.": "O take não chegou ao intervalo de punch.",
  "This browser cannot record at {r} kHz here.": "Este navegador não consegue gravar aqui a {r} kHz.",
- "{t} recorded on {n}": "{t} gravado em {n}"
+ "{t} recorded on {n}": "{t} gravado em {n}",
+ "Multitrack": "Multipista",
+ "Insert into multitrack": "Inserir no multipista",
+ "New session with this file": "Nova sessão com este ficheiro",
+ "Add files or record into it.": "Adicione ficheiros ou grave nela.",
+ "Open in waveform": "Abrir na forma de onda",
+ "Files changed": "Ficheiros alterados",
+ "These clips were shortened because their files are shorter now:": "Estes clips foram encurtados porque os ficheiros agora são mais curtos:"
 }

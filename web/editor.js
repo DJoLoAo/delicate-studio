@@ -712,6 +712,8 @@ function applyState(st) {
 
 function showOpened(r) {
   showDoc(r.meta, r.peaks, r.bands, r.state);
+  vwNoteDoc(r.meta.id);
+  vwRender();
   if (r.recovered) tell(t("Studio restored this file's edit history from its last good save. The most recent edit may be missing."), t("History restored"));
 }
 
@@ -766,6 +768,7 @@ function showDoc(meta, peaks, bands, state) {
 }
 
 function closeDoc() {
+  saveView(true);
   stopPlay();
   dgReset();
   closeDiag();
@@ -785,6 +788,7 @@ function closeDoc() {
   try { localStorage.removeItem("studioLastDoc"); } catch {}
   call({ t: "close" }).catch(() => {});
   refreshFiles();
+  vwRender();
 }
 
 async function openDoc(id) {
@@ -1004,6 +1008,7 @@ async function refreshFiles() {
         if (!(await ask(t("Remove from Studio?"), d.name + "\n\n" + t("This deletes Studio's working copy from this browser. Your original file is not touched."), { ok: t("remove") }))) return;
         try {
           await call({ t: "remove", id: d.id });
+          vwForgetDoc(d.id);
           try { localStorage.removeItem("studioView:" + d.id); } catch {}
           if (ed.doc && ed.doc.id === d.id) closeDoc(); else refreshFiles();
         } catch (e) { tell(e && e.message === "exporting" ? t("This file is being exported or is used in the open session. Remove it when the render has finished or the session is closed.") : String(e.message || e)); }
@@ -1827,6 +1832,7 @@ function wireUi() {
   wirePen();
   wireTn();
   wireSes();
+  wireView();
   wirePunch();
   wireTags();
   wireAlbum();

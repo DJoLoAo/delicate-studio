@@ -1464,5 +1464,12 @@
  "The recording could not start.": "रिकॉर्डिंग शुरू नहीं हो सकी।",
  "The take did not reach the punch range.": "टेक पंच रेंज तक नहीं पहुँचा।",
  "This browser cannot record at {r} kHz here.": "यह ब्राउज़र यहाँ {r} kHz पर रिकॉर्ड नहीं कर सकता।",
- "{t} recorded on {n}": "{t} {n} पर रिकॉर्ड हुआ"
+ "{t} recorded on {n}": "{t} {n} पर रिकॉर्ड हुआ",
+ "Multitrack": "मल्टीट्रैक",
+ "Insert into multitrack": "मल्टीट्रैक में डालें",
+ "New session with this file": "इस फ़ाइल के साथ नया सेशन",
+ "Add files or record into it.": "फ़ाइलें जोड़ें या उसमें रिकॉर्ड करें।",
+ "Open in waveform": "वेवफ़ॉर्म में खोलें",
+ "Files changed": "फ़ाइलें बदलीं",
+ "These clips were shortened because their files are shorter now:": "ये क्लिप छोटे किए गए क्योंकि इनकी फ़ाइलें अब छोटी हैं:"
 }

@@ -98,7 +98,9 @@ button,a{touch-action:manipulation}
 #dlg .dbtns .dok{color:var(--gold);border-color:var(--gold)}
 
 @media (max-width:520px){
-  .top .who{display:none}
+  .top .who,.top .djlink{display:none}
+  .top{gap:calc(6px*var(--fs));padding-left:calc(10px*var(--fs))}
+  .top .logo svg{height:calc(18px*var(--fs))}
   .empty h1{font-size:calc(28px*var(--fs))}
 }
 
@@ -133,6 +135,17 @@ button,a{touch-action:manipulation}
 .seg.hidden{display:none}
 .segbtn{background:var(--bg3);color:var(--gray);border:0;border-right:1px solid var(--border);padding:calc(4px*var(--fs)) calc(9px*var(--fs));font:inherit;font-size:calc(10px*var(--fs));letter-spacing:.04em;cursor:pointer}
 .segbtn:last-child{border-right:0}
+.vsw{flex:none;margin-left:calc(6px*var(--fs))}
+.vsw .segbtn{display:inline-flex;align-items:center;gap:calc(6px*var(--fs));padding:calc(5px*var(--fs)) calc(10px*var(--fs))}
+.vsw svg{width:calc(14px*var(--fs));height:calc(14px*var(--fs))}
+.vsw .segbtn.on{color:var(--bg);background:var(--gold)}
+.vwrows{display:flex;flex-direction:column;gap:calc(4px*var(--fs));max-height:50vh;overflow:auto}
+.vwrow{display:flex;flex-direction:column;align-items:flex-start;gap:calc(2px*var(--fs));text-align:left;background:var(--bg3);border:1px solid var(--border);color:var(--white);font:inherit;padding:calc(7px*var(--fs)) calc(10px*var(--fs));cursor:pointer}
+.vwrow:hover{border-color:var(--gold)}
+.vwrow b{font-weight:400;font-size:calc(12px*var(--fs))}
+.vwrow span{color:var(--dim);font-size:calc(10px*var(--fs))}
+@media (max-width:760px){.vsw .segbtn span{display:none}.vsw .segbtn{padding:calc(5px*var(--fs)) calc(8px*var(--fs))}}
+@media (max-width:520px){.vsw{margin-left:0}.vsw .segbtn{padding:calc(5px*var(--fs)) calc(5px*var(--fs))}}
 .segbtn:hover{color:var(--white)}
 .segbtn.on{background:var(--bg4);color:var(--gold)}
 .iconbtn.sm{width:calc(26px*var(--fs));height:calc(26px*var(--fs));padding:calc(4px*var(--fs))}
