@@ -1131,7 +1131,9 @@ function albumClean(v) {
     for (const d of Array.isArray(a.sides) ? a.sides : []) { const id = s(d, 80); if (id && !sides.includes(id) && sides.length < 26) sides.push(id); }
     let rel = a.release && typeof a.release === "object" ? a.release : null;
     if (rel && JSON.stringify(rel).length > 200000) rel = null;
-    const cd = a.cd && typeof a.cd === "object" ? { upc: s(a.cd.upc, 20).replace(/\D/g, ""), title: s(a.cd.title, 160), performer: s(a.cd.performer, 160) } : { upc: "", title: "", performer: "" };
+    const lo = a.cd && a.cd.loud && typeof a.cd.loud === "object" ? a.cd.loud : {}, fnum = (v, lo2, hi, d) => Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.max(lo2, Math.min(hi, Number(v))) : d;
+    const loud = { mode: lo.mode === "track" ? "track" : "album", target: fnum(lo.target, -40, 0, -14), ceil: fnum(lo.ceil, -12, 0, -1) };
+    const cd = a.cd && typeof a.cd === "object" ? { upc: s(a.cd.upc, 20).replace(/\D/g, ""), title: s(a.cd.title, 160), performer: s(a.cd.performer, 160), loud } : { upc: "", title: "", performer: "", loud };
     out.push({ id: s(a.id, 60) || crypto.randomUUID(), title: s(a.title, 200), release: rel, sides, created: Number(a.created) || Date.now(), updated: Date.now(), montage: s(a.montage, 60), cd });
   }
   return out;
@@ -1835,6 +1837,34 @@ async function cdDdp(m) {
     try { await dir.removeEntry(file); } catch {}
     throw e;
   } finally { job.done(); }
+}
+
+async function cdLoud(m) {
+  if (!SES.s || !SES.mix) throw new Error("stale");
+  const s = SES.s, sr = s.sr, F = sesLen(s), mix = SES.mix;
+  const parts = (m.ranges || []).concat([m.album || [0, F]]).map(r => [clampI(r[0], 0, F), clampI(r[1], 0, F)]);
+  const total = Math.max(1, parts.reduce((t, r) => t + Math.max(0, r[1] - r[0]), 0));
+  const job = sesJob(m), x = await dspExports(), N = 65536, buf = new Float32Array(N * 2), out = [];
+  let done = 0;
+  try {
+    for (const [a, b] of parts) {
+      if (x.lm_open(2, sr) !== 0) throw new Error(dspError(x));
+      for (let p = a; p < b; p += N) {
+        const n = Math.min(N, b - p);
+        mix(p, n, buf, N);
+        const ptr = x.lm_in(n, 2), inb = new Float32Array(x.memory.buffer, ptr, n * 2);
+        inb.set(buf.subarray(0, n), 0);
+        inb.set(buf.subarray(N, N + n), n);
+        if (x.lm_feed(n) !== 0) throw new Error(dspError(x));
+        done += n;
+        await job.tick(done / total);
+      }
+      const st = ldStatsOut(x), tp = st.tp.filter(v => v !== null);
+      out.push({ lufs: st.integrated, lra: st.lra, tp: tp.length ? Math.max(...tp) : null });
+    }
+  } finally { job.done(); }
+  const album = out.pop();
+  return { t: "cdloud", tracks: out, album };
 }
 
 async function sesConvert(m) {
@@ -4641,6 +4671,7 @@ async function handle(m) {
   if (m.t === "sesdel") { postMessage(Object.assign({ req: m.req }, await sesDel(m))); return; }
   if (m.t === "sesbounce") { postMessage(Object.assign({ req: m.req }, await sesBounce(m))); return; }
   if (m.t === "cdddp") { postMessage(Object.assign({ req: m.req }, await cdDdp(m))); return; }
+  if (m.t === "cdloud") { postMessage(Object.assign({ req: m.req }, await cdLoud(m))); return; }
   if (m.t === "sesconv") { postMessage(Object.assign({ req: m.req }, await sesConvert(m))); return; }
   if (m.t === "sescancel") { if (SES.job) SES.job.cancel = true; return; }
   if (m.t === "djprobe") { postMessage(Object.assign({ req: m.req }, await djProbe(m))); return; }

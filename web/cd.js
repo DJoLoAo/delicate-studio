@@ -1,4 +1,4 @@
-const cd = { trans: null, timer: 0, ddp: null };
+const cd = { trans: null, timer: 0, ddp: null, lm: null, meas: null };
 const CD_GAP = 2, CD_PREGAP = 2, CD_MAXF = (79 * 60 + 57) * 75 + 74;
 
 function cdSnap(x, sr) { const f = sr / 75; return Math.max(0, Math.round(Math.round(x / f) * f)); }
@@ -137,6 +137,122 @@ async function cdDdp(A) {
   else flash(msg);
 }
 
+function cdLoudCfg(A) {
+  const l = (A.cd && A.cd.loud) || {}, n = (v, d) => Number.isFinite(v) ? v : d;
+  return { mode: l.mode === "track" ? "track" : "album", target: n(l.target, -14), ceil: n(l.ceil, -1) };
+}
+
+function cdSig(s) {
+  return JSON.stringify([cdClips(s).map(k => [k.id, k.doc, k.at, k.from, k.len, k.gain || 0, k.fin || 0, k.fout || 0]), s.tracks.map(tr => [tr.id, tr.gain || 0, tr.pan || 0, !!tr.mute, !!tr.solo, tr.clips.length])]);
+}
+
+function cdMeas(A, s) { const M = cd.meas; return M && s && M.id === A.montage && M.sig === cdSig(s) ? M : null; }
+
+function cdPlan(A, s) {
+  const M = cdMeas(A, s);
+  if (!M) return null;
+  const c = cdLoudCfg(A), r1 = v => Math.round(v * 10) / 10;
+  const one = (l, tp) => {
+    if (l === null || l === undefined) return { d: 0, short: 0 };
+    const want = c.target - l, d = tp === null || tp === undefined ? want : Math.min(want, c.ceil - tp);
+    return { d: r1(d), short: r1(want - d) };
+  };
+  if (c.mode === "album") { const p = one(M.album.lufs, M.album.tp); return { mode: "album", album: p, tracks: M.tracks.map(() => p) }; }
+  return { mode: "track", album: null, tracks: M.tracks.map(k => one(k.lufs, k.tp)) };
+}
+
+function cdDb(v, plus) { return v === null || v === undefined || !Number.isFinite(v) ? "—" : (plus && v > 0 ? "+" : "") + v.toFixed(1); }
+
+async function cdMeasure(A) {
+  if (!A.montage || cd.lm) return;
+  if (!(ses.open && ses.s && ses.s.id === A.montage)) {
+    await ssOpen(A.montage);
+    if (ses.open && ses.mode === "scenes") snMode("multi");
+  }
+  if (!ses.open || ses.s.id !== A.montage) return;
+  await ssSave();
+  const s = ses.s, L = cdClips(s);
+  if (!L.length) return;
+  const sig = cdSig(s), jobId = "l" + Date.now();
+  cd.lm = { id: jobId };
+  if (al.cur === A) alRenderCd(A);
+  let r;
+  try { r = await call({ t: "cdloud", jobId, ranges: L.map(k => [k.at, k.at + k.len]), album: [L[0].at, Math.max(...L.map(k => k.at + k.len))] }); }
+  catch (e) { if ((e && e.message) !== "cancelled") tell(String(e.message || e), t("Could not measure the loudness")); return; }
+  finally { cd.lm = null; if (al.cur) alRenderCd(al.cur); }
+  cd.meas = { id: A.montage, sig, tracks: r.tracks, album: r.album };
+  if (al.cur) alRenderCd(al.cur);
+}
+
+async function cdApply(A) {
+  const s0 = await cdSession(A), P = s0 && cdPlan(A, s0);
+  if (!P) return;
+  const ids = cdClips(s0).map(k => k.id), M = cd.meas;
+  if (P.tracks.every(p => !p.d)) { flash(t("The montage is already there")); return; }
+  const got = [];
+  await cdEdit(A, s2 => {
+    for (const k of cdClips(s2)) {
+      const i = ids.indexOf(k.id);
+      if (i < 0) continue;
+      const g0 = k.gain || 0, g1 = Math.max(-96, Math.min(24, Math.round((g0 + P.tracks[i].d) * 10) / 10));
+      k.gain = g1;
+      got[i] = g1 - g0;
+    }
+  });
+  const s1 = await cdSession(A);
+  M.tracks.forEach((k, i) => { const d = got[i] || 0; if (k.lufs !== null) k.lufs += d; if (k.tp !== null) k.tp += d; });
+  if (P.mode === "album") { const d = got[0] || 0; if (M.album.lufs !== null) M.album.lufs += d; if (M.album.tp !== null) M.album.tp += d; }
+  else M.album = { lufs: null, lra: null, tp: M.tracks.reduce((m, k) => k.tp !== null && (m === null || k.tp > m) ? k.tp : m, null) };
+  M.sig = cdSig(s1);
+  if (al.cur) alRenderCd(al.cur);
+  flash(P.mode === "album" ? t("Album gain of {d} dB on every track").replace("{d}", cdDb(P.album.d, true)) : t("Every track matched to {t} LUFS").replace("{t}", cdDb(cdLoudCfg(A).target)));
+}
+
+function cdLoudBox(A, s) {
+  const c = cdLoudCfg(A), M = cdMeas(A, s), P = cdPlan(A, s), box = alEl("div", "cdloud");
+  const save = async (f, v) => {
+    const C = al.cur;
+    if (!C) return;
+    C.cd = Object.assign({ upc: "", title: "", performer: "" }, C.cd || {});
+    C.cd.loud = Object.assign(cdLoudCfg(C), { [f]: v });
+    await alSave();
+    if (al.cur) alRenderCd(al.cur);
+  };
+  const num = (v, lo, hi, f) => { const x = Number(String(v).replace(",", ".").replace("−", "-")); if (!Number.isFinite(x)) { alRenderCd(A); return; } save(f, Math.max(lo, Math.min(hi, Math.round(x * 10) / 10))); };
+  const dd = alEl("div", "dd down cdlm");
+  dd.innerHTML = '<div class="cur"></div><div class="list"></div>';
+  ddInit(dd, [{ v: "album", label: "One album gain" }, { v: "track", label: "Match every track" }], c.mode, v => save("mode", v));
+  const row = alEl("div", "cdlrow");
+  row.append(alEl("label", "", t("Loudness")), dd, alEl("label", "", t("Target")), cdInput("cdlt", c.target.toFixed(1), "-14", v => num(v, -40, 0, "target")), alEl("span", "snote", "LUFS"),
+    alEl("label", "", t("Ceiling")), cdInput("cdlc", c.ceil.toFixed(1), "-1", v => num(v, -12, 0, "ceil")), alEl("span", "snote", "dBTP"));
+  const mb = alBtn(cd.lm ? t("Measuring…") : M ? t("Measure again") : t("Measure"), t("Integrated loudness and true peak of every track and of the whole album, as the montage plays"), () => cdMeasure(A), "outbtn cdlmeas");
+  mb.disabled = !!cd.lm;
+  const ab = alBtn(t("Apply"), t("Set the clip gains of the montage so it reaches the target"), () => cdApply(A), "outbtn cdlapp");
+  ab.disabled = !P || !!cd.lm;
+  row.append(mb, ab);
+  box.appendChild(row);
+  const sum = alEl("div", "cdlsum");
+  if (cd.lm) sum.textContent = t("Measuring…");
+  else if (!M) sum.textContent = cd.meas && cd.meas.id === A.montage ? t("The montage changed since it was measured. Measure again.") : t("Measure the montage to see its loudness. One album gain keeps the level differences between the songs; matching brings every track to the target.");
+  else {
+    const al0 = M.album, parts = [t("Album") + " " + cdDb(al0.lufs) + " LUFS"];
+    if (al0.lra !== null && al0.lra !== undefined) parts.push("LRA " + cdDb(al0.lra) + " LU");
+    parts.push(t("peak") + " " + cdDb(al0.tp) + " dBTP");
+    let line = parts.join(" · ");
+    if (P.mode === "album") {
+      line += " → " + t("album gain {d} dB").replace("{d}", cdDb(P.album.d, true));
+      if (P.album.short > 0.05) line += " · " + t("{d} dB short of the target: the peaks reach the ceiling. Use a limiter to go louder.").replace("{d}", cdDb(P.album.short));
+    } else {
+      const lim = P.tracks.filter(p => p.short > 0.05).length;
+      line += " → " + t("each track to {t} LUFS").replace("{t}", cdDb(c.target));
+      if (lim) line += " · " + t("{n} tracks stop short at the ceiling").replace("{n}", lim);
+    }
+    sum.textContent = line;
+  }
+  box.appendChild(sum);
+  return box;
+}
+
 function cdGaps(L) { return L.map((k, i) => i ? k.at - (L[i - 1].at + L[i - 1].len) : 0); }
 
 function cdRelayout(s, gaps) {
@@ -192,8 +308,9 @@ async function alRenderCd(A) {
     alEl("label", "", t("Performer")), cdInput("cdp", A.cd.performer, alArtist(A), v => save("performer", v.trim())),
     alEl("label", "", "UPC/EAN"), cdInput("cdu", A.cd.upc, "0123456789012", v => save("upc", v.replace(/\D/g, ""))));
   box.appendChild(head);
-  const tbl = alEl("div", "cdtbl");
+  const M = cdMeas(A, s), P = cdPlan(A, s), tbl = alEl("div", "cdtbl" + (M ? " ml" : ""));
   tbl.append(alEl("span", "cdh", "#"), alEl("span", "cdh", t("Start")), alEl("span", "cdh", t("Length")), alEl("span", "cdh", t("Gap (s)")), alEl("span", "cdh", t("Title")), alEl("span", "cdh", t("Performer")), alEl("span", "cdh", "ISRC"));
+  if (M) tbl.append(alEl("span", "cdh", "LUFS"), alEl("span", "cdh", "dBTP"), alEl("span", "cdh", t("Gain")));
   L.forEach((k, i) => {
     const c = k.cd || {}, id = k.id;
     const set = (f, v) => cdEdit(A, s2 => { const q = cdClips(s2).find(x => x.id === id); if (q) q.cd = Object.assign({ title: "", performer: "", isrc: "" }, q.cd || {}, { [f]: v }); });
@@ -203,8 +320,14 @@ async function alRenderCd(A) {
     if (c.isrc && !cdIsrcOk(c.isrc)) isrc.classList.add("bad");
     tbl.append(alEl("span", "cdn", String(i + 1)), alEl("span", "cdtm", cdTime(CD_PREGAP * sr + k.at - L[0].at, sr)), alEl("span", "cdtm", cdTime(k.len, sr)), gap,
       cdInput("cdtt", c.title, k.name, v => set("title", v.trim())), cdInput("cdpp", c.performer, A.cd.performer || alArtist(A), v => set("performer", v.trim())), isrc);
+    if (M) {
+      const m = M.tracks[i] || {}, p = P.tracks[i] || { d: 0, short: 0 }, g = alEl("span", "cdtm cdlg" + (p.short > 0.05 ? " lim" : ""), cdDb(p.d, true));
+      if (p.short > 0.05) g.title = t("{d} dB short of the target: the peaks reach the ceiling. Use a limiter to go louder.").replace("{d}", cdDb(p.short));
+      tbl.append(alEl("span", "cdtm cdll", cdDb(m.lufs)), alEl("span", "cdtm cdlp", cdDb(m.tp)), g);
+    }
   });
   box.appendChild(tbl);
+  box.appendChild(cdLoudBox(A, s));
   const chk = alEl("div", "cdchk");
   for (const r of cdCheck(A, s)) chk.appendChild(alEl("div", r.good ? "ok" : "bad", (r.good ? "✓ " : "⚠ ") + r.text));
   box.appendChild(chk);

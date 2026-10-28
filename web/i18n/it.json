@@ -1608,5 +1608,21 @@
  "A DDP 2.0 fileset for the pressing plant, 44.1 kHz 16-bit, as a zip with PQ list, cue sheet and MD5 checksums": "Un set di file DDP 2.0 per lo stabilimento di stampa, 44,1 kHz 16 bit, in zip con lista PQ, cue sheet e checksum MD5",
  "Writing the DDP": "Scrittura del DDP",
  "Longer than a CD": "Più lungo di un CD",
- "The program is longer than 79:57:74. Not every plant presses that much; ask yours first.": "Il programma supera 79:57:74. Non tutti gli stabilimenti stampano così tanto; chiedi prima al tuo."
+ "The program is longer than 79:57:74. Not every plant presses that much; ask yours first.": "Il programma supera 79:57:74. Non tutti gli stabilimenti stampano così tanto; chiedi prima al tuo.",
+ "Could not measure the loudness": "Impossibile misurare la loudness",
+ "The montage is already there": "Il montaggio è già lì",
+ "Album gain of {d} dB on every track": "Guadagno d'album di {d} dB su ogni traccia",
+ "Every track matched to {t} LUFS": "Ogni traccia allineata a {t} LUFS",
+ "One album gain": "Un guadagno d'album",
+ "Match every track": "Allinea ogni traccia",
+ "Ceiling": "Tetto",
+ "Measure again": "Misura di nuovo",
+ "Integrated loudness and true peak of every track and of the whole album, as the montage plays": "Loudness integrata e true peak di ogni traccia e dell'intero album, come suona il montaggio",
+ "Set the clip gains of the montage so it reaches the target": "Imposta i guadagni dei clip del montaggio perché raggiunga l'obiettivo",
+ "The montage changed since it was measured. Measure again.": "Il montaggio è cambiato dalla misurazione. Misura di nuovo.",
+ "Measure the montage to see its loudness. One album gain keeps the level differences between the songs; matching brings every track to the target.": "Misura il montaggio per vederne la loudness. Un guadagno d'album mantiene le differenze di livello tra i brani; l'allineamento porta ogni traccia all'obiettivo.",
+ "album gain {d} dB": "guadagno d'album {d} dB",
+ "{d} dB short of the target: the peaks reach the ceiling. Use a limiter to go louder.": "{d} dB sotto l'obiettivo: i picchi raggiungono il tetto. Usa un limiter per alzare ancora.",
+ "each track to {t} LUFS": "ogni traccia a {t} LUFS",
+ "{n} tracks stop short at the ceiling": "{n} tracce si fermano al tetto"
 }

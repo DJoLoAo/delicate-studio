@@ -937,6 +937,7 @@ function ssProg(m) {
   if (djProg(m)) return;
   if (ses.conv && m.id === ses.conv.id) { clearTimeout(ed.flashT); $("stMsg").textContent = t("Converting") + " · " + Math.round(m.frac * 100) + " %"; }
   if (ses.bounce && m.id === ses.bounce.id) { clearTimeout(ed.flashT); $("stMsg").textContent = t("Mixing down") + " · " + Math.round(m.frac * 100) + " %"; }
+  if (cd.lm && m.id === cd.lm.id) { const e = document.querySelector("#albCd .cdlsum"); const txt = t("Measuring…") + " " + Math.round(m.frac * 100) + " %"; if (e) e.textContent = txt; else { clearTimeout(ed.flashT); $("stMsg").textContent = txt; } }
   if (cd.ddp && m.id === cd.ddp.id) { clearTimeout(ed.flashT); $("stMsg").textContent = t("Writing the DDP") + " · " + Math.round(m.frac * 100) + " %"; }
 }
 

@@ -1608,5 +1608,21 @@
  "A DDP 2.0 fileset for the pressing plant, 44.1 kHz 16-bit, as a zip with PQ list, cue sheet and MD5 checksums": "प्रेसिंग प्लांट के लिए DDP 2.0 फ़ाइल सेट, 44.1 kHz 16-बिट, PQ सूची, cue शीट और MD5 चेकसम के साथ zip में",
  "Writing the DDP": "DDP लिखा जा रहा है",
  "Longer than a CD": "CD से लंबा",
- "The program is longer than 79:57:74. Not every plant presses that much; ask yours first.": "प्रोग्राम 79:57:74 से लंबा है। हर प्लांट इतना नहीं दबाता; पहले अपने प्लांट से पूछें।"
+ "The program is longer than 79:57:74. Not every plant presses that much; ask yours first.": "प्रोग्राम 79:57:74 से लंबा है। हर प्लांट इतना नहीं दबाता; पहले अपने प्लांट से पूछें।",
+ "Could not measure the loudness": "लाउडनेस नहीं मापी जा सकी",
+ "The montage is already there": "मोंटाज पहले से वहीं है",
+ "Album gain of {d} dB on every track": "हर ट्रैक पर {d} dB एल्बम गेन",
+ "Every track matched to {t} LUFS": "हर ट्रैक {t} LUFS पर मिलाया गया",
+ "One album gain": "एक एल्बम गेन",
+ "Match every track": "हर ट्रैक मिलाएँ",
+ "Ceiling": "सीमा",
+ "Measure again": "फिर से मापें",
+ "Integrated loudness and true peak of every track and of the whole album, as the montage plays": "हर ट्रैक और पूरे एल्बम की इंटीग्रेटेड लाउडनेस और ट्रू पीक, जैसे मोंटाज बजता है",
+ "Set the clip gains of the montage so it reaches the target": "मोंटाज के क्लिप गेन ऐसे सेट करें कि वह लक्ष्य तक पहुँचे",
+ "The montage changed since it was measured. Measure again.": "मापने के बाद मोंटाज बदल गया है। फिर से मापें।",
+ "Measure the montage to see its loudness. One album gain keeps the level differences between the songs; matching brings every track to the target.": "लाउडनेस देखने के लिए मोंटाज मापें। एक एल्बम गेन गानों के बीच स्तर का अंतर रखता है; मिलाना हर ट्रैक को लक्ष्य पर लाता है।",
+ "album gain {d} dB": "एल्बम गेन {d} dB",
+ "{d} dB short of the target: the peaks reach the ceiling. Use a limiter to go louder.": "लक्ष्य से {d} dB कम: पीक सीमा तक पहुँचते हैं। और तेज़ करने के लिए लिमिटर लगाएँ।",
+ "each track to {t} LUFS": "हर ट्रैक {t} LUFS पर",
+ "{n} tracks stop short at the ceiling": "{n} ट्रैक सीमा पर रुक जाते हैं"
 }
