@@ -486,9 +486,11 @@ function prDraw() {
   g.restore();
   g.fillStyle = "#d9d3c8";
   g.fillRect(0, PR_RULER, PR_KEYW, G.gh);
+  const lit = prLit();
   for (let p = p0; p <= p1; p++) {
-    const y = prY(p), m = p % 12;
-    if ([1, 3, 6, 8, 10].includes(m)) { g.fillStyle = "#1b1814"; g.fillRect(0, y + 1, PR_KEYW * 0.6, v.kh - 2); }
+    const y = prY(p), m = p % 12, black = [1, 3, 6, 8, 10].includes(m), lc = lit.get(p);
+    if (lc && !black) { g.fillStyle = tc(lc, 0.85); g.fillRect(0, y, PR_KEYW, v.kh); }
+    if (black) { g.fillStyle = lc ? tc(lc, 1) : "#1b1814"; g.fillRect(0, y + 1, PR_KEYW * 0.6, v.kh - 2); }
     if (m === 0 || m === 5) { g.fillStyle = "#9a948a"; g.fillRect(0, y + v.kh - 0.5, PR_KEYW, 1); }
     if (m === 0 && v.kh >= 7) { g.fillStyle = "#3a352f"; g.font = thFont(8); g.textAlign = "right"; g.textBaseline = "middle"; g.fillText(mdName(p), PR_KEYW - 3, y + v.kh / 2); }
   }
@@ -632,6 +634,7 @@ function prMove(e) {
     prRender();
     return;
   }
+  if (d.kind === "keys") { const p = Math.max(0, Math.min(127, prYP(y))); if (p !== d.p) { d.p = p; prAudition(p, 100); } return; }
   if (d.kind === "vel") { prVel(y); return; }
   if (d.kind === "erase") { const h = prHit(x, y); if (h) { const tr = prTr(); tr.notes.splice(tr.notes.indexOf(h.n), 1); prDirty(); prRender(); } return; }
   if (d.kind === "band") {
@@ -850,7 +853,26 @@ function prVoice(p, v, when, dur, ch) {
   return { stop: at => { const t1 = at || ctx.currentTime; out.gain.cancelScheduledValues(t1); out.gain.setTargetAtTime(0, t1, 0.01); for (const o of oscs) { try { o.stop(t1 + 0.05); } catch {} } } };
 }
 
+function prLit() {
+  const m = new Map(), len = PR_COLORS.length;
+  if (pr.play) {
+    const tk = prNowTick(), order = pr.s.tracks.map((tr, i) => i).filter(i => i !== pr.track).concat([pr.track]);
+    for (const i of order) {
+      const tr = pr.s.tracks[i];
+      if (!tr || tr.mute) continue;
+      for (const n of tr.notes) if (n.t <= tk && tk < n.t + n.d) m.set(n.p, PR_COLORS[i % len]);
+    }
+  }
+  if (pr.aud && performance.now() < pr.aud.until) m.set(pr.aud.p, PR_COLORS[pr.track % len]);
+  if (pr.drag && pr.drag.kind === "keys") m.set(pr.drag.p, PR_COLORS[pr.track % len]);
+  return m;
+}
+
 function prAudition(p, v) {
+  pr.aud = { p, until: performance.now() + 250 };
+  clearTimeout(pr.audT);
+  pr.audT = setTimeout(() => { pr.aud = null; if (!pr.play && pr.open) prDraw(); }, 260);
+  if (!pr.play) requestAnimationFrame(() => { if (pr.open) prDraw(); });
   const ch = prTr().ch, port = prOutPort();
   if (port) { port.send([0x90 | ch, p, v]); port.send([0x80 | ch, p, 0], performance.now() + 250); return; }
   prVoice(p, v, prCtx().currentTime + 0.005, 0.25, ch);
