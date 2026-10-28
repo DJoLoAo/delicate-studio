@@ -35,6 +35,7 @@ function snRestoreMode() {
 
 function snShow() {
   $("ses").classList.add("scmode");
+  $("srcp").classList.add("hidden");
   $("sesBody").classList.add("hidden");
   document.querySelector("#ses .sesrow").classList.add("hidden");
   $("scn").classList.remove("hidden");
@@ -48,7 +49,7 @@ function snHide() {
   $("scn").classList.add("hidden");
   $("sesBody").classList.remove("hidden");
   document.querySelector("#ses .sesrow").classList.remove("hidden");
-  if (ses.open) { ssHeads(); ssDraw(); }
+  if (ses.open) { ssHeads(); ssDraw(); sdShow(); }
 }
 
 function snNewRow(name) { return { id: ssNewId(), name: name || t("Scene") + " " + (snData().rows.length + 1), slots: {} }; }

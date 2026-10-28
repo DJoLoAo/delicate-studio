@@ -188,6 +188,7 @@ async function ssOpen(id) {
   ssHeads();
   ssButtons();
   snRestoreMode();
+  sdRestore();
   requestAnimationFrame(() => {
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem("studioSesView:" + id) || "null"); } catch {}
@@ -207,6 +208,9 @@ async function ssClose(quiet) {
   fxSesClose();
   ssStop();
   snHide();
+  sdPrevStop();
+  sd.open = false;
+  sdShow();
   pcDisarm();
   await ssSave();
   ses.open = false;
@@ -253,6 +257,7 @@ function ssPlayhead() {
 async function ssPlay(from) {
   if (!ses.open || !ses.s.sr || pc.rec || pc.busy) return;
   if (ses.mode === "scenes") { await snPlay([]); return; }
+  if (sd.prev) sdPrevStop();
   const L = ssLen();
   if (!L) return;
   await ensureAudioFor(ses.s.sr, 2);

@@ -1835,6 +1835,7 @@ function wireUi() {
   wireSes();
   wireView();
   wireScenes();
+  wireSrc();
   wirePunch();
   wireTags();
   wireAlbum();

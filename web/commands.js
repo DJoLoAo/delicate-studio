@@ -145,6 +145,11 @@ const CMDS = [
   { id: "open", g: "File", label: "Open a file…", run: () => pickFiles() },
   { id: "recPanel", g: "File", label: "Record…", run: () => recToggle(), kw: "record recording input microphone vinyl rip turntable guitar capture" },
   { id: "rec", g: "Transport", label: "Record / stop recording", run: () => recGo(), ss: () => pcGo(), kw: "record recording start stop capture punch in out take" },
+  { id: "srcPanel", g: "Edit", label: "Source window", run: () => sdToggle(), ss: () => sdToggle(), sesOnly: true, kw: "source destination 3 point 4 point three four point edit sequoia pyramix rip takes compile best version" },
+  { id: "srcIn", g: "Edit", label: "Source in", run: () => sdMark("in"), ss: () => sdMark("in"), sesOnly: true, ssWhen: () => sd.open && !!sdM(), kw: "source in point mark" },
+  { id: "srcOut", g: "Edit", label: "Source out", run: () => sdMark("out"), ss: () => sdMark("out"), sesOnly: true, ssWhen: () => sd.open && !!sdM(), kw: "source out point mark" },
+  { id: "srcOver", g: "Edit", label: "Overwrite from the source", run: () => sdOverwrite(), ss: () => sdOverwrite(), sesOnly: true, ssWhen: () => sd.open && !!sdM(), kw: "source destination overwrite three point edit" },
+  { id: "srcIns", g: "Edit", label: "Insert from the source", run: () => sdInsert(), ss: () => sdInsert(), sesOnly: true, ssWhen: () => sd.open && !!sdM(), kw: "source destination insert ripple three point edit" },
   { id: "sesNewTrack", g: "Edit", label: "New track", run: () => pcNewTrack(), ss: () => pcNewTrack(), sesOnly: true, kw: "multitrack add empty track record audio" },
   { id: "punchCfg", g: "Transport", label: "Recording in sessions…", run: () => pcSettings(), ss: () => pcSettings(), sesOnly: true, kw: "punch in out pre roll post roll latency offset takes monitor input" },
   { id: "export", g: "File", label: "Export…", run: () => openExport(), doc: true, kw: "render bounce save wav flac master dither", ss: () => ssBounce(true), ssWhen: () => ssLen() > 0 },
@@ -186,7 +191,7 @@ const BASE_KEYS = {
   undo: ["Mod+Z"], redo: ["Mod+Shift+Z", "Mod+Y"], cut: ["Mod+X"], copy: ["Mod+C"], paste: ["Mod+V"],
   delete: ["Delete", "Backspace"], silence: ["Shift+Delete", "Shift+Backspace"], crop: ["T"], hist: ["H"], heal: ["Mod+U"], nrCap: ["Shift+P"],
   markAdd: ["M"], locAdd: ["Shift+M"], locs: ["J"], spec: ["Shift+D"], toolRect: ["E"], toolLasso: ["D"], toolBrush: ["B"], pencil: ["P"], sesSplit: ["S"], transients: ["Shift+T"], nextTransient: ["Tab"], prevTransient: ["Shift+Tab"],
-  open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"], rec: ["Shift+Space"], viewWave: ["8"], viewMulti: ["9"], viewScenes: ["0"]
+  open: ["Mod+O"], export: ["Mod+Shift+E"], palette: ["Mod+K", "Mod+Shift+P"], keys: ["?"], rec: ["Shift+Space"], viewWave: ["8"], viewMulti: ["9"], viewScenes: ["0"], srcIn: ["I"], srcOut: ["O"]
 };
 
 const KEYMAPS = {
