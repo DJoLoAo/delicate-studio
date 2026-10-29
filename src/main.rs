@@ -133,6 +133,7 @@ async fn main() {
         .route("/reviews/{id}/comments/{cid}", post(review::resolve))
         .route("/cd/mb/{id}", get(cdrip::mb))
         .route("/cd/ar/{name}", get(cdrip::ar))
+        .route("/cd/offsets", get(cdrip::offsets))
         .route("/pub/{token}", get(review::pub_get))
         .route("/pub/{token}/audio", get(review::pub_audio))
         .route("/pub/{token}/comments", post(review::pub_comment))

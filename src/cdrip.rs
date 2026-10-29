@@ -127,6 +127,16 @@ pub async fn ar(State(st): State<AppState>, headers: HeaderMap, Path(name): Path
     }
 }
 
+pub async fn offsets(State(st): State<AppState>, headers: HeaderMap) -> Response {
+    if let Err(code) = current_user(&st, &headers).await { return code.into_response(); }
+    let url = format!("{}/accuraterip/DriveOffsets.bin", st.cd.ar);
+    match fetch(&st, "ar:offsets".to_string(), url, false).await {
+        Ok((200, b)) if b.len() >= 69 => ([(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"))], b).into_response(),
+        Ok(_) => (StatusCode::NOT_FOUND, Json(json!({ "error": "not-found" }))).into_response(),
+        Err(r) => r,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

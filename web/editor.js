@@ -828,9 +828,10 @@ async function importFiles(files) {
 }
 
 function importProgress(m) {
+  if (ciProg(m)) return;
   const box = $("busy");
   box.classList.remove("hidden");
-  $("busyTitle").textContent = m.phase === "download" ? t("Downloading") : m.phase === "verify" ? t("Checking against AccurateRip") : t("Reading");
+  $("busyTitle").textContent = m.phase === "download" ? t("Downloading") : m.phase === "verify" ? t("Checking against AccurateRip") : m.phase === "rip" ? t("Ripping securely") : t("Reading");
   $("busyName").textContent = m.name;
   $("busyBar").style.width = Math.round((m.frac || 0) * 100) + "%";
   $("busyPct").textContent = m.phase === "download" && !m.total ? fmtBytes(m.bytes || 0) : Math.round((m.frac || 0) * 100) + "%" + (m.phase === "download" && m.total ? " · " + fmtBytes(m.total) : "");
@@ -1788,7 +1789,7 @@ function wireUi() {
   const snapSeg = () => document.querySelectorAll("#snapSeg button").forEach(b => b.classList.toggle("on", (b.dataset.v === "1") === ed.snap));
   $("snapSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ed.snap = b.dataset.v === "1"; localStorage.setItem("studioSnap", ed.snap ? "1" : "0"); snapSeg(); });
   snapSeg();
-  $("busyCancel").addEventListener("click", () => ed.worker.postMessage({ t: dj.job ? "sescancel" : "cancel" }));
+  $("busyCancel").addEventListener("click", () => { brAbort(); ed.worker.postMessage({ t: dj.job ? "sescancel" : "cancel" }); });
   $("playBtn").addEventListener("click", togglePlay);
   $("stopBtn").addEventListener("click", () => stopPlay());
   $("homeBtn").addEventListener("click", () => { ed.cursor = 0; ensureVisible(0); if (ed.play.on) startPlay(0); redraw(); });

@@ -127,4 +127,54 @@ function ciF450(w, at) {
   return s;
 }
 
-if (typeof module !== "undefined") module.exports = { ciAiff, ciToc, ciTocPlist, ciMbId, ciMbToc, ciFreedb, ciArIds, ciArName, ciDbar, ciAcc, ciPush, ciDone, ciF450, ciHex, CI_SPF, CI_SKIP, CI_REACH };
+function ciTocFrom(info) {
+  const all = info.toc.tracks, audio = all.filter(t => !t.data);
+  if (!audio.length) return null;
+  const offsets = audio.map(t => t.lba + CI_LEAD), lens = audio.map((t, i) => info.ends[i] - t.lba);
+  const last = audio[audio.length - 1], end = last.lba + lens[lens.length - 1] + CI_LEAD;
+  const dataT = all.filter(t => t.data);
+  return { offsets, all: all.map(t => t.lba + CI_LEAD), end, leadout: info.toc.leadout + CI_LEAD, lens, pregap: audio[0].lba, data: dataT.length ? info.toc.leadout - dataT[dataT.length - 1].lba : 0 };
+}
+
+function ciOffsets(buf) {
+  const u = buf instanceof Uint8Array ? buf : new Uint8Array(buf), dv = new DataView(u.buffer, u.byteOffset, u.byteLength), out = [];
+  for (let o = 0; o + 69 <= u.length; o += 69) {
+    let name = "";
+    for (let i = 0; i < 33 && u[o + 2 + i]; i++) name += String.fromCharCode(u[o + 2 + i]);
+    out.push({ name: name.trim(), offset: dv.getInt16(o, true) });
+  }
+  return out;
+}
+
+function ciNorm(s) { return String(s || "").toLowerCase().replace(/\s+/g, " ").replace(/\s*-\s*/g, " - ").trim(); }
+
+function ciDriveOffset(list, name) {
+  const n = ciNorm(name), flat = x => ciNorm(x).replace(/[\s-]/g, "");
+  if (!n) return null;
+  return list.find(x => ciNorm(x.name) === n) || list.find(x => flat(x.name) === flat(name)) || null;
+}
+
+function ciCdText(bytes) {
+  const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), parts = { 128: [], 129: [] }, first = {};
+  for (let o = 0; o + 18 <= u.length; o += 18) {
+    const type = u[o], tr = u[o + 1] & 0x7f, blk = (u[o + 3] >> 4) & 7, dbcc = u[o + 3] & 0x80;
+    if (blk !== 0 || dbcc || !(type in parts)) continue;
+    if (!(type in first)) first[type] = tr;
+    for (let i = 4; i < 16; i++) parts[type].push(u[o + i]);
+  }
+  const split = type => {
+    const out = [], b = parts[type];
+    let cur = "";
+    for (const c of b) { if (c === 0) { out.push(cur); cur = ""; } else cur += c === 9 && out.length ? "\t" : String.fromCharCode(c); }
+    while (out.length && !out[out.length - 1]) out.pop();
+    return out.map((x, i) => x === "\t" ? out[i - 1] || "" : x);
+  };
+  const T = split(128), P = split(129), t0 = first[128] || 0, p0 = first[129] || 0, n = Math.max(T.length + t0, P.length + p0);
+  if (!T.length && !P.length) return null;
+  const at = (arr, start, k) => (k - start >= 0 && k - start < arr.length ? arr[k - start] : "").trim();
+  const tracks = [];
+  for (let k = 1; k < n; k++) tracks.push({ title: at(T, t0, k), performer: at(P, p0, k) });
+  return { title: at(T, t0, 0), performer: at(P, p0, 0), tracks };
+}
+
+if (typeof module !== "undefined") module.exports = { ciTocFrom, ciOffsets, ciDriveOffset, ciCdText, ciAiff, ciToc, ciTocPlist, ciMbId, ciMbToc, ciFreedb, ciArIds, ciArName, ciDbar, ciAcc, ciPush, ciDone, ciF450, ciHex, CI_SPF, CI_SKIP, CI_REACH };

@@ -1964,6 +1964,59 @@ async function cdImport(m) {
   return { t: "cdimported", meta: r.meta };
 }
 
+const CDW = new Map();
+
+async function cdBegin(m) {
+  const dir = await docsDir(), id = crypto.randomUUID(), docDir = await dir.getDirectoryHandle(id, { create: true });
+  const pool = await (await docDir.getFileHandle("pool.f32", { create: true })).createSyncAccessHandle();
+  const wid = "w" + id.slice(0, 8);
+  CDW.set(wid, { id, dir, docDir, pool, S: sinkNew(pool, 2, 44100), got: 0, m, buf: new Float32Array(0) });
+  return { t: "cdbegun", wid, id };
+}
+
+function cdChunk(m) {
+  const W = CDW.get(m.wid);
+  if (!W || !m.bytes) return;
+  const b = new Uint8Array(m.bytes), n = b.length >> 2, dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  if (W.buf.length < n * 2) W.buf = new Float32Array(n * 2);
+  const o = W.buf;
+  for (let k = 0; k < n; k++) { o[k] = dv.getInt16(k * 4, true) / 32768; o[n + k] = dv.getInt16(k * 4 + 2, true) / 32768; }
+  sinkPush(W.S, o.subarray(0, n * 2), n);
+  W.got += n;
+}
+
+async function cdEnd(m) {
+  const W = CDW.get(m.wid);
+  if (!W) throw new Error("stale");
+  CDW.delete(m.wid);
+  try {
+    if (!W.got) throw new Error("no audio in file");
+    const { slots, slotPeaks, bands } = sinkEnd(W.S);
+    W.pool.flush();
+    W.pool.close();
+    W.pool = null;
+    await writeFile(W.docDir, "peaks.f32", slotPeaks);
+    await writeFile(W.docDir, "bands.f32", bands);
+    const q = W.m, F = W.got;
+    const meta = { v: 1, id: W.id, name: String(q.name || "").trim().slice(0, 160) || "Audio CD", ext: "", size: F * 8, sampleRate: 44100, channels: 2, bits: 16, frames: F, blockFrames: BLOCK, slots, created: Date.now(), opened: Date.now(), readOnly: false, tags: Array.isArray(q.tags) ? q.tags.slice(0, 40) : [], source: q.source || { kind: "cd" }, locs: cdMarks(q.marks, F), cd: Object.assign({}, q.cd || {}, m.cd || {}) };
+    await writeFile(W.docDir, "meta.json", enc(meta));
+    return { t: "cdended", meta };
+  } catch (e) {
+    if (W.pool) { try { W.pool.close(); } catch {} }
+    try { await W.dir.removeEntry(W.id, { recursive: true }); } catch {}
+    throw e;
+  }
+}
+
+async function cdAbort(m) {
+  const W = CDW.get(m.wid);
+  if (!W) return { t: "cdaborted" };
+  CDW.delete(m.wid);
+  try { W.pool.close(); } catch {}
+  try { await W.dir.removeEntry(W.id, { recursive: true }); } catch {}
+  return { t: "cdaborted" };
+}
+
 async function cdOpenDoc(id) {
   const docDir = await (await docsDir()).getDirectoryHandle(String(id)), meta = await readJson(docDir, "meta.json");
   let c = cur && cur.meta.id === meta.id ? cur : lingering.get(meta.id) || null, fresh = false;
@@ -4870,6 +4923,7 @@ function opened(req, r) {
 }
 
 async function handle(m) {
+  if (m.t === "cdchunk") { cdChunk(m); return; }
   if (m.t === "cancel") { cancelImport = true; if (downloadCtl) downloadCtl.abort(); return; }
   if (m.t === "ring") { ring = { data: new Float32Array(m.data), ctrl: new Int32Array(m.ctrl), size: m.size }; return; }
   if (m.t === "play") { startPlay(m.start, m.end, m.loop, m.off); return; }
@@ -4996,6 +5050,9 @@ async function handle(m) {
   if (m.t === "sesbounce") { postMessage(Object.assign({ req: m.req }, await sesBounce(m))); return; }
   if (m.t === "cdddp") { postMessage(Object.assign({ req: m.req }, await cdDdp(m))); return; }
   if (m.t === "cdimport") { await importing; const job = cdImport(m); importing = job.catch(() => {}); postMessage(Object.assign({ req: m.req }, await job)); return; }
+  if (m.t === "cdbegin") { postMessage(Object.assign({ req: m.req }, await cdBegin(m))); return; }
+  if (m.t === "cdend") { postMessage(Object.assign({ req: m.req }, await cdEnd(m))); return; }
+  if (m.t === "cdabort") { postMessage(Object.assign({ req: m.req }, await cdAbort(m))); return; }
   if (m.t === "cdverify") { postMessage(Object.assign({ req: m.req }, await cdVerify(m))); return; }
   if (m.t === "cdshift") { postMessage(Object.assign({ req: m.req }, await cdShift(m))); return; }
   if (m.t === "dxzip") { postMessage(Object.assign({ req: m.req }, await dxZip(m))); return; }

@@ -507,7 +507,11 @@ canvas.ru{height:calc(34px*var(--fs))}
 .citbl .ciar{font-size:calc(10px*var(--fs));color:var(--dim);white-space:nowrap}
 .citbl .ciar.ok{color:var(--green)}
 .citbl .ciar.bad{color:var(--gold)}
-@media (max-width:760px){#cdi{padding:calc(8px*var(--fs))}.citbl{grid-template-columns:auto auto calc(150px*var(--fs)) calc(110px*var(--fs)) calc(118px*var(--fs)) auto}}
+.citbl.rip{grid-template-columns:auto auto minmax(calc(130px*var(--fs)),2fr) minmax(calc(90px*var(--fs)),1fr) calc(118px*var(--fs)) auto auto}
+#cdi .cidisc{line-height:1.5}
+#cdi .ciprog{display:flex;flex-direction:column;gap:calc(6px*var(--fs))}
+#cdi .cidrive{min-width:calc(220px*var(--fs))}
+@media (max-width:760px){#cdi{padding:calc(8px*var(--fs))}.citbl{grid-template-columns:auto auto calc(150px*var(--fs)) calc(110px*var(--fs)) calc(118px*var(--fs)) auto}.citbl.rip{grid-template-columns:auto auto calc(150px*var(--fs)) calc(110px*var(--fs)) calc(118px*var(--fs)) auto auto}}
 #alb{position:fixed;inset:0;background:rgba(12,10,8,.72);display:flex;align-items:flex-start;justify-content:center;z-index:42;padding:calc(40px*var(--fs)) calc(16px*var(--fs)) calc(16px*var(--fs));overflow:auto}
 #alb.hidden{display:none}
 #alb .panel{background:var(--bg2);border:1px solid var(--border);width:min(calc(720px*var(--fs)),100%);box-shadow:0 14px 48px rgba(0,0,0,.65)}
