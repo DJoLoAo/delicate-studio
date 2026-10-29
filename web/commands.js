@@ -172,6 +172,7 @@ const CMDS = [
   { id: "newMono", g: "File", label: "New mono file from this one…", run: () => pxMonoDlg(), doc: true, when: () => ed.doc.channels > 1, kw: "convert mono downmix channels new file save as" },
   { id: "newStereo", g: "File", label: "New stereo file from this one", run: () => pxNewFile("stereo"), doc: true, when: () => ed.doc.channels === 1, kw: "convert stereo channels new file dual mono save as" },
   { id: "albums", g: "File", label: "Albums", run: () => openFiles("albums"), kw: "album record sides lp vinyl discogs release export all tracks" },
+  { id: "cdImport", g: "File", label: "Import a CD…", run: () => ciOpen(), ss: () => ciOpen(), kw: "rip cd audio aiff mac accuraterip musicbrainz disc compact" },
   { id: "albumNew", g: "File", label: "New album from this file…", run: () => alNew(), doc: true, when: () => !alOf(ed.doc.id), kw: "album record sides lp vinyl join both sides" },
   { id: "albumOpen", g: "File", label: "Album of this file…", run: () => alOpenFor(ed.doc.id), doc: true, when: () => !!alOf(ed.doc.id), kw: "album record sides lp vinyl" },
   { id: "tags", g: "File", label: "File tags…", run: () => ftOpen(false), doc: true, kw: "metadata meta id3 vorbis info bwf title artist album cover art tag edit discogs" },

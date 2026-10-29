@@ -108,7 +108,7 @@
         <div class="fpane" data-pane="studio"><div id="filesList" class="flist"></div><div class="sinfo" id="storeInfo"></div></div>
         <div class="fpane hidden" data-pane="library"><input id="libQ" class="fsearch" type="search" placeholder="Search your library by title, artist or album" autocomplete="off" spellcheck="false"><div id="libList" class="flist"></div></div>
         <div class="fpane hidden" data-pane="locker"><input id="lkQ" class="fsearch" type="search" placeholder="Filter by title, artist, album or folder" autocomplete="off" spellcheck="false"><div id="lkList" class="flist"></div><div class="sinfo" id="lkInfo"></div></div>
-        <div class="fpane hidden" data-pane="albums"><div class="albhead"><span class="sinfo">An album joins the sides of a record: one Discogs release, tracks named on every side, one export.</span><button class="outbtn" id="albNew">New album</button></div><div id="albList" class="flist"></div></div>
+        <div class="fpane hidden" data-pane="albums"><div class="albhead"><span class="sinfo">An album joins the sides of a record: one Discogs release, tracks named on every side, one export.</span><button class="outbtn" id="ciOpen">Import a CD…</button><button class="outbtn" id="albNew">New album</button></div><div id="albList" class="flist"></div></div>
         <div class="fpane hidden" data-pane="midi"><div class="albhead"><span class="sinfo">MIDI files open in the piano roll: edit the notes, play them on the built-in synth or your own gear, save them as .mid.</span><button class="outbtn" id="prImport">Import .mid…</button><button class="outbtn" id="prNew">New MIDI</button><input type="file" id="prFile" accept=".mid,.midi,audio/midi" hidden></div><div id="prList" class="flist"></div></div>
         <div class="fpane hidden" data-pane="sessions"><div class="albhead"><span class="sinfo">A session lays out Studio files on tracks and mixes them: a DJ set with its room microphone, a band, a podcast.</span><button class="outbtn" id="djOpen">DJ recording…</button><button class="outbtn" id="sesNew">New session</button></div><div id="sesList" class="flist"></div></div>
       </div>
@@ -444,6 +444,14 @@
   </div>
 </div>
 
+<div id="cdi" class="hidden">
+  <div class="panel cipanel" role="dialog" aria-labelledby="ciHead">
+    <div class="phead"><b id="ciHead">Import a CD</b><span class="grow"></span><button class="x" id="ciClose" title="Close" aria-label="Close">×</button></div>
+    <div id="ciBody"></div>
+    <input type="file" id="ciFiles" accept=".aiff,.aif,.plist,audio/aiff,audio/x-aiff" multiple hidden>
+    <input type="file" id="ciDir" webkitdirectory multiple hidden>
+  </div>
+</div>
 <div id="alb" class="hidden">
   <div class="panel albpanel" role="dialog" aria-labelledby="albTitle">
     <div class="phead"><b id="albTitle">Album</b><span class="grow"></span><button class="outbtn" id="albDel">delete album</button><button class="x" id="albClose" title="Close" aria-label="Close">×</button></div>
@@ -601,6 +609,8 @@
 <script src="/streaming.js"></script>
 <script src="/cal.js"></script>
 <script src="/ddex.js"></script>
+<script src="/cdcore.js"></script>
+<script src="/cdrip.js"></script>
 <script src="/rec.js"></script>
 <script src="/ext.js"></script>
 <script src="/tour.js"></script>

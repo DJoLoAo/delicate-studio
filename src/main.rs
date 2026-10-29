@@ -13,6 +13,7 @@ use tower_http::{
     set_header::SetResponseHeaderLayer,
 };
 
+mod cdrip;
 mod review;
 mod transcribe;
 mod watch;
@@ -32,6 +33,7 @@ struct AppState {
     whisper: String,
     tq: transcribe::Shared,
     reviews: review::Shared,
+    cd: cdrip::Shared,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -116,7 +118,7 @@ async fn main() {
     );
     let reviews = review::open(base);
     tokio::spawn(review::run(reviews.clone()));
-    let state = AppState { http, dj, web: web.clone(), watch, slow, whisper, tq: transcribe::open(), reviews };
+    let state = AppState { http, dj, web: web.clone(), watch, slow, whisper, tq: transcribe::open(), reviews, cd: cdrip::open() };
     let api = Router::new()
         .route("/me", get(me))
         .route("/version", get(version))
@@ -129,6 +131,8 @@ async fn main() {
         .route("/reviews/{id}/data", axum::routing::put(review::part).layer(axum::extract::DefaultBodyLimit::max(review::PART + 4096)))
         .route("/reviews/{id}/done", post(review::done))
         .route("/reviews/{id}/comments/{cid}", post(review::resolve))
+        .route("/cd/mb/{id}", get(cdrip::mb))
+        .route("/cd/ar/{name}", get(cdrip::ar))
         .route("/pub/{token}", get(review::pub_get))
         .route("/pub/{token}/audio", get(review::pub_audio))
         .route("/pub/{token}/comments", post(review::pub_comment))

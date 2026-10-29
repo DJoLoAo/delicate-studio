@@ -1,4 +1,4 @@
-importScripts("/edit.js", "/trcore.js", "/tags.js", "/onset.js", "/sesmath.js", "/ddp.js");
+importScripts("/edit.js", "/trcore.js", "/tags.js", "/onset.js", "/sesmath.js", "/ddp.js", "/cdcore.js");
 
 const BLOCK = 65536;
 const BUCKET = 256;
@@ -1920,6 +1920,151 @@ async function dxZip(m) {
     try { hd.close(); } catch {}
     try { await dir.removeEntry(file); } catch {}
     throw e;
+  }
+}
+
+function cdMarks(list, F) {
+  return (Array.isArray(list) ? list : []).slice(0, 99).map((k, i) => {
+    const a = clampI(k.a, 0, F), b = clampI(k.b, 0, F), mk = { id: i + 1, n: i + 1, kind: "range", a, b, name: String(k.name || "").slice(0, 120), view: null, chans: null };
+    if (k.tag && typeof k.tag === "object") mk.tag = k.tag;
+    return mk;
+  }).filter(k => k.b > k.a);
+}
+
+function cdProg(m, phase, frac) { postMessage({ t: "progress", req: m.req, name: m.name || "CD", phase, frac: Math.min(1, frac) }); }
+
+async function cdImport(m) {
+  const reader = new FileReaderSync(), files = (m.files || []).map(f => f.file || f);
+  const heads = files.map(f => {
+    const h = ciAiff(new Uint8Array(reader.readAsArrayBuffer(f.slice(0, Math.min(f.size, 1 << 16)))));
+    if (!h || h.bad || h.ch !== 2 || h.bits !== 16 || h.sr !== 44100) throw new Error("format|" + f.name);
+    return h;
+  });
+  const total = heads.reduce((a, h) => a + h.frames, 0);
+  if (!total) throw new Error("no audio in file");
+  cancelImport = false;
+  let done = 0, last = 0;
+  const marks = cdMarks(m.marks, total);
+  const r = await sesNewDoc(m.name, 44100, 2, total, async push => {
+    const CH = 1 << 16, out = new Float32Array(CH * 2);
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i], h = heads[i];
+      for (let at = 0; at < h.frames; at += CH) {
+        const n = Math.min(CH, h.frames - at), b = new Uint8Array(reader.readAsArrayBuffer(f.slice(h.data + at * 4, h.data + (at + n) * 4)));
+        if (b.length < n * 4) throw new Error("short|" + f.name);
+        const dv = new DataView(b.buffer);
+        for (let k = 0; k < n; k++) { out[k] = dv.getInt16(k * 4, h.le) / 32768; out[n + k] = dv.getInt16(k * 4 + 2, h.le) / 32768; }
+        push(out.subarray(0, n * 2), n);
+        done += n;
+        const now = performance.now();
+        if (now - last > 150) { last = now; cdProg(m, "decode", done / total); await new Promise(res => setTimeout(res, 0)); if (cancelImport) throw new Error("cancelled"); }
+      }
+    }
+  }, null, { source: m.source || { kind: "cd" }, locs: marks, tags: Array.isArray(m.tags) ? m.tags.slice(0, 40) : [], cd: m.cd || null, bits: 16, ext: "aiff" });
+  return { t: "cdimported", meta: r.meta };
+}
+
+async function cdOpenDoc(id) {
+  const docDir = await (await docsDir()).getDirectoryHandle(String(id)), meta = await readJson(docDir, "meta.json");
+  let c = cur && cur.meta.id === meta.id ? cur : lingering.get(meta.id) || null, fresh = false;
+  if (!c) { c = await loadDoc(docDir, meta); fresh = true; }
+  return { c, fresh, rd: (src, cc, f, q, o, off) => readSrcOf(c, src, cc, f, q, o, off) };
+}
+
+function cdWords(buf, N, n, w) {
+  for (let i = 0; i < n; i++) {
+    let l = Math.round(buf[i] * 32768), r = Math.round(buf[N + i] * 32768);
+    l = l > 32767 ? 32767 : l < -32768 ? -32768 : l;
+    r = r > 32767 ? 32767 : r < -32768 ? -32768 : r;
+    w[i] = ((r & 0xffff) << 16 | (l & 0xffff)) >>> 0;
+  }
+}
+
+async function cdPass(D, T, oi, m, from, span) {
+  const { c, rd } = D, F = c.len, N = 1 << 16, buf = new Float32Array(N * 2), w = new Uint32Array(N);
+  const st = T.map((t, i) => ciAcc(t[1] - t[0], i === 0, i === T.length - 1));
+  const lo = Math.max(0, T[0][0] + oi), hi = Math.min(F, T[T.length - 1][1] + oi);
+  if (T[0][0] + oi < 0) { const z = new Uint32Array(Math.min(N, -(T[0][0] + oi))); for (let left = -(T[0][0] + oi); left > 0; left -= z.length) ciPush(st[0], z, Math.min(z.length, left)); }
+  let ti = 0, last = 0;
+  for (let p = lo; p < hi; p += N) {
+    const n = Math.min(N, hi - p);
+    readList(c.lists[0], c.cum[0], p, n, buf, 0, rd);
+    readList(c.lists[1 % c.meta.channels], c.cum[1 % c.meta.channels], p, n, buf, N, rd);
+    cdWords(buf, N, n, w);
+    let i = 0;
+    while (i < n) {
+      while (ti < T.length && p + i >= T[ti][1] + oi) ti++;
+      if (ti >= T.length) break;
+      const end = Math.min(n, T[ti][1] + oi - p);
+      ciPush(st[ti], w.subarray(i, end), end - i);
+      i = end;
+    }
+    const now = performance.now();
+    if (now - last > 150) { last = now; cdProg(m, "verify", from + span * (p + n - lo) / Math.max(1, hi - lo)); await new Promise(res => setTimeout(res, 0)); if (cancelImport) throw new Error("cancelled"); }
+  }
+  return st.map(ciDone);
+}
+
+async function cdVerify(m) {
+  const D = await cdOpenDoc(m.id), { c, rd } = D, F = c.len;
+  const T = (m.tracks || []).map(t => [clampI(t[0], 0, F), clampI(t[1], 0, F)]).filter(t => t[1] > t[0]);
+  if (!T.length) throw new Error("nothing");
+  const P = Array.isArray(m.ar) ? m.ar : [];
+  cancelImport = false;
+  try {
+    const base = await cdPass(D, T, 0, m, 0, P.length ? 0.6 : 1);
+    const votes = new Map(), W = CI_SPF + 2 * CI_REACH, buf = new Float32Array(W * 2), win = new Uint32Array(W);
+    T.forEach((t, i) => {
+      const want = P.map(p => p.tracks[i] && p.tracks[i].f450).filter(Boolean);
+      const at = t[0] + 450 * CI_SPF - CI_REACH;
+      if (!want.length || t[1] - t[0] < 452 * CI_SPF || at < 0 || at + W > F) return;
+      readList(c.lists[0], c.cum[0], at, W, buf, 0, rd);
+      readList(c.lists[1 % c.meta.channels], c.cum[1 % c.meta.channels], at, W, buf, W, rd);
+      cdWords(buf, W, W, win);
+      const seen = new Set();
+      for (let oi = -CI_REACH; oi <= CI_REACH; oi++) {
+        const v = ciF450(win, CI_REACH + oi);
+        if (want.includes(v) && !seen.has(oi)) { seen.add(oi); votes.set(oi, (votes.get(oi) || 0) + 1); }
+      }
+    });
+    const cand = [...votes.entries()].filter(e => e[0] !== 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+    const score = (oi, crcs) => crcs.map((r, i) => {
+      let conf = 0, total = 0, v = 0;
+      for (const p of P) { const k = p.tracks[i]; if (!k) continue; total += k.c; if (k.crc && (k.crc === r.v1 || k.crc === r.v2)) { conf += k.c; v = k.crc === r.v2 ? 2 : 1; } }
+      return { conf, total, v };
+    });
+    const results = [{ offset: 0, tracks: score(0, base) }];
+    for (const [j, oi] of cand.entries()) results.push({ offset: oi, tracks: score(oi, await cdPass(D, T, oi, m, 0.6 + 0.4 * j / cand.length, 0.4 / cand.length)) });
+    const good = r => r.tracks.filter(x => x.conf > 0).length, sum = r => r.tracks.reduce((a, x) => a + x.conf, 0);
+    results.sort((a, b) => good(b) - good(a) || sum(b) - sum(a) || Math.abs(a.offset) - Math.abs(b.offset));
+    cdProg(m, "verify", 1);
+    return { t: "cdverified", crcs: base, votes: [...votes.entries()], results };
+  } finally {
+    if (D.fresh) closeHandles(D.c);
+  }
+}
+
+async function cdShift(m) {
+  const D = await cdOpenDoc(m.id), { c, rd } = D, F = c.len, oi = clampI(m.shift, -CI_REACH, CI_REACH), meta = c.meta;
+  cancelImport = false;
+  try {
+    const N = 1 << 16, buf = new Float32Array(N * 2), il = new Float32Array(N * 2), ch = meta.channels;
+    const marks = (c.marks || []).map(k => Object.assign({}, k));
+    const r = await sesNewDoc(meta.name, meta.sampleRate, ch, F, async push => {
+      let last = 0;
+      for (let p = 0; p < F; p += N) {
+        const n = Math.min(N, F - p), s0 = p + oi, a = Math.max(0, s0), b = Math.min(F, s0 + n);
+        buf.fill(0);
+        if (b > a) for (let k = 0; k < ch; k++) readList(c.lists[k], c.cum[k], a, b - a, buf, k * N + (a - s0), rd);
+        for (let k = 0; k < ch; k++) il.set(buf.subarray(k * N, k * N + n), k * n);
+        push(il.subarray(0, n * ch), n);
+        const now = performance.now();
+        if (now - last > 150) { last = now; cdProg(m, "verify", (p + n) / F); await new Promise(res => setTimeout(res, 0)); }
+      }
+    }, null, { source: meta.source || { kind: "cd" }, locs: marks.length && validMarks(marks, F) ? marks : meta.locs || [], tags: meta.tags || [], cd: Object.assign({}, meta.cd || {}, { shift: oi }), bits: meta.bits, ext: meta.ext || "" });
+    return { t: "cdshifted", meta: r.meta };
+  } finally {
+    if (D.fresh) closeHandles(D.c);
   }
 }
 
@@ -4850,6 +4995,9 @@ async function handle(m) {
   if (m.t === "sesdel") { postMessage(Object.assign({ req: m.req }, await sesDel(m))); return; }
   if (m.t === "sesbounce") { postMessage(Object.assign({ req: m.req }, await sesBounce(m))); return; }
   if (m.t === "cdddp") { postMessage(Object.assign({ req: m.req }, await cdDdp(m))); return; }
+  if (m.t === "cdimport") { await importing; const job = cdImport(m); importing = job.catch(() => {}); postMessage(Object.assign({ req: m.req }, await job)); return; }
+  if (m.t === "cdverify") { postMessage(Object.assign({ req: m.req }, await cdVerify(m))); return; }
+  if (m.t === "cdshift") { postMessage(Object.assign({ req: m.req }, await cdShift(m))); return; }
   if (m.t === "dxzip") { postMessage(Object.assign({ req: m.req }, await dxZip(m))); return; }
   if (m.t === "cdloud") { postMessage(Object.assign({ req: m.req }, await cdLoud(m))); return; }
   if (m.t === "vncheck") { postMessage(Object.assign({ req: m.req }, await vnCheck(m))); return; }

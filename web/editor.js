@@ -830,7 +830,7 @@ async function importFiles(files) {
 function importProgress(m) {
   const box = $("busy");
   box.classList.remove("hidden");
-  $("busyTitle").textContent = m.phase === "download" ? t("Downloading") : t("Reading");
+  $("busyTitle").textContent = m.phase === "download" ? t("Downloading") : m.phase === "verify" ? t("Checking against AccurateRip") : t("Reading");
   $("busyName").textContent = m.name;
   $("busyBar").style.width = Math.round((m.frac || 0) * 100) + "%";
   $("busyPct").textContent = m.phase === "download" && !m.total ? fmtBytes(m.bytes || 0) : Math.round((m.frac || 0) * 100) + "%" + (m.phase === "download" && m.total ? " · " + fmtBytes(m.total) : "");
@@ -1832,6 +1832,7 @@ function wireUi() {
   wireMidi();
   txInit();
   rvInit();
+  ciInit();
   wireTracks();
   wirePx();
   wirePen();
