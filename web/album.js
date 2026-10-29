@@ -240,6 +240,7 @@ function alRender() {
   $("albExport").disabled = !s.n;
   alRenderCd(A);
   alRenderVn(A);
+  alRenderSq(A);
 }
 
 async function alChanged() {

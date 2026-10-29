@@ -261,7 +261,7 @@ function cdHash(str) {
 
 function cdCsv(rows) { return rows.map(r => r.map(v => { const x = String(v == null ? "" : v); return /[",\n;]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(",")).join("\r\n") + "\r\n"; }
 
-async function cdRelease(A) {
+async function cdRelease(A, opts) {
   const s0 = await cdSession(A);
   if (!s0) return;
   const bad = cdCheck(A, s0).filter(r => !r.good && !r.soft && !r.cd);
@@ -292,6 +292,13 @@ async function cdRelease(A) {
   let info = null;
   try { info = (await call({ t: "docinfo", ids: [id] })).docs[0]; } catch {}
   if (!info || info.error) { tell(t("The rendered file is no longer here. Render it again."), t("Could not export")); return; }
+  if (opts && opts.hear) {
+    await openDoc(id);
+    if (!ed.doc || ed.doc.id !== id) return;
+    sv.plat = opts.hear;
+    svOpen();
+    return;
+  }
   const rel = A.release || {}, P = (A.cd && A.cd.performer) || alArtist(A) || "", T = (A.cd && A.cd.title) || alTitle(A) || "", upc = ddpEan((A.cd && A.cd.upc) || ""), n = L.length;
   const starts = L.map(k => k.at - a), pieces = L.map((k, i) => {
     const c = k.cd || {}, b = i + 1 < n ? starts[i + 1] : info.frames, pos = String(i + 1).padStart(2, "0");
@@ -387,6 +394,7 @@ async function alRenderCd(A) {
   for (const r of cdCheck(A, s)) chk.appendChild(alEl("div", r.good ? "ok" : "bad", (r.good ? "✓ " : "⚠ ") + r.text));
   box.appendChild(chk);
   const btns = alEl("div", "cdbtns");
+  alRenderSq(A);
   btns.append(alBtn(t("Open the montage"), t("Open it in the multitrack to move, trim and fade the tracks"), () => cdOpen(A)), alBtn(t("Play the transitions"), t("The last 10 s of each track into the first 5 s of the next"), () => cdTransitions(A)), alBtn(t("Write the DDP"), t("A DDP 2.0 fileset for the pressing plant, 44.1 kHz 16-bit, as a zip with PQ list, cue sheet and MD5 checksums"), () => cdDdp(A)), alBtn(t("Export the release"), t("One file per track from the montage as it plays, with title, artist, ISRC and UPC/EAN, plus a track sheet for the distributor"), () => cdRelease(A)), alBtn(t("Rebuild from the sides"), t("Lay the montage out again from the range markers of the sides"), async () => { if (await ask(t("Rebuild the montage?"), t("Gaps, crossfades and CD-Text of the montage are laid out again from the sides."), { ok: t("rebuild") })) cdMake(A, true); }));
   box.appendChild(btns);
 }

@@ -4,7 +4,7 @@ const SV_PLATFORMS = [
   { v: "apple", plat: "apple", label: "Apple Music", real: "AAC 256 kbps", codec: "aac", kbps: 256 },
   { v: "youtube", plat: "youtube", label: "YouTube", real: "Opus about 130 kbps", codec: "opus", kbps: 128 },
   { v: "soundcloud", plat: "soundcloud", label: "SoundCloud", real: "Opus 64 kbps", codec: "opus", kbps: 64 },
-  { v: "deezer", plat: "deezer", label: "Deezer", real: "MP3 128 kbps", codec: "opus", kbps: 128 }
+  { v: "deezer", plat: "deezer", label: "Deezer Free", real: "MP3 128 kbps (subscribers get FLAC)", codec: "opus", kbps: 128 }
 ];
 const SV_MAX = 120;
 const sv = { open: false, plat: "spotify", job: null, err: "", r: null, ctx: null, nodes: null, mode: "plat", playing: false, t0: 0, off: 0, raf: 0, stats: null };

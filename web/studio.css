@@ -202,6 +202,13 @@ button,a{touch-action:manipulation}
 .cdlrow .dd{min-width:calc(150px*var(--fs))}
 .cdlsum{font-size:calc(11px*var(--fs));color:var(--gray)}
 .vnside{display:flex;flex-direction:column;gap:calc(4px*var(--fs))}
+.sqtbl{display:grid;grid-template-columns:auto auto auto auto minmax(calc(160px*var(--fs)),1fr) auto;gap:calc(4px*var(--fs)) calc(10px*var(--fs));align-items:center;overflow-x:auto}
+.sqtbl .cdh{font-size:calc(9px*var(--fs));color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.sqtbl .cdtm{font-family:var(--mono);font-size:calc(11px*var(--fs));color:var(--gray);white-space:nowrap}
+.sqtbl .sqn{font-size:calc(11px*var(--fs));color:var(--white);white-space:nowrap}
+.sqtbl .sqhot{color:var(--gold)}
+.sqtbl .snote{min-width:0}
+@media (max-width:600px){.sqtbl{grid-template-columns:auto auto auto auto calc(180px*var(--fs)) auto}}
 .txlist{display:flex;flex-direction:column;gap:calc(2px*var(--fs));max-height:calc(360px*var(--fs));overflow-y:auto;border:1px solid var(--border);padding:calc(4px*var(--fs))}
 .txseg{display:flex;gap:calc(8px*var(--fs));align-items:baseline;padding:calc(2px*var(--fs)) calc(4px*var(--fs));font-size:calc(12px*var(--fs));line-height:1.5;color:var(--gray)}
 .txseg.now{background:color-mix(in srgb,var(--gold) 10%,transparent);color:var(--white)}
