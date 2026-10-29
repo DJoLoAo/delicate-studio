@@ -1162,7 +1162,13 @@ function albumClean(v) {
     const cd = a.cd && typeof a.cd === "object" ? { upc: s(a.cd.upc, 20).replace(/\D/g, ""), title: s(a.cd.title, 160), performer: s(a.cd.performer, 160), loud } : { upc: "", title: "", performer: "", loud };
     const mix = a.mix && typeof a.mix === "object" && s(a.mix.doc, 80) ? { doc: s(a.mix.doc, 80), sig: s(a.mix.sig, 40) } : null;
     const vinyl = { fmt: ["12-33", "12-45", "10-33", "10-45", "7-45", "7-33"].includes(a.vinyl && a.vinyl.fmt) ? a.vinyl.fmt : "12-33" };
-    out.push({ id: s(a.id, 60) || crypto.randomUUID(), title: s(a.title, 200), release: rel, sides, created: Number(a.created) || Date.now(), updated: Date.now(), montage: s(a.montage, 60), cd, mix, vinyl });
+    const dx = a.ddex && typeof a.ddex === "object" ? a.ddex : null, party = p => ({ name: s(p && p.name, 160), dpid: s(p && p.dpid, 24) });
+    const cv = dx && dx.cover && typeof dx.cover === "object" && /^image\/(jpeg|png)$/.test(dx.cover.mime) ? { name: s(dx.cover.name, 200), mime: dx.cover.mime, w: fnum(dx.cover.w, 0, 100000, 0), h: fnum(dx.cover.h, 0, 100000, 0), size: fnum(dx.cover.size, 0, 1e9, 0), at: fnum(dx.cover.at, 0, 1e15, 0) } : null;
+    const ddex = dx ? { label: s(dx.label, 160), date: /^\d{4}-\d{2}-\d{2}$/.test(dx.date) ? dx.date : "", genre: s(dx.genre, 80), catno: s(dx.catno, 60), pOwner: s(dx.pOwner, 160), pYear: /^\d{4}$/.test(dx.pYear) ? dx.pYear : "", cOwner: s(dx.cOwner, 160), cYear: /^\d{4}$/.test(dx.cYear) ? dx.cYear : "", lang: /^[a-z]{2,3}$/.test(dx.lang) ? dx.lang : "en", type: ["Album", "EP", "Single"].includes(dx.type) ? dx.type : "", sender: party(dx.sender), recipient: party(dx.recipient), stream: dx.stream !== false, download: dx.download !== false, test: !!dx.test, cover: cv } : null;
+    if (dx && dx.label === undefined) delete ddex.label;
+    if (dx && dx.genre === undefined) delete ddex.genre;
+    if (dx && dx.catno === undefined) delete ddex.catno;
+    out.push({ id: s(a.id, 60) || crypto.randomUUID(), title: s(a.title, 200), release: rel, sides, created: Number(a.created) || Date.now(), updated: Date.now(), montage: s(a.montage, 60), cd, mix, vinyl, ddex });
   }
   return out;
 }
@@ -1282,7 +1288,7 @@ function sesClean(v) {
     for (const k of Array.isArray(tr.clips) ? tr.clips.slice(0, 2000) : []) {
       if (!k || typeof k !== "object" || !k.doc) continue;
       const len = int(k.len, 1, 2 ** 40), fin = int(k.fin, 0, len);
-      const cd = k.cd && typeof k.cd === "object" ? { title: str(k.cd.title, 160), performer: str(k.cd.performer, 160), isrc: str(k.cd.isrc, 15).toUpperCase().replace(/[^A-Z0-9]/g, "") } : null;
+      const cd = k.cd && typeof k.cd === "object" ? { title: str(k.cd.title, 160), performer: str(k.cd.performer, 160), isrc: str(k.cd.isrc, 15).toUpperCase().replace(/[^A-Z0-9]/g, ""), composer: str(k.cd.composer, 400), lyricist: str(k.cd.lyricist, 400), explicit: !!k.cd.explicit } : null;
       clips.push({ id: str(k.id, 40) || crypto.randomUUID().slice(0, 12), doc: str(k.doc, 80), at: int(k.at, 0, 2 ** 40), from: int(k.from, 0, 2 ** 40), len, gain: num(k.gain, -96, 24, 0), fin, fout: int(k.fout, 0, len - fin), name: str(k.name, 160), cd });
     }
     clips.sort((a, b) => a.at - b.at);
@@ -1865,6 +1871,56 @@ async function cdDdp(m) {
     try { await dir.removeEntry(file); } catch {}
     throw e;
   } finally { job.done(); }
+}
+
+async function dxZip(m) {
+  await exportsReady;
+  const dir = await exportsDir(), file = m.jobId + ".zip", when = ddpZipTime(new Date());
+  const hd = await (await dir.getFileHandle(file, { create: true })).createSyncAccessHandle();
+  const entries = [], total = Math.max(1, (m.items || []).reduce((a, it) => a + (it.size || (it.bytes ? it.bytes.length : 0)), 0));
+  let off = 0, done = 0, last = 0;
+  try {
+    hd.truncate(0);
+    for (const it of m.items || []) {
+      if (it.bytes) {
+        const b = it.bytes instanceof Uint8Array ? it.bytes : new Uint8Array(it.bytes), crc = ddpCrc32(0, b), h = ddpZipLocal(it.name, crc, b.length, when);
+        entries.push({ name: it.name, crc, size: b.length, off });
+        putAt(hd, h, off); off += h.length;
+        putAt(hd, b, off); off += b.length;
+        done += b.length;
+        continue;
+      }
+      const src = await (await dir.getFileHandle(it.file)).getFile(), size = src.size, head = off, hl = ddpZipLocal(it.name, 0, size, when).length;
+      if (off + hl + size > 0xFFFFFFFF) throw new Error("too-large");
+      off += hl;
+      let crc = 0;
+      const rd = src.stream().getReader();
+      for (;;) {
+        const { value, done: end } = await rd.read();
+        if (end) break;
+        crc = ddpCrc32(crc, value);
+        putAt(hd, value, off);
+        off += value.length;
+        done += value.length;
+        const now = performance.now();
+        if (now - last > 150) { last = now; postMessage({ t: "dxzip", jobId: m.jobId, frac: done / total }); }
+      }
+      putAt(hd, ddpZipLocal(it.name, crc, size, when), head);
+      entries.push({ name: it.name, crc, size, off: head });
+    }
+    const end = ddpZipEnd(entries, off, when);
+    if (off + end.length > 0xFFFFFFFF) throw new Error("too-large");
+    putAt(hd, end, off);
+    off += end.length;
+    hd.flush();
+    hd.close();
+    for (const it of m.items || []) if (it.file && it.drop) { try { await dir.removeEntry(it.file); } catch {} }
+    return { file, size: off };
+  } catch (e) {
+    try { hd.close(); } catch {}
+    try { await dir.removeEntry(file); } catch {}
+    throw e;
+  }
 }
 
 async function cdLoud(m) {
@@ -2518,8 +2574,22 @@ async function renderJob(job) {
       }
       sha = new TextDecoder().decode(new Uint8Array(x.memory.buffer, x.sha_hex(), 64));
     }
+    let md5 = null;
+    if (job.dest.kind === "ddex") {
+      job.state = "hashing"; job.frac = 0; xpost(job);
+      const st = ddpMd5New(), CAP = 1 << 22, tmp = new Uint8Array(CAP);
+      for (let at = 0; at < fileOff;) {
+        const n = Math.min(CAP, fileOff - at), v = tmp.subarray(0, n);
+        hd.read(v, { at });
+        ddpMd5Push(st, v);
+        at += n;
+        job.frac = at / fileOff;
+        await tick(0);
+      }
+      md5 = ddpMd5Hex(st);
+    }
     hd.close();
-    return { size: fileOff, peak, clipped, frames: outFrames, rate: rateOut, sha };
+    return { size: fileOff, peak, clipped, frames: outFrames, rate: rateOut, sha, md5, bits };
   } catch (e) {
     try { hd.close(); } catch {}
     try { x.fl_close(); x.rs_close(); } catch {}
@@ -2581,7 +2651,7 @@ async function pumpExport() {
       let up = null;
       if (job.dest.kind === "locker") up = await lockerUpload(job, res);
       job.state = "done"; job.frac = 1;
-      xpost(job, { size: res.size, peak: res.peak, clipped: res.clipped, frames: res.frames, rate: res.rate, sha: res.sha, file: job.file, locker: up, ms: Math.round(performance.now() - t0) });
+      xpost(job, { size: res.size, peak: res.peak, clipped: res.clipped, frames: res.frames, rate: res.rate, sha: res.sha, md5: res.md5, bits: res.bits, file: job.file, locker: up, ms: Math.round(performance.now() - t0) });
     } catch (e) {
       job.state = e.message === "cancelled" ? "cancelled" : "failed";
       xpost(job, { error: errText(e), quota: e.quota || null });
@@ -4780,6 +4850,7 @@ async function handle(m) {
   if (m.t === "sesdel") { postMessage(Object.assign({ req: m.req }, await sesDel(m))); return; }
   if (m.t === "sesbounce") { postMessage(Object.assign({ req: m.req }, await sesBounce(m))); return; }
   if (m.t === "cdddp") { postMessage(Object.assign({ req: m.req }, await cdDdp(m))); return; }
+  if (m.t === "dxzip") { postMessage(Object.assign({ req: m.req }, await dxZip(m))); return; }
   if (m.t === "cdloud") { postMessage(Object.assign({ req: m.req }, await cdLoud(m))); return; }
   if (m.t === "vncheck") { postMessage(Object.assign({ req: m.req }, await vnCheck(m))); return; }
   if (m.t === "sesconv") { postMessage(Object.assign({ req: m.req }, await sesConvert(m))); return; }

@@ -261,13 +261,9 @@ function cdHash(str) {
 
 function cdCsv(rows) { return rows.map(r => r.map(v => { const x = String(v == null ? "" : v); return /[",\n;]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(",")).join("\r\n") + "\r\n"; }
 
-async function cdRelease(A, opts) {
-  const s0 = await cdSession(A);
-  if (!s0) return;
-  const bad = cdCheck(A, s0).filter(r => !r.good && !r.soft && !r.cd);
-  if (bad.length) { tell(bad.map(r => "⚠ " + r.text).join("\n"), t("Fix these before exporting the release")); return; }
+async function cdMixdown(A) {
   await cdOpen(A);
-  if (!ses.open || ses.s.id !== A.montage) return;
+  if (!ses.open || ses.s.id !== A.montage) return null;
   await ssSave();
   const s = ses.s, L = cdClips(s), a = L[0].at, end = Math.max(...L.map(k => k.at + k.len));
   const sig = cdHash(JSON.stringify([s.sr, s.tracks, s.master || null, a, end]));
@@ -279,7 +275,7 @@ async function cdRelease(A, opts) {
     ses.bounce = { id: jobId };
     let r;
     try { r = await call({ t: "sesbounce", jobId, a, b: end, name: ((A.cd && A.cd.title) || alTitle(A) || "Album") + " · " + t("release mix") }); }
-    catch (e) { if ((e && e.message) !== "cancelled") tell(String(e.message || e), t("Could not mix down")); return; }
+    catch (e) { if ((e && e.message) !== "cancelled") tell(String(e.message || e), t("Could not mix down")); return null; }
     finally { ses.bounce = null; $("stMsg").textContent = ""; }
     if (r.peak > 1) flash(t("The mix goes over full scale by {d} dB. Turn some tracks down, or use the limiter when exporting.").replace("{d}", (20 * Math.log10(r.peak)).toFixed(1)));
     id = r.meta.id;
@@ -291,7 +287,28 @@ async function cdRelease(A, opts) {
   }
   let info = null;
   try { info = (await call({ t: "docinfo", ids: [id] })).docs[0]; } catch {}
-  if (!info || info.error) { tell(t("The rendered file is no longer here. Render it again."), t("Could not export")); return; }
+  if (!info || info.error) { tell(t("The rendered file is no longer here. Render it again."), t("Could not export")); return null; }
+  return { id, info, L, a };
+}
+
+function cdCut(A, M) {
+  const { info, L, a } = M, rel = A.release || {}, P = (A.cd && A.cd.performer) || alArtist(A) || "", T = (A.cd && A.cd.title) || alTitle(A) || "", upc = ddpEan((A.cd && A.cd.upc) || ""), n = L.length;
+  const starts = L.map(k => k.at - a), pieces = L.map((k, i) => {
+    const c = k.cd || {}, b = i + 1 < n ? starts[i + 1] : info.frames, pos = String(i + 1).padStart(2, "0");
+    const tag = { pos, title: c.title || k.name || "", artist: c.performer || P, album: T, albumArtist: P, year: rel.year || "", label: rel.label || "", catno: rel.catno || "", country: rel.country || "", genre: rel.genre || "", style: rel.style || "", format: "", release: rel.id || "", cover: rel.cover || "", isrc: c.isrc || "", upc, total: String(n) };
+    return { a: Math.max(0, starts[i]), b: Math.min(info.frames, b), range: tag.title, index: i + 1, tag, doc: info, clip: k };
+  });
+  return { pieces, rel, P, T, upc };
+}
+
+async function cdRelease(A, opts) {
+  const s0 = await cdSession(A);
+  if (!s0) return;
+  const bad = cdCheck(A, s0).filter(r => !r.good && !r.soft && !r.cd);
+  if (bad.length) { tell(bad.map(r => "⚠ " + r.text).join("\n"), t("Fix these before exporting the release")); return; }
+  const M = await cdMixdown(A);
+  if (!M) return;
+  const { id, info } = M;
   if (opts && opts.hear) {
     await openDoc(id);
     if (!ed.doc || ed.doc.id !== id) return;
@@ -299,12 +316,7 @@ async function cdRelease(A, opts) {
     svOpen();
     return;
   }
-  const rel = A.release || {}, P = (A.cd && A.cd.performer) || alArtist(A) || "", T = (A.cd && A.cd.title) || alTitle(A) || "", upc = ddpEan((A.cd && A.cd.upc) || ""), n = L.length;
-  const starts = L.map(k => k.at - a), pieces = L.map((k, i) => {
-    const c = k.cd || {}, b = i + 1 < n ? starts[i + 1] : info.frames, pos = String(i + 1).padStart(2, "0");
-    const tag = { pos, title: c.title || k.name || "", artist: c.performer || P, album: T, albumArtist: P, year: rel.year || "", label: rel.label || "", catno: rel.catno || "", country: rel.country || "", genre: rel.genre || "", style: rel.style || "", format: "", release: rel.id || "", cover: rel.cover || "", isrc: c.isrc || "", upc, total: String(n) };
-    return { a: Math.max(0, starts[i]), b: Math.min(info.frames, b), range: tag.title, index: i + 1, tag, doc: info };
-  });
+  const { pieces, rel, P, T, upc } = cdCut(A, M);
   const head = [t("Track"), t("Title"), t("Artist"), "ISRC", t("Length"), "UPC/EAN", t("Album"), t("Album artist")];
   const csv = cdCsv([head].concat(pieces.map(p => [p.tag.pos, p.tag.title, p.tag.artist, p.tag.isrc, fmtDur((p.b - p.a) / info.sampleRate), upc, T, P])));
   const ctx = { id: A.id, title: T, named: true, artist: P, genre: rel.genre || "", year: rel.year ? String(rel.year) : "", release: A.release, upc, sides: [{ info, letter: "", disc: 1 }], ndisc: 1, pieces, sheet: { name: xpClean([P, T].filter(Boolean).join(" - ") || "release") + " - tracks.csv", text: csv } };
@@ -396,6 +408,7 @@ async function alRenderCd(A) {
   box.appendChild(chk);
   const btns = alEl("div", "cdbtns");
   alRenderSq(A);
+  dxRender(A);
   btns.append(alBtn(t("Open the montage"), t("Open it in the multitrack to move, trim and fade the tracks"), () => cdOpen(A)), alBtn(t("Play the transitions"), t("The last 10 s of each track into the first 5 s of the next"), () => cdTransitions(A)), alBtn(t("Write the DDP"), t("A DDP 2.0 fileset for the pressing plant, 44.1 kHz 16-bit, as a zip with PQ list, cue sheet and MD5 checksums"), () => cdDdp(A)), alBtn(t("Export the release"), t("One file per track from the montage as it plays, with title, artist, ISRC and UPC/EAN, plus a track sheet for the distributor"), () => cdRelease(A)), alBtn(t("Rebuild from the sides"), t("Lay the montage out again from the range markers of the sides"), async () => { if (await ask(t("Rebuild the montage?"), t("Gaps, crossfades and CD-Text of the montage are laid out again from the sides."), { ok: t("rebuild") })) cdMake(A, true); }));
   box.appendChild(btns);
 }

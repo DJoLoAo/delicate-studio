@@ -241,6 +241,7 @@ function alRender() {
   alRenderCd(A);
   alRenderVn(A);
   alRenderSq(A);
+  dxRender(A);
 }
 
 async function alChanged() {

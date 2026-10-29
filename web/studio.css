@@ -208,6 +208,47 @@ button,a{touch-action:manipulation}
 .sqtbl .sqn{font-size:calc(11px*var(--fs));color:var(--white);white-space:nowrap}
 .sqtbl .sqhot{color:var(--gold)}
 .sqtbl .snote{min-width:0}
+.dxtop{display:flex;gap:calc(14px*var(--fs));align-items:flex-start}
+.dxcover{flex:none;width:calc(132px*var(--fs));height:calc(132px*var(--fs));padding:0;border:1px solid var(--border);background:var(--bg);color:var(--dim);font:inherit;font-size:calc(9px*var(--fs));letter-spacing:.1em;text-transform:uppercase;cursor:pointer;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.dxcover.none{border-style:dashed}
+.dxcover:hover{border-color:var(--gray)}
+.dxcover img{width:100%;height:100%;object-fit:cover;display:block}
+.dxright{flex:1;min-width:0;display:flex;flex-direction:column;gap:calc(8px*var(--fs))}
+.dxhead{grid-template-columns:auto 1fr auto 1fr}
+.dxhead .xtext{min-width:0;width:100%;box-sizing:border-box;padding:calc(4px*var(--fs)) calc(6px*var(--fs))}
+.dxhead .dd{min-width:0}
+.dxpair{display:flex;gap:calc(6px*var(--fs));min-width:0}
+.dxpair .xtext{flex:1}
+.dxpair .dxpy,.dxpair .dxcy{flex:none;width:calc(58px*var(--fs));font-family:var(--mono)}
+.dxpair .dxdpid{flex:none;width:21ch;font-family:var(--mono)}
+.dxhead .bad{border-color:var(--red)}
+.dxdate{text-align:left;cursor:pointer}
+.dxdate.empty{color:var(--dim)}
+.dxtog.on,.dxex.on{color:var(--gold);border-color:var(--gold)}
+.dxtbl{display:grid;grid-template-columns:auto minmax(calc(110px*var(--fs)),1.2fr) auto auto minmax(calc(110px*var(--fs)),1fr) minmax(calc(110px*var(--fs)),1fr) auto;gap:calc(4px*var(--fs)) calc(8px*var(--fs));align-items:center;overflow-x:auto}
+.dxtbl .cdh{font-size:calc(9px*var(--fs));color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.dxtbl .cdn,.dxtbl .cdtm{font-family:var(--mono);font-size:calc(11px*var(--fs));color:var(--gray);white-space:nowrap}
+.dxtbl .dxt{font-size:calc(11px*var(--fs));color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.dxtbl .dxmiss{color:var(--gold)}
+.dxtbl .xtext{min-width:0;width:100%;box-sizing:border-box;padding:calc(4px*var(--fs)) calc(6px*var(--fs))}
+.dxtbl .dxex{padding:calc(3px*var(--fs)) calc(7px*var(--fs))}
+.dxbar{position:relative;height:calc(18px*var(--fs));border:1px solid var(--border);background:var(--bg)}
+.dxbar.hidden{display:none}
+.dxbar .dxfill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--bg4);transition:width .15s}
+.dxbar .dxstep{position:relative;padding:0 calc(8px*var(--fs));line-height:calc(18px*var(--fs))}
+.cal{position:fixed;z-index:80;background:var(--bg2);border:1px solid var(--border);box-shadow:0 10px 30px rgba(0,0,0,.6);padding:calc(8px*var(--fs));width:calc(232px*var(--fs));font-size:calc(11px*var(--fs))}
+.calhead{display:flex;align-items:center;gap:calc(2px*var(--fs));margin-bottom:calc(6px*var(--fs))}
+.caltitle{flex:1;text-align:center;color:var(--white);text-transform:capitalize}
+.calnav{background:none;border:1px solid transparent;color:var(--gray);font:inherit;cursor:pointer;padding:calc(2px*var(--fs)) calc(6px*var(--fs))}
+.calnav:hover{color:var(--gold);border-color:var(--border)}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:calc(2px*var(--fs))}
+.calwd{text-align:center;color:var(--dim);font-size:calc(9px*var(--fs));text-transform:uppercase;padding:calc(2px*var(--fs)) 0}
+.calday{background:none;border:1px solid transparent;color:var(--white);font:inherit;font-family:var(--mono);cursor:pointer;padding:calc(4px*var(--fs)) 0}
+.calday:hover{background:var(--bg4);color:var(--gold)}
+.calday.today{border-color:var(--border)}
+.calday.on{background:var(--gold);color:var(--bg)}
+.calfoot{display:flex;gap:calc(6px*var(--fs));justify-content:flex-end;margin-top:calc(6px*var(--fs))}
+@media (max-width:600px){.dxtop{flex-direction:column}.dxhead{grid-template-columns:auto 1fr}.dxtbl{grid-template-columns:auto calc(130px*var(--fs)) auto auto calc(130px*var(--fs)) calc(130px*var(--fs)) auto}}
 @media (max-width:600px){.sqtbl{grid-template-columns:auto auto auto auto calc(180px*var(--fs)) auto}}
 .txlist{display:flex;flex-direction:column;gap:calc(2px*var(--fs));max-height:calc(360px*var(--fs));overflow-y:auto;border:1px solid var(--border);padding:calc(4px*var(--fs))}
 .txseg{display:flex;gap:calc(8px*var(--fs));align-items:baseline;padding:calc(2px*var(--fs)) calc(4px*var(--fs));font-size:calc(12px*var(--fs));line-height:1.5;color:var(--gray)}
