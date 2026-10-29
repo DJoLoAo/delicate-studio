@@ -311,6 +311,7 @@ async function cdRelease(A, opts) {
   const f = xpClean([P, T].filter(Boolean).join(" - "));
   if (f) xp.cfg.folder = f;
   if (xp.cfg.tplRange === XP_DEFAULT.tplRange) xp.cfg.tplRange = "$position $title";
+  if (opts && opts.formats) xp.cfg.formats = opts.formats.map(f => Object.assign({}, f));
   xpSave();
   openExport(ctx);
 }

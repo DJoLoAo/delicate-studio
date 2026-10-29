@@ -1752,5 +1752,16 @@
  "hear": "ascolta",
  "track by track": "traccia per traccia",
  "Deezer Free": "Deezer Free",
- "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (FLAC per gli abbonati)"
+ "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (FLAC per gli abbonati)",
+ "Made from lossy files ({f}): no lossless or hi-res label is honest for this release.": "Fatto da file con perdita ({f}): nessuna etichetta lossless o hi-res è onesta per questa uscita.",
+ "The sources are 16-bit: deliver CD quality. A 24-bit file of 16-bit material gets no hi-res label.": "Le sorgenti sono a 16 bit: consegna qualità CD. Un file a 24 bit da materiale a 16 bit non ottiene l'etichetta hi-res.",
+ "Sources {b} at {r} or more: the hi-res master qualifies on Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) and Deezer.": "Sorgenti {b} a {r} o più: il master hi-res è idoneo su Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) e Deezer.",
+ "Apple Music shows Hi-Res Lossless (above 48 kHz).": "Apple Music mostra Hi-Res Lossless (sopra 48 kHz).",
+ "Apple Music shows Lossless; Hi-Res Lossless needs more than 48 kHz.": "Apple Music mostra Lossless; Hi-Res Lossless richiede più di 48 kHz.",
+ "Spotify plays at most 24-bit/44.1 kHz and converts it itself.": "Spotify suona al massimo a 24 bit/44,1 kHz e converte da sé.",
+ "Every track of a release needs the hi-res specs for the badge; the lowest source counts.": "Per il badge ogni traccia dell'uscita deve avere le specifiche hi-res; conta la sorgente più bassa.",
+ "Export hi-res and CD quality": "Esporta hi-res e qualità CD",
+ "Export CD quality": "Esporta qualità CD",
+ "FLAC 24-bit at {r} kHz for the hi-res services and WAV 16-bit/44.1 kHz with dither for the others, one file per track with tags": "FLAC 24 bit a {r} kHz per i servizi hi-res e WAV 16 bit/44,1 kHz con dither per gli altri, un file per traccia con tag",
+ "WAV 16-bit/44.1 kHz with dither, one file per track with tags": "WAV 16 bit/44,1 kHz con dither, un file per traccia con tag"
 }

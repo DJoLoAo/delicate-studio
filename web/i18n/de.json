@@ -1752,5 +1752,16 @@
  "hear": "anhören",
  "track by track": "Track für Track",
  "Deezer Free": "Deezer Free",
- "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (Abonnenten bekommen FLAC)"
+ "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (Abonnenten bekommen FLAC)",
+ "Made from lossy files ({f}): no lossless or hi-res label is honest for this release.": "Aus verlustbehafteten Dateien gemacht ({f}): Kein Lossless- oder Hi-Res-Label ist für diese Veröffentlichung ehrlich.",
+ "The sources are 16-bit: deliver CD quality. A 24-bit file of 16-bit material gets no hi-res label.": "Die Quellen sind 16 Bit: Liefere CD-Qualität. Eine 24-Bit-Datei aus 16-Bit-Material bekommt kein Hi-Res-Label.",
+ "Sources {b} at {r} or more: the hi-res master qualifies on Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) and Deezer.": "Quellen {b} bei {r} oder mehr: Das Hi-Res-Master qualifiziert sich bei Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) und Deezer.",
+ "Apple Music shows Hi-Res Lossless (above 48 kHz).": "Apple Music zeigt Hi-Res Lossless (über 48 kHz).",
+ "Apple Music shows Lossless; Hi-Res Lossless needs more than 48 kHz.": "Apple Music zeigt Lossless; Hi-Res Lossless braucht mehr als 48 kHz.",
+ "Spotify plays at most 24-bit/44.1 kHz and converts it itself.": "Spotify spielt höchstens 24 Bit/44,1 kHz und rechnet selbst um.",
+ "Every track of a release needs the hi-res specs for the badge; the lowest source counts.": "Für das Abzeichen braucht jeder Track einer Veröffentlichung die Hi-Res-Werte; die schwächste Quelle zählt.",
+ "Export hi-res and CD quality": "Hi-Res und CD-Qualität exportieren",
+ "Export CD quality": "CD-Qualität exportieren",
+ "FLAC 24-bit at {r} kHz for the hi-res services and WAV 16-bit/44.1 kHz with dither for the others, one file per track with tags": "FLAC 24 Bit bei {r} kHz für die Hi-Res-Dienste und WAV 16 Bit/44,1 kHz mit Dither für die anderen, eine Datei pro Track mit Tags",
+ "WAV 16-bit/44.1 kHz with dither, one file per track with tags": "WAV 16 Bit/44,1 kHz mit Dither, eine Datei pro Track mit Tags"
 }

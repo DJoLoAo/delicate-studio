@@ -1752,5 +1752,16 @@
  "hear": "escuchar",
  "track by track": "pista por pista",
  "Deezer Free": "Deezer Free",
- "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (FLAC para suscriptores)"
+ "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (FLAC para suscriptores)",
+ "Made from lossy files ({f}): no lossless or hi-res label is honest for this release.": "Hecho con archivos con pérdida ({f}): ninguna etiqueta lossless o hi-res es honesta para este lanzamiento.",
+ "The sources are 16-bit: deliver CD quality. A 24-bit file of 16-bit material gets no hi-res label.": "Las fuentes son de 16 bits: entrega calidad CD. Un archivo de 24 bits hecho de material de 16 bits no recibe etiqueta hi-res.",
+ "Sources {b} at {r} or more: the hi-res master qualifies on Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) and Deezer.": "Fuentes {b} a {r} o más: el máster hi-res cumple en Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) y Deezer.",
+ "Apple Music shows Hi-Res Lossless (above 48 kHz).": "Apple Music muestra Hi-Res Lossless (por encima de 48 kHz).",
+ "Apple Music shows Lossless; Hi-Res Lossless needs more than 48 kHz.": "Apple Music muestra Lossless; Hi-Res Lossless necesita más de 48 kHz.",
+ "Spotify plays at most 24-bit/44.1 kHz and converts it itself.": "Spotify reproduce como máximo 24 bits/44,1 kHz y convierte por su cuenta.",
+ "Every track of a release needs the hi-res specs for the badge; the lowest source counts.": "Para la insignia, cada pista del lanzamiento necesita las especificaciones hi-res; cuenta la fuente más baja.",
+ "Export hi-res and CD quality": "Exportar hi-res y calidad CD",
+ "Export CD quality": "Exportar calidad CD",
+ "FLAC 24-bit at {r} kHz for the hi-res services and WAV 16-bit/44.1 kHz with dither for the others, one file per track with tags": "FLAC 24 bits a {r} kHz para los servicios hi-res y WAV 16 bits/44,1 kHz con dither para los demás, un archivo por pista con etiquetas",
+ "WAV 16-bit/44.1 kHz with dither, one file per track with tags": "WAV 16 bits/44,1 kHz con dither, un archivo por pista con etiquetas"
 }

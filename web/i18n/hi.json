@@ -1752,5 +1752,16 @@
  "hear": "सुनें",
  "track by track": "ट्रैक दर ट्रैक",
  "Deezer Free": "Deezer Free",
- "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (सब्सक्राइबर को FLAC)"
+ "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (सब्सक्राइबर को FLAC)",
+ "Made from lossy files ({f}): no lossless or hi-res label is honest for this release.": "लॉसी फ़ाइलों से बना ({f}): इस रिलीज़ के लिए कोई लॉसलेस या हाई-रेज़ लेबल सही नहीं है।",
+ "The sources are 16-bit: deliver CD quality. A 24-bit file of 16-bit material gets no hi-res label.": "स्रोत 16-बिट हैं: CD गुणवत्ता दें। 16-बिट सामग्री की 24-बिट फ़ाइल को हाई-रेज़ लेबल नहीं मिलता।",
+ "Sources {b} at {r} or more: the hi-res master qualifies on Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) and Deezer.": "स्रोत {b}, {r} या उससे अधिक: हाई-रेज़ मास्टर Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) और Deezer पर योग्य है।",
+ "Apple Music shows Hi-Res Lossless (above 48 kHz).": "Apple Music Hi-Res Lossless दिखाता है (48 kHz से ऊपर)।",
+ "Apple Music shows Lossless; Hi-Res Lossless needs more than 48 kHz.": "Apple Music Lossless दिखाता है; Hi-Res Lossless के लिए 48 kHz से अधिक चाहिए।",
+ "Spotify plays at most 24-bit/44.1 kHz and converts it itself.": "Spotify अधिकतम 24-बिट/44.1 kHz चलाता है और खुद बदलता है।",
+ "Every track of a release needs the hi-res specs for the badge; the lowest source counts.": "बैज के लिए रिलीज़ के हर ट्रैक में हाई-रेज़ मान चाहिए; सबसे कमज़ोर स्रोत गिना जाता है।",
+ "Export hi-res and CD quality": "हाई-रेज़ और CD गुणवत्ता एक्सपोर्ट करें",
+ "Export CD quality": "CD गुणवत्ता एक्सपोर्ट करें",
+ "FLAC 24-bit at {r} kHz for the hi-res services and WAV 16-bit/44.1 kHz with dither for the others, one file per track with tags": "हाई-रेज़ सेवाओं के लिए {r} kHz पर FLAC 24-बिट और बाकी के लिए डिथर के साथ WAV 16-बिट/44.1 kHz, टैग के साथ हर ट्रैक की एक फ़ाइल",
+ "WAV 16-bit/44.1 kHz with dither, one file per track with tags": "डिथर के साथ WAV 16-बिट/44.1 kHz, टैग के साथ हर ट्रैक की एक फ़ाइल"
 }

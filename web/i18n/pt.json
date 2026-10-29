@@ -1752,5 +1752,16 @@
  "hear": "ouvir",
  "track by track": "faixa a faixa",
  "Deezer Free": "Deezer Free",
- "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (FLAC para assinantes)"
+ "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (FLAC para assinantes)",
+ "Made from lossy files ({f}): no lossless or hi-res label is honest for this release.": "Feito a partir de ficheiros com perdas ({f}): nenhuma etiqueta lossless ou hi-res é honesta para este lançamento.",
+ "The sources are 16-bit: deliver CD quality. A 24-bit file of 16-bit material gets no hi-res label.": "As fontes são de 16 bits: entrega qualidade CD. Um ficheiro de 24 bits feito de material de 16 bits não recebe etiqueta hi-res.",
+ "Sources {b} at {r} or more: the hi-res master qualifies on Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) and Deezer.": "Fontes {b} a {r} ou mais: o master hi-res qualifica-se no Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) e Deezer.",
+ "Apple Music shows Hi-Res Lossless (above 48 kHz).": "O Apple Music mostra Hi-Res Lossless (acima de 48 kHz).",
+ "Apple Music shows Lossless; Hi-Res Lossless needs more than 48 kHz.": "O Apple Music mostra Lossless; Hi-Res Lossless precisa de mais de 48 kHz.",
+ "Spotify plays at most 24-bit/44.1 kHz and converts it itself.": "O Spotify toca no máximo 24 bits/44,1 kHz e converte sozinho.",
+ "Every track of a release needs the hi-res specs for the badge; the lowest source counts.": "Para o selo, cada faixa do lançamento precisa das especificações hi-res; conta a fonte mais baixa.",
+ "Export hi-res and CD quality": "Exportar hi-res e qualidade CD",
+ "Export CD quality": "Exportar qualidade CD",
+ "FLAC 24-bit at {r} kHz for the hi-res services and WAV 16-bit/44.1 kHz with dither for the others, one file per track with tags": "FLAC 24 bits a {r} kHz para os serviços hi-res e WAV 16 bits/44,1 kHz com dither para os outros, um ficheiro por faixa com tags",
+ "WAV 16-bit/44.1 kHz with dither, one file per track with tags": "WAV 16 bits/44,1 kHz com dither, um ficheiro por faixa com tags"
 }

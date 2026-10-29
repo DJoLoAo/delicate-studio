@@ -1752,5 +1752,16 @@
  "hear": "écouter",
  "track by track": "piste par piste",
  "Deezer Free": "Deezer Free",
- "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (FLAC pour les abonnés)"
+ "MP3 128 kbps (subscribers get FLAC)": "MP3 128 kbps (FLAC pour les abonnés)",
+ "Made from lossy files ({f}): no lossless or hi-res label is honest for this release.": "Fait à partir de fichiers avec perte ({f}) : aucun label lossless ou hi-res n'est honnête pour cette sortie.",
+ "The sources are 16-bit: deliver CD quality. A 24-bit file of 16-bit material gets no hi-res label.": "Les sources sont en 16 bits : livre en qualité CD. Un fichier 24 bits issu de 16 bits n'obtient pas de label hi-res.",
+ "Sources {b} at {r} or more: the hi-res master qualifies on Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) and Deezer.": "Sources {b} à {r} ou plus : le master hi-res est éligible sur Qobuz (Hi-Res), Amazon Music (Ultra HD), TIDAL (Max) et Deezer.",
+ "Apple Music shows Hi-Res Lossless (above 48 kHz).": "Apple Music affiche Hi-Res Lossless (au-dessus de 48 kHz).",
+ "Apple Music shows Lossless; Hi-Res Lossless needs more than 48 kHz.": "Apple Music affiche Lossless ; Hi-Res Lossless demande plus de 48 kHz.",
+ "Spotify plays at most 24-bit/44.1 kHz and converts it itself.": "Spotify joue au plus en 24 bits/44,1 kHz et convertit lui-même.",
+ "Every track of a release needs the hi-res specs for the badge; the lowest source counts.": "Pour le badge, chaque piste d'une sortie doit avoir les specs hi-res ; la source la plus faible compte.",
+ "Export hi-res and CD quality": "Exporter en hi-res et qualité CD",
+ "Export CD quality": "Exporter en qualité CD",
+ "FLAC 24-bit at {r} kHz for the hi-res services and WAV 16-bit/44.1 kHz with dither for the others, one file per track with tags": "FLAC 24 bits à {r} kHz pour les services hi-res et WAV 16 bits/44,1 kHz avec dither pour les autres, un fichier par piste avec tags",
+ "WAV 16-bit/44.1 kHz with dither, one file per track with tags": "WAV 16 bits/44,1 kHz avec dither, un fichier par piste avec tags"
 }
